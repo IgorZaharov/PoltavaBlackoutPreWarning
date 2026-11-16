@@ -6,7 +6,6 @@ import ua.blackout.prewarning.core.LegacyMirror
 import ua.blackout.prewarning.data.model.EmergencyOutageInfo
 import ua.blackout.prewarning.data.model.SelectedAddressQuery
 import ua.blackout.prewarning.data.model.UserSettings
-import ua.blackout.prewarning.data.parser.ZtoeAddressLookup
 
 class SettingsRepository(context: Context) {
     private val appContext: Context = context.applicationContext
@@ -101,7 +100,7 @@ class SettingsRepository(context: Context) {
                 if (legacyAll.isNotEmpty() && (legacy.contains("queue") || legacy.contains("city_url"))) {
                     val editor = prefs.edit()
                     if (legacy.contains("city_url")) {
-                        editor.putString("city_url", readSafeString(legacyAll, "city_url", "https://www.ztoe.com.ua/unhooking-search.php"))
+                        editor.putString("city_url", readSafeString(legacyAll, "city_url", "https://www.poe.pl.ua/disconnection/power-outages/"))
                     }
                     if (legacy.contains("queue")) {
                         editor.putString("queue", readSafeString(legacyAll, "queue", ""))
@@ -175,7 +174,7 @@ class SettingsRepository(context: Context) {
         } else {
             null
         }
-        val activeEmergencyOutage = if (ZtoeAddressLookup.isValidEmergencyOutage(rawEmergencyCandidate)) {
+        val activeEmergencyOutage = if (LegacyEmergency.isValid(rawEmergencyCandidate)) {
             rawEmergencyCandidate
         } else {
             if (rawEmergencyCandidate != null) {
@@ -194,7 +193,7 @@ class SettingsRepository(context: Context) {
         val anyAlertsEnabled = soundGate(notificationsEnabled, emergencyNotificationsEnabled)
 
         return UserSettings(
-            cityUrl = readSafeString(allMap, "city_url", "https://www.ztoe.com.ua/unhooking-search.php").ifBlank { "https://www.ztoe.com.ua/unhooking-search.php" },
+            cityUrl = readSafeString(allMap, "city_url", "https://www.poe.pl.ua/disconnection/power-outages/").ifBlank { "https://www.poe.pl.ua/disconnection/power-outages/" },
             queue = readSafeString(allMap, "queue", ""),
             customQueueStatusText = customQueueStatusText,
             selectedAddress = selectedAddress,
@@ -395,4 +394,29 @@ class SettingsRepository(context: Context) {
     }
 
     fun getSharedPreferences(): SharedPreferences = prefs
+}
+
+/**
+ * Validation of the single legacy "active emergency" record of the 1.3 settings keys (kept so a value
+ * written by an older build is dropped instead of shown). Moved from the removed ztoe address lookup.
+ */
+internal object LegacyEmergency {
+    private val TIMESTAMP = Regex("""(?:\b\d{1,2}\.\d{1,2}(?:\.\d{2,4})?\b|\b\d{4}-\d{2}-\d{2}\b)?[\sT]*\b([01]?\d|2[0-3]):[0-5]\d\b""")
+
+    fun isValidTimestamp(value: String?): Boolean {
+        if (value.isNullOrBlank()) return false
+        val lower = value.lowercase()
+        if (lower.contains("не вимикається") || lower.contains("за винятком") || lower.contains("побутові") || lower.contains("споживачі")) {
+            return false
+        }
+        return TIMESTAMP.containsMatchIn(value.trim())
+    }
+
+    fun isValid(info: EmergencyOutageInfo?): Boolean {
+        if (info == null) return false
+        val typeLower = info.outageType.lowercase()
+        val validType = (typeLower.contains("аварійн") || typeLower.contains("emergency") || typeLower.contains("гав") || typeLower.contains("сгав")) &&
+            !typeLower.contains("не вимикається") && !typeLower.contains("за винятком")
+        return validType && isValidTimestamp(info.startTime) && isValidTimestamp(info.estimatedRestoreTime)
+    }
 }

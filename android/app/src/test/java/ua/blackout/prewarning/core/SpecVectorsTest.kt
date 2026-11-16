@@ -246,63 +246,9 @@ class SpecVectorsTest {
         assertEquals("a&b", TextNorm.decodeEntities("a&amp;b"))
     }
 
-    // ---------------------------------------------------------------------------------------------
-    // poweron_api.json
-    // ---------------------------------------------------------------------------------------------
+    // poweron_api.json is the inherited Zhytomyr source: the Poltava app has no PowerOn mapper any more.
+    // The file stays for the iOS target until milestone I2 (it loads vector files by name).
 
-    private fun row(o: JSONObject) = PowerOnRow(
-        id = o.getLong("id"),
-        cityId = if (o.isNull("cityId")) null else o.getInt("cityId"),
-        cityName = o.getString("cityName"),
-        streetId = if (o.isNull("streetId")) null else o.getInt("streetId"),
-        streetName = o.getString("streetName"),
-        dateEvent = o.getString("dateEvent"),
-        datePlanIn = o.getString("datePlanIn"),
-        koment = o.optStr("koment"),
-        switchSubReason = if (o.isNull("switchSubReason")) null else o.getInt("switchSubReason"),
-        typeOff = if (o.isNull("typeOff")) null else o.getInt("typeOff"),
-        buildingNames = o.getString("buildingNames")
-    )
-
-    @Test
-    fun powerOnVectors() {
-        val v = load("poweron_api.json")
-        for (t in v.getJSONArray("timestamps").objects()) {
-            val parsed = PowerOnMapper.parseTime(t.getString("in"))
-            if (t.isNull("out")) assertNull("timestamp '${t.getString("in")}'", parsed)
-            else assertEquals("timestamp '${t.getString("in")}'", t.getString("out"), parsed.toString())
-        }
-        for (c in v.getJSONArray("emergencyMapping").objects()) {
-            val name = c.getString("name")
-            val got = PowerOnMapper.emergencyRecordsFor(c.getJSONArray("rows").objects().map(::row), c.getString("house"))
-            val exp = c.getJSONArray("expect").objects()
-            assertEquals("$name: count", exp.size, got.size)
-            exp.forEachIndexed { i, e ->
-                assertEquals("$name: id", e.getString("id"), got[i].id)
-                assertEquals("$name: start", e.getString("start"), got[i].start.toString())
-                assertEquals("$name: estimatedEnd", e.optStr("estimatedEnd"), got[i].estimatedEnd?.toString())
-                assertEquals("$name: label", e.optStr("label"), got[i].label)
-            }
-        }
-        for (c in v.getJSONArray("repairMapping").objects()) {
-            val name = c.getString("name")
-            val got = PowerOnMapper.repairOutagesFor(
-                c.getJSONArray("rows").objects().map(::row), c.getString("house"), LocalDate.parse(c.getString("today"))
-            )
-            val exp = c.getJSONArray("expect").objects()
-            assertEquals("$name: count", exp.size, got.size)
-            exp.forEachIndexed { i, e ->
-                assertEquals("$name: id", e.getString("id"), got[i].id)
-                assertEquals("$name: kind", OutageKind.REPAIR, got[i].kind)
-                assertEquals("$name: start", e.getString("start"), got[i].start.toString())
-                assertEquals("$name: end", e.getString("end"), got[i].end.toString())
-                assertEquals("$name: label", e.optStr("label"), got[i].label)
-            }
-        }
-    }
-
-    // ---------------------------------------------------------------------------------------------
-    // site_state.json
     // ---------------------------------------------------------------------------------------------
 
     @Test

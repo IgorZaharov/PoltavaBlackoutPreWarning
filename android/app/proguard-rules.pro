@@ -12,9 +12,7 @@
 -keep class ua.blackout.prewarning.receiver.** { *; }
 -keep class ua.blackout.prewarning.notification.** { *; }
 
-# Keep Jsoup and ignore its compile-time nullability annotations in R8
--keep class org.jsoup.** { *; }
--dontwarn org.jsoup.**
+# Ignore compile-time nullability annotations of libraries in R8
 -dontwarn org.jspecify.annotations.**
 -dontwarn javax.annotation.**
 -dontwarn org.codehaus.mojo.animal_sniffer.**

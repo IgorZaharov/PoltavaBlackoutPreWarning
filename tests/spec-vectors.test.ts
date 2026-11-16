@@ -30,7 +30,6 @@ import {
 } from '../src/core/outageEngine';
 import { HouseKey, StreetKey, TextNorm } from '../src/core/addressKeys';
 import { EmergencyFetch, eventKey, reconcile, type LedgerEntry } from '../src/core/emergencyLedger';
-import { PowerOnMapper, type PowerOnRow } from '../src/core/poweronMapper';
 import { PoeMapper, type Place } from '../src/core/poeMapper';
 import { PoeSchedule } from '../src/core/poeSchedule';
 import { FETCH_FAILURES, SITE_STATES, SiteStateResolver, type FetchFailure, type SiteState } from '../src/core/siteState';
@@ -283,66 +282,8 @@ function addressKeyVectors(): number {
   return checks + 4;
 }
 
-// -------------------------------------------------------------------------------------------------
-// poweron_api.json
-// -------------------------------------------------------------------------------------------------
-
-const intOrNull = (o: Json, key: string): number | null => (o[key] === undefined || o[key] === null ? null : Number(o[key]));
-
-function row(o: Json): PowerOnRow {
-  return {
-    id: Number(o.id),
-    cityId: intOrNull(o, 'cityId'),
-    cityName: String(o.cityName),
-    streetId: intOrNull(o, 'streetId'),
-    streetName: String(o.streetName),
-    dateEvent: String(o.dateEvent),
-    datePlanIn: String(o.datePlanIn),
-    koment: optStr(o, 'koment'),
-    switchSubReason: intOrNull(o, 'switchSubReason'),
-    typeOff: intOrNull(o, 'typeOff'),
-    buildingNames: String(o.buildingNames),
-  };
-}
-
-function powerOnVectors(): number {
-  const v: Json = load('poweron_api.json');
-  let checks = 0;
-  for (const t of v.timestamps as Json[]) {
-    const parsed = PowerOnMapper.parseTime(t.in);
-    if (t.out === null) assert.equal(parsed, null, `timestamp '${t.in}'`);
-    else assert.equal(dtStr(parsed), t.out, `timestamp '${t.in}'`);
-    checks++;
-  }
-  for (const c of v.emergencyMapping as Json[]) {
-    const name: string = c.name;
-    const got = PowerOnMapper.emergencyRecordsFor((c.rows as Json[]).map(row), c.house);
-    const exp: Json[] = c.expect;
-    assert.equal(got.length, exp.length, `${name}: count`);
-    exp.forEach((e, i) => {
-      assert.equal(got[i].id, e.id, `${name}: id`);
-      assert.equal(formatLocalDateTime(got[i].start), e.start, `${name}: start`);
-      assert.equal(dtStr(got[i].estimatedEnd), optStr(e, 'estimatedEnd'), `${name}: estimatedEnd`);
-      assert.equal(got[i].label, optStr(e, 'label'), `${name}: label`);
-    });
-    checks++;
-  }
-  for (const c of v.repairMapping as Json[]) {
-    const name: string = c.name;
-    const got = PowerOnMapper.repairOutagesFor((c.rows as Json[]).map(row), c.house, parseLocalDate(c.today));
-    const exp: Json[] = c.expect;
-    assert.equal(got.length, exp.length, `${name}: count`);
-    exp.forEach((e, i) => {
-      assert.equal(got[i].id, e.id, `${name}: id`);
-      assert.equal(got[i].kind, 'REPAIR', `${name}: kind`);
-      assert.equal(formatLocalDateTime(got[i].start), e.start, `${name}: start`);
-      assert.equal(formatLocalDateTime(got[i].end), e.end, `${name}: end`);
-      assert.equal(got[i].label, optStr(e, 'label'), `${name}: label`);
-    });
-    checks++;
-  }
-  return checks;
-}
+// poweron_api.json is the inherited Zhytomyr source: the Poltava app has no PowerOn mapper any more. The
+// file stays for the iOS target until milestone I2 (it loads vector files by name).
 
 // -------------------------------------------------------------------------------------------------
 // poe_api.json (spec/POE_API.md section 8)
@@ -848,7 +789,6 @@ const suites: [string, () => number][] = [
   ['outage_engine.json', outageEngineVectors],
   ['emergency_ledger.json', emergencyLedgerVectors],
   ['address_keys.json', addressKeyVectors],
-  ['poweron_api.json', powerOnVectors],
   ['poe_api.json', poeApiVectors],
   ['outage_engine_poe.json', outageEnginePoeVectors],
   ['poe_schedule.json', poeScheduleVectors],

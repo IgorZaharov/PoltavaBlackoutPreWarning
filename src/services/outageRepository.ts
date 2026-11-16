@@ -4,9 +4,9 @@
  * alert checks all go through it, so they cannot disagree about what is off and when
  * (spec/OUTAGE_ENGINE.md).
  *
- *  - `snapshot(settings, now)` is local only (no network): ztoe cache + PowerOn repairs + the ledger.
- *  - `refresh(settings, force, notify)` fetches ztoe and PowerOn. A source that fails keeps its previous
- *    data and is reported as such; it never becomes "no outage".
+ *  - `snapshot(settings, now)` is local only (no network): POE queue tables + repair works + the ledger.
+ *  - `refresh(settings, force, notify)` fetches the POE tables and the per-house status of every address.
+ *    A source that fails keeps its previous data and is reported as such; it never becomes "no outage".
  */
 import { plannedSpans as plannedSpansOf } from '../core/outageEngine';
 import type { Span } from '../core/outageModels';
@@ -14,29 +14,15 @@ import { plannedActive } from '../core/subscriptions';
 import { HouseKey, StreetKey } from '../core/addressKeys';
 import { reconcile, outages as ledgerOutages, type EmergencyEvent } from '../core/emergencyLedger';
 import { fromInstant, formatLocalDate, toLocalDate, type LocalDate, type LocalDateTime } from '../core/localTime';
-import { buildPlanned, dayView as engineDayView, inWindow, status as engineStatus } from '../core/outageEngine';
-import { statusAt, type DayView, type Outage, type StatusInfo } from '../core/outageModels';
+import { buildPlannedCells, dayView as engineDayView, inWindow, status as engineStatus, switchWindows } from '../core/outageEngine';
+import { statusAt, type DayView, type Outage, type StatusInfo, type SwitchWindow } from '../core/outageModels';
 import type { SiteState } from '../core/siteState';
 import type { BlackoutSlot, SelectedAddressQuery, UserSettings } from '../types';
-import { PowerOnClient, POWERON_IDS_TTL_MS, type PowerOnResult, type PowerOnTarget } from './poweronClient';
 import { OutageStateStore, getOutageStateStore, type PowerOnSnapshot, type SiteSnapshot } from './outageStore';
 import { ScheduleCache, getScheduleCache } from './scheduleCache';
-import {
-  fetchZtoeSchedule,
-  type ScheduleFetchResult,
-  type ZtoeFetchOptions,
-  type ZtoeFetchStatus,
-} from './ztoeParser';
-import {
-  ZTOE_REM_OPTIONS,
-  findSettlementById,
-  findStreetById,
-  getRems,
-  getStreetsForSettlement,
-  type ZtoeRemOption,
-  type ZtoeSettlementOption,
-  type ZtoeStreetOption,
-} from './ztoeAddressLookup';
+import { PoeClient, type AddressStatusFetch } from './poeClient';
+import { getPoeClient, syncPoeSchedule, type PoeFetchStatus, type ScheduleSyncOptions, type ScheduleSyncResult } from './poeScheduleSync';
+import { NO_QUEUE_TEXT, findStreetById, type PoeStreetOption } from './poeAddressLookup';
 import { triggerEmergencyEventAlerts } from './alertManager';
 import { resolveLanguage } from './i18n';
 import { addressKey as subscriptionAddressKey, alertOrder, displayLabel, type Subscription, type SubscriptionStore } from '../core/subscriptions';
@@ -58,12 +44,14 @@ export interface OutageSnapshotInit {
   now: LocalDateTime;
   queue: string;
   outages: readonly Outage[];
-  /** Today's ztoe table is cached and still valid for today (or the address has no queue at all). */
+  /** Today's queue table is cached and still valid for today (or the address has no queue at all). */
   plannedKnown: boolean;
   tomorrowPublished: boolean;
   site: SiteSnapshot | null;
   poweron: PowerOnSnapshot | null;
   hasAddress: boolean;
+  /** POE switching half-hours of the queue (spec/OUTAGE_ENGINE.md 3.5). */
+  switching?: readonly SwitchWindow[];
 }
 
 /** Everything the screens, the widget simulator and alert checks need, derived from local state only. */
@@ -76,6 +64,7 @@ export class OutageSnapshot {
   readonly site: SiteSnapshot | null;
   readonly poweron: PowerOnSnapshot | null;
   readonly hasAddress: boolean;
+  readonly switching: readonly SwitchWindow[];
 
   constructor(init: OutageSnapshotInit) {
     this.now = init.now;
@@ -86,6 +75,7 @@ export class OutageSnapshot {
     this.site = init.site;
     this.poweron = init.poweron;
     this.hasAddress = init.hasAddress;
+    this.switching = init.switching ?? [];
   }
 
   get today(): LocalDate {
@@ -93,11 +83,11 @@ export class OutageSnapshot {
   }
 
   dayView(date: LocalDate): DayView {
-    return engineDayView(this.outages, date, this.now);
+    return engineDayView(this.outages, date, this.now, undefined, this.switching);
   }
 
   status(): StatusInfo {
-    return engineStatus(this.outages, this.now);
+    return engineStatus(this.outages, this.now, undefined, this.switching);
   }
 
   /** The planned schedule is unknown and nothing else is known either: screens go grey. */
@@ -144,6 +134,7 @@ export class OutageSnapshot {
         status: s.off ? 'POWER_OFF' : 'POWER_ON',
         isEmergency: s.emergency,
         isPlanned: s.planned,
+        isSwitching: s.switching,
       };
     });
   }
@@ -175,7 +166,7 @@ export interface AddressEvents {
 
 export interface RefreshOutcome {
   siteState: SiteState | null;
-  fetchStatus: ZtoeFetchStatus | null;
+  fetchStatus: PoeFetchStatus | null;
   poweronOk: boolean | null;
   /** Events of the primary (selected) address. */
   events: readonly EmergencyEvent[];
@@ -187,27 +178,22 @@ export interface RefreshOutcome {
   snapshot: OutageSnapshot;
 }
 
-/** Names and ids of the selected address, resolved from the address index (a seam for tests). */
+/** Streets of the selected address, resolved from the POE address directory (a seam for tests). */
 export interface AddressResolver {
-  rem(remId: string): ZtoeRemOption | undefined;
-  settlement(settlementId: string): ZtoeSettlementOption | undefined;
-  street(streetId: string): ZtoeStreetOption | undefined;
-  streetsForSettlement(settlementId: string): ZtoeStreetOption[];
+  street(streetId: string): Pick<PoeStreetOption, 'nameUk' | 'allIds'> | undefined;
 }
 
 export const defaultAddressResolver: AddressResolver = {
-  rem: (remId) => getRems().find((r) => r.id === remId) ?? ZTOE_REM_OPTIONS.find((r) => r.id === remId),
-  settlement: findSettlementById,
   street: findStreetById,
-  streetsForSettlement: getStreetsForSettlement,
 };
 
 export interface OutageRepositoryDeps {
   schedule?: ScheduleCache;
   store?: OutageStateStore;
-  powerOn?: { fetch(target: PowerOnTarget, today: LocalDate, now?: LocalDateTime): Promise<PowerOnResult> };
-  /** Replaces the ztoe refresh (tests). */
-  fetchSchedule?: (url: string, queue: string, options: ZtoeFetchOptions) => Promise<ScheduleFetchResult>;
+  /** The POE client for the per-house status (default: the process-wide one). */
+  poe?: PoeClient;
+  /** Replaces the POE table refresh (tests). */
+  syncSchedule?: (options: ScheduleSyncOptions) => Promise<ScheduleSyncResult>;
   address?: AddressResolver;
   /** The real instant in epoch milliseconds (tests pass a fake clock). */
   nowMs?: () => number;
@@ -220,10 +206,10 @@ export interface OutageRepositoryDeps {
     /** The address's planned spans and whether it is warned about them (spec/NOTIFICATIONS.md 2.4a). */
     planned?: { spans: readonly Span[]; alertsOn: boolean }
   ) => void;
-  /** Passed through to the ztoe fetch (tests inject the HTML here). */
-  ztoeOptions?: Pick<ZtoeFetchOptions, 'fetchHtml' | 'isOnline'>;
   /** The subscription store and the master switch (default: the app-wide SubscriptionSync). */
   subscriptions?: (settings: UserSettings) => { store: SubscriptionStore; master: boolean };
+  /** Writes a queue read from POE into a subscription (default: the app-wide SubscriptionSync). */
+  assignQueue?: (settings: UserSettings, itemId: string | null, queue: string | null, statusText: string | null) => void;
   /** Delivers the events of another subscription (default: the browser notification adapter). */
   notifyOther?: (settings: UserSettings, other: AddressEvents, now: LocalDateTime) => void;
 }
@@ -231,20 +217,20 @@ export interface OutageRepositoryDeps {
 export class OutageRepository {
   private readonly schedule: ScheduleCache;
   private readonly store: OutageStateStore;
-  private readonly powerOn: NonNullable<OutageRepositoryDeps['powerOn']>;
-  private readonly fetchSchedule: NonNullable<OutageRepositoryDeps['fetchSchedule']>;
+  private readonly poeOverride: PoeClient | null;
+  private readonly syncSchedule: NonNullable<OutageRepositoryDeps['syncSchedule']>;
   private readonly address: AddressResolver;
   private readonly nowMs: () => number;
   private readonly notifyEvents: NonNullable<OutageRepositoryDeps['notify']>;
-  private readonly ztoeOptions: NonNullable<OutageRepositoryDeps['ztoeOptions']>;
   private readonly subscriptions: NonNullable<OutageRepositoryDeps['subscriptions']>;
+  private readonly assignQueue: NonNullable<OutageRepositoryDeps['assignQueue']>;
   private readonly notifyOther: NonNullable<OutageRepositoryDeps['notifyOther']>;
 
   constructor(deps: OutageRepositoryDeps = {}) {
     this.schedule = deps.schedule ?? getScheduleCache();
     this.store = deps.store ?? getOutageStateStore();
-    this.powerOn = deps.powerOn ?? new PowerOnClient();
-    this.fetchSchedule = deps.fetchSchedule ?? fetchZtoeSchedule;
+    this.poeOverride = deps.poe ?? null;
+    this.syncSchedule = deps.syncSchedule ?? ((options) => syncPoeSchedule({ ...options, client: options.client ?? this.poe }));
     this.address = deps.address ?? defaultAddressResolver;
     this.nowMs = deps.nowMs ?? (() => Date.now());
     this.notifyEvents =
@@ -255,12 +241,18 @@ export class OutageRepository {
           plannedAlertsOn: planned?.alertsOn,
         });
       });
-    this.ztoeOptions = deps.ztoeOptions ?? {};
     this.subscriptions =
       deps.subscriptions ??
       ((settings) => {
         const sync = getSubscriptionSync();
         return { store: sync.store(settings), master: sync.master(settings) };
+      });
+    this.assignQueue =
+      deps.assignQueue ??
+      ((settings, itemId, queue, statusText) => {
+        const sync = getSubscriptionSync();
+        if (itemId === null) sync.assignPrimaryQueue(settings, queue, statusText, null);
+        else sync.assignItemQueue(settings, itemId, queue, statusText);
       });
     this.notifyOther =
       deps.notifyOther ??
@@ -272,6 +264,10 @@ export class OutageRepository {
           plannedAlertsOn: other.plannedAlertsOn,
         });
       });
+  }
+
+  private get poe(): PoeClient {
+    return this.poeOverride ?? getPoeClient();
   }
 
   /** Stable key of the selected address; survives duplicate-street merges because it uses the canonical street key. */
@@ -313,11 +309,14 @@ export class OutageRepository {
       site: this.store.site(),
       poweron,
       hasAddress: key !== null,
+      switching: hasQueue
+        ? switchWindows(today, this.schedule.todayCells(q, today), this.schedule.tomorrowCells(q, today), this.schedule.yesterdayCells(q, today))
+        : [],
     });
   }
 
   /**
-   * The outages of one queue and address key (either may be absent), local state only. One ztoe fetch
+   * The outages of one queue and address key (either may be absent), local state only. One POE fetch
    * caches all 12 queues, so this works for every subscription (spec/SUBSCRIPTIONS.md 8.1).
    */
   outagesFor(queue: string | null, key: string | null, now: LocalDateTime = fromInstant(this.nowMs())): Outage[] {
@@ -325,7 +324,7 @@ export class OutageRepository {
     const q = (queue ?? '').trim();
     const planned =
       q !== ''
-        ? buildPlanned(today, this.schedule.todayOffCells(q, today), this.schedule.tomorrowOffCells(q, today), this.schedule.yesterdayOffCells(q, today))
+        ? buildPlannedCells(today, this.schedule.todayCells(q, today), this.schedule.tomorrowCells(q, today), this.schedule.yesterdayCells(q, today))
         : [];
     const emergencies = key !== null ? ledgerOutages(this.store.ledger(key), now) : [];
     const repairs = key !== null ? this.store.repairs(key) : [];
@@ -333,7 +332,8 @@ export class OutageRepository {
   }
 
   /**
-   * Refreshes ztoe (planned) and PowerOn (emergency + repair works) for the selected address.
+   * Refreshes the POE queue tables and the per-house status (emergency «пошкодження», repair works, the
+   * house's queue) for the selected address and the other subscriptions.
    * A source that fails keeps its previous data and is reported as such; it never counts as "no outage".
    * [shownId] is the item the main view shows: it is polled whatever its switches (spec/SUBSCRIPTIONS.md 8.4).
    * [widgetIds] are the items the widgets show (section 10), polled the same way.
@@ -347,7 +347,7 @@ export class OutageRepository {
   ): Promise<RefreshOutcome> {
     const nowMs = this.nowMs();
     let siteState: SiteState | null = null;
-    let fetchStatus: ZtoeFetchStatus | null = null;
+    let fetchStatus: PoeFetchStatus | null = null;
     let subs: { store: SubscriptionStore; master: boolean } | null = null;
     try {
       subs = this.subscriptions(settings);
@@ -355,17 +355,15 @@ export class OutageRepository {
       subs = null;
     }
 
-    // One fetch caches all 12 queues. A primary without a queue still fetches for the other addresses.
+    // One request per day caches all 12 queues. A primary without a queue still fetches for the other
+    // addresses, and an address whose queue is not known yet gets it from the per-house status.
     const primaryQueue = (settings.queue || '').trim();
-    const ztoeQueue = primaryQueue !== '' ? primaryQueue : (subs ? alertOrder(subs.store).find((i) => i.queue !== null)?.queue ?? '' : '');
-    if (ztoeQueue !== '') {
+    const anyQueue =
+      primaryQueue !== '' || !!settings.selectedAddressQuery || (subs ? alertOrder(subs.store).some((i) => i.queue !== null || i.address !== null) : false);
+    const fresh = nowMs - this.schedule.lastSyncMs() >= 0 && nowMs - this.schedule.lastSyncMs() < 4.5 * 60_000;
+    if (anyQueue && (forceNetwork || !fresh)) {
       try {
-        const res = await this.fetchSchedule(settings.url, ztoeQueue, {
-          force: forceNetwork,
-          now: new Date(nowMs),
-          cache: this.schedule,
-          ...this.ztoeOptions,
-        });
+        const res = await this.syncSchedule({ cache: this.schedule, nowMs });
         this.store.saveSite(res.siteState, nowMs, res.notice ?? null);
         if (primaryQueue !== '') {
           fetchStatus = res.status;
@@ -380,11 +378,25 @@ export class OutageRepository {
     let events: readonly EmergencyEvent[] = [];
     const query = settings.selectedAddressQuery;
     const key = this.addressKey(query);
+    let current = settings;
     if (query && key) {
-      const polled = await this.pollPowerOn(query, key, nowMs);
+      const polled = await this.pollPoe(query, key, nowMs);
       poweronOk = polled?.ok ?? false;
       events = polled?.events ?? [];
       this.store.savePowerOn(poweronOk, nowMs);
+      if (polled?.status) {
+        const queue = polled.status.status.queue ?? '';
+        const statusText = queue === '' ? NO_QUEUE_TEXT : null;
+        if (queue !== (settings.queue || '') || statusText !== (settings.customQueueStatusText ?? null)) {
+          // into the primary subscription, which is mirrored back into the settings
+          try {
+            this.assignQueue(settings, null, queue === '' ? null : queue, statusText);
+            current = { ...settings, queue, customQueueStatusText: statusText ?? undefined };
+          } catch {
+            // the queue is read again on the next refresh
+          }
+        }
+      }
       if (notify && events.length > 0 && (settings.emergencyNotificationsEnabled ?? true)) {
         const primaryItem = subs ? subs.store.items.find((i) => i.id === subs.store.primaryId) ?? null : null;
         this.notifyEvents(settings, key, events, fromInstant(nowMs), {
@@ -403,12 +415,12 @@ export class OutageRepository {
       plannedSpans: key ? plannedSpansOf(this.outagesFor(settings.queue, key, fromInstant(nowMs))) : [],
       plannedAlertsOn: subs && primaryItem ? plannedActive(subs.master, primaryItem) : settings.notificationsEnabled,
       otherEvents,
-      snapshot: this.snapshot(settings, fromInstant(this.nowMs())),
+      snapshot: this.snapshot(current, fromInstant(this.nowMs())),
     };
   }
 
   /**
-   * PowerOn for every other subscription that wants emergency alerts, plus the one the main view shows
+   * The per-house status for every other subscription that wants emergency alerts, plus the one the main view shows
    * (spec/SUBSCRIPTIONS.md 8.4): own request, own failure, own ledger, own status line.
    */
   private async refreshOtherAddresses(
@@ -429,8 +441,19 @@ export class OutageRepository {
       if (!alerts && item.id !== shownId && !widgetIds.includes(item.id)) continue;
       const key = subscriptionAddressKey(a);
       if (key === primaryKey) continue;
-      const polled = await this.pollPowerOn({ remId: a.remSlug, settlementId: a.settlementId, streetId: a.streetId, house: a.house }, key, nowMs);
+      const polled = await this.pollPoe({ remId: a.remSlug, settlementId: a.settlementId, streetId: a.streetId, house: a.house }, key, nowMs);
       this.store.savePowerOnFor(key, polled?.ok ?? false, nowMs);
+      if (polled?.status) {
+        const queue = polled.status.status.queue;
+        const statusText = queue === null ? NO_QUEUE_TEXT : null;
+        if (queue !== item.queue || statusText !== item.queueStatusText) {
+          try {
+            this.assignQueue(settings, item.id, queue, statusText);
+          } catch {
+            // read again on the next refresh
+          }
+        }
+      }
       if (!alerts || !polled || polled.events.length === 0) continue;
       const other: AddressEvents = {
         itemId: item.id,
@@ -446,46 +469,35 @@ export class OutageRepository {
     return out;
   }
 
-  /** One PowerOn query: saves ids, ledger and repairs under [key]. Null when it failed or could not be built. */
-  private async pollPowerOn(query: SelectedAddressQuery, key: string, nowMs: number): Promise<{ ok: boolean; events: readonly EmergencyEvent[] } | null> {
+  /**
+   * Asks POE about one house (E4) and saves the ledger and repair works under [key]. The street's merged
+   * ids are tried in turn until POE answers for one. An unavailable answer leaves the ledger and the
+   * repairs as they were (spec/POE_API.md section 9). Null only when it could not be built.
+   */
+  private async pollPoe(
+    query: SelectedAddressQuery,
+    key: string,
+    nowMs: number
+  ): Promise<{ ok: boolean; events: readonly EmergencyEvent[]; status: Extract<AddressStatusFetch, { kind: 'confirmed' }> | null } | null> {
     try {
-      const target = this.buildTarget(query, key, nowMs);
-      if (!target) return null;
+      const cityId = Number(query.settlementId);
+      if (!Number.isFinite(cityId) || !query.house || query.house.trim() === '') return null;
       const now = fromInstant(nowMs);
-      const result = await this.powerOn.fetch(target, toLocalDate(now), now);
-      if (result.ids && (result.ids.cityIds.length > 0 || result.ids.streetIds.length > 0)) this.store.saveIds(key, result.ids, nowMs);
-      const ledger = reconcile(this.store.ledger(key), result.emergency, now);
+      const today = toLocalDate(now);
+      const street = this.address.street(query.streetId);
+      const ids = (street?.allIds ?? [query.streetId]).map(Number).filter(Number.isFinite);
+      let fetch: AddressStatusFetch = { kind: 'unavailable', reason: 'unresolved' };
+      for (const sid of ids) {
+        fetch = await this.poe.addressStatus(cityId, sid, query.house, today);
+        if (fetch.kind === 'confirmed') break;
+      }
+      const ledger = reconcile(this.store.ledger(key), PoeClient.emergencyFetch(fetch, today), now);
       this.store.saveLedger(key, ledger.entries);
-      if (result.repairs) this.store.saveRepairs(key, result.repairs);
-      return { ok: result.emergency.type === 'Confirmed', events: ledger.events };
+      if (fetch.kind === 'confirmed') this.store.saveRepairs(key, fetch.status.repairs);
+      return { ok: fetch.kind === 'confirmed', events: ledger.events, status: fetch.kind === 'confirmed' ? fetch : null };
     } catch {
       return null;
     }
-  }
-
-  private buildTarget(query: SelectedAddressQuery, key: string, nowMs: number): PowerOnTarget | null {
-    const rem = this.address.rem(query.remId);
-    const settlement = this.address.settlement(query.settlementId);
-    if (!settlement) return null;
-    const street = this.address.street(query.streetId);
-    if (!street) return null;
-    // A merged street is one option: its other spellings share the StreetKey, which is all PowerOn matching uses
-    const streetKey = StreetKey.of(street.nameUk);
-    const names = this.address
-      .streetsForSettlement(settlement.id)
-      .filter((s) => StreetKey.of(s.nameUk) === streetKey)
-      .map((s) => s.nameUk);
-    const cached = this.store.ids(key);
-    const fresh = cached !== null && nowMs - cached.resolvedAtMs >= 0 && nowMs - cached.resolvedAtMs < POWERON_IDS_TTL_MS ? cached.ids : null;
-    const otg = rem?.ztoeOtgId !== undefined ? parseInt(rem.ztoeOtgId, 10) : NaN;
-    return {
-      remOtgId: Number.isFinite(otg) ? otg : null,
-      settlementName: settlement.nameUk,
-      streetNames: names.length > 0 ? names : [street.nameUk],
-      house: query.house,
-      cachedCityIds: fresh?.cityIds ?? [],
-      cachedStreetIds: fresh?.streetIds ?? [],
-    };
   }
 }
 

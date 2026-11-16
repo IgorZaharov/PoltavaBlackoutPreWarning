@@ -5,14 +5,12 @@
  *
  *   ledger_<addr>   JSON array of ledger entries (ISO local date-times, 48 h retention)
  *   repair_<addr>   JSON array of planned repair works
- *   ids_<addr>      resolved PowerOn ids {cityIds, streetIds, resolvedAtMs}
  *   site_state, site_checked_ms, site_last_success_ms, poweron_ok, poweron_checked_ms, poweron_last_ok_ms
  */
 import { formatLocalDateTime, parseLocalDateTime, type LocalDateTime } from '../core/localTime';
 import type { LedgerEntry } from '../core/emergencyLedger';
 import { makeOutage, type Outage } from '../core/outageModels';
 import { SITE_STATES, type SiteState } from '../core/siteState';
-import type { PowerOnIds } from './poweronClient';
 import { JsonPrefs, defaultStorage, type KeyValueStorage } from './storage';
 
 export const OUTAGE_STATE_STORAGE_KEY = 'zt_outage_state_v1';
@@ -140,27 +138,6 @@ export class OutageStateStore {
   }
 
   // --- resolved PowerOn ids (per address) ------------------------------------------------------
-
-  ids(addressKey: string): { ids: PowerOnIds; resolvedAtMs: number } | null {
-    const raw = this.prefs.getString(`ids_${addressKey}`);
-    if (raw === null) return null;
-    try {
-      const o = JSON.parse(raw) as { cityIds?: unknown; streetIds?: unknown; resolvedAtMs?: unknown };
-      const nums = (v: unknown): number[] => (Array.isArray(v) ? v.filter((n): n is number => typeof n === 'number' && Number.isFinite(n)) : []);
-      return {
-        ids: { cityIds: nums(o.cityIds), streetIds: nums(o.streetIds) },
-        resolvedAtMs: typeof o.resolvedAtMs === 'number' ? o.resolvedAtMs : 0,
-      };
-    } catch {
-      return null;
-    }
-  }
-
-  saveIds(addressKey: string, ids: PowerOnIds, nowMs: number): void {
-    this.prefs.edit({
-      [`ids_${addressKey}`]: JSON.stringify({ cityIds: [...ids.cityIds], streetIds: [...ids.streetIds], resolvedAtMs: nowMs }),
-    });
-  }
 
   // --- site and source status ------------------------------------------------------------------
 

@@ -20,7 +20,7 @@ import {
 } from '../core/subscriptions';
 import type { SelectedAddressQuery, UserSettings } from '../types';
 import { SubscriptionRepository } from './subscriptionStore';
-import { findStreetById } from './ztoeAddressLookup';
+import { findStreetById } from './poeAddressLookup';
 
 export function resolveStreetName(streetId: string | undefined): string | null {
   if (!streetId) return null;
@@ -151,7 +151,7 @@ export class SubscriptionSync {
     return this.change(settings, (s) => add(s, item));
   }
 
-  /** A background ZTOE lookup for the primary address found its queue (or "no queue"). */
+  /** POE (per-house status, E4) gave the primary address its queue (or "no queue"). */
   assignPrimaryQueue(
     settings: UserSettings,
     queue: string | null,
@@ -163,6 +163,11 @@ export class SubscriptionSync {
         ? { ok: false, code: ERR_NOT_FOUND, existingId: null }
         : setQueueInfo(s, s.primaryId, queue, statusText, addressText),
     );
+  }
+
+  /** Same for any other address item (spec/POE_API.md 8.5: the queue is re-read on every refresh). */
+  assignItemQueue(settings: UserSettings, id: string, queue: string | null, statusText: string | null): SyncResult {
+    return this.change(settings, (s) => setQueueInfo(s, id, queue, statusText, null));
   }
 
   /** Forgets the store and the master switch (reset to first launch). */

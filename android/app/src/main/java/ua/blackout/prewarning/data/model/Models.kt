@@ -33,8 +33,10 @@ data class BlackoutSlot(
     val endTimeStr: String, // "18:00" or "15:00"
     val status: SlotStatus,
     val isEmergency: Boolean = false,
-    /** Off because of the planned ztoe schedule (or repair works). With [isEmergency] both overlap on the drum. */
-    val isPlanned: Boolean = status == SlotStatus.POWER_OFF && !isEmergency
+    /** Off because of the planned schedule (or repair works). With [isEmergency] both overlap on the drum. */
+    val isPlanned: Boolean = status == SlotStatus.POWER_OFF && !isEmergency,
+    /** POE switching half-hour (spec/OUTAGE_ENGINE.md 3.5): power may still be off; never counts as off. */
+    val isSwitching: Boolean = false
 ) {
     val hour: Int get() = startHour
     val startStr: String get() = startTimeStr
@@ -71,7 +73,7 @@ data class DaySchedule(
 
 // CRITICAL CONSTANTS — DO NOT MODIFY DEFAULT VALUES (advanceNoticeMinutes = 15, refreshIntervalMinutes = 30L) UNLESS EXPLICITLY REQUESTED
 data class UserSettings(
-    val cityUrl: String = "https://www.ztoe.com.ua/unhooking-search.php",
+    val cityUrl: String = "https://www.poe.pl.ua/disconnection/power-outages/",
     val queue: String = "",
     val customQueueStatusText: String? = null,
     val selectedAddress: String? = null,

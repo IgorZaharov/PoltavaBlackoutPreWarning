@@ -47,7 +47,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import ua.blackout.prewarning.core.SiteState
-import ua.blackout.prewarning.data.parser.ZtoeAddressLookup
+import ua.blackout.prewarning.data.poe.PoeAddressLookup
 import ua.blackout.prewarning.data.repository.OutageRepository
 import ua.blackout.prewarning.data.repository.OutageStateStore
 import ua.blackout.prewarning.data.repository.RefreshOutcome
@@ -238,17 +238,11 @@ fun BlackoutAppNavigation(
         isRefreshing = true
         try {
             val outcome = withContext(Dispatchers.IO) {
-                ZtoeAddressLookup.initDiskCache(appContext)
+                PoeAddressLookup.init(appContext)
                 val addrQuery = settingsRepo.getSettings().selectedAddressQuery
                 if (resolveAddress && addrQuery != null && addrQuery.streetId.isNotBlank() && addrQuery.house.isNotBlank()) {
                     val lookup = try {
-                        ZtoeAddressLookup.checkAddressOnZtoeWebsite(
-                            remId = addrQuery.remId,
-                            settlementId = addrQuery.settlementId,
-                            streetId = addrQuery.streetId,
-                            house = addrQuery.house,
-                            siteUrl = settingsRepo.getSettings().cityUrl
-                        )
+                        PoeAddressLookup.checkAddress(addrQuery)
                     } catch (_: Exception) {
                         null
                     }
@@ -394,18 +388,12 @@ fun BlackoutAppNavigation(
         }
     }
 
-    // Hydrate address index from disk cache and prefetch REMs, cities, and streets strictly in the background after initial UI render
-    LaunchedEffect(siteUrl) {
+    // Load the bundled POE address directory in the background after the first frame
+    LaunchedEffect(Unit) {
         delay(250L)
         withContext(Dispatchers.IO) {
             try {
-                ZtoeAddressLookup.initDiskCache(appContext)
-                ZtoeAddressLookup.prefetchAddressIndexInBackground(
-                    context = appContext,
-                    siteUrl = siteUrl,
-                    savedQuery = selectedAddressQuery,
-                    forceRefresh = false
-                )
+                PoeAddressLookup.init(appContext)
             } catch (_: Exception) {}
         }
     }

@@ -31,6 +31,14 @@ First version line of «Світло в Полтаві», built from «Світ�
 - **Live checks**: `scripts/poe-live-probe.ts` prints the live queue table, measures, one per-house status and a branch registry summary; `.github/workflows/poe-data.yml` runs it daily and re-crawls the directory weekly (commits only when the data changed).
 - Recorded live answers moved to `spec/fixtures/poe/` so the tests of every platform share them.
 
+### Changed (milestone P3: the app runs on POE data)
+- **Android**: `OutageRepository.kt` refreshes the POE queue tables (`data/poe/PoeScheduleSync.kt`) and the per-house status of every address (emergency «пошкодження», repair works, queue), writes the queue POE reports back into the subscription (`SubscriptionSync.assignPrimaryQueue` / `assignItemQueue`) and passes the switching half-hours to the engine; `ScheduleRepository.kt` stores three-state cells ('2' = switching, never off); `BlackoutSlot.isSwitching` for the drum (drawn in P4). The address picker in `SettingsScreen.kt` (branch → settlement → street → house) and the address re-check in `BlackoutAppNavigation.kt` use `data/poe/PoeAddressLookup.kt` (bundled `poe_directory.json`, houses live from POE, `PoeBranches.kt` from `spec/branches.json`); the first-launch cascade starts at Полтавська об'єднана філія / місто Полтава; the Settings site check reads today's POE table. `ScheduleSyncWorker.kt` no longer runs a separate address check. The default site address is `https://www.poe.pl.ua/disconnection/power-outages/` (`valid-urls.json` lists it first; the ztoe entry stays for the iOS app until I2).
+- **Web simulator** (parity, D6): `src/services/outageRepository.ts`, `scheduleCache.ts`, `poeScheduleSync.ts`, `poeAddressLookup.ts`, `subscriptionSync.ts`, `alertManager.ts`, `SettingsView.tsx` and `App.tsx` mirror the Android changes; the directory snapshot is loaded from `public/poe_directory.json`.
+- **Tests**: `AppInvariantsTest.kt` (was `ZtoeParserTest.kt`) and `tests/unit.test.ts` read the recorded POE page; `PoePipelineTest.kt` follows a «пошкодження» from the per-house status to the START and END events and checks that a failure announces nothing; the repository tests in `tests/services.test.ts` run against a fake POE site.
+
+### Removed (milestone P3)
+- The Zhytomyr data layer on Android and the web: `ZtoeParser`, `ZtoeAddressLookup`, `ZtoeStaticDirectory`, `PowerOnClient`, `PowerOnMapper` (Kotlin and TypeScript), the PowerOn id cache of the state store, their tests (`StreetDedupTest.kt`, `PowerOnClientTest.kt`, the ztoe/PowerOn/street cases of `tests/services.test.ts` and the PowerOn runner of the vector tests), and the Jsoup dependency. `spec/POWERON_API.md` and `spec/vectors/poweron_api.json` stay for the iOS app until I2.
+
 # History inherited from «Світло в Житомирі»
 
 ## [Unreleased] - iOS port

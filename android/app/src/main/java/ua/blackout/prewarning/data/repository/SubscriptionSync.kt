@@ -82,10 +82,15 @@ class SubscriptionSync(context: Context) {
         return change { Subscriptions.add(it, item) }
     }
 
-    /** A background ZTOE lookup for the primary address found its queue (or "no queue"). */
+    /** POE (per-house status, E4) gave the primary address its queue (or "no queue"). */
     fun assignPrimaryQueue(queue: String?, statusText: String?, addressText: String?): StoreResult = change { s ->
         val id = s.primaryId ?: return@change StoreResult.Error(Subscriptions.ERR_NOT_FOUND)
         Subscriptions.setQueueInfo(s, id, queue, statusText, addressText)
+    }
+
+    /** Same for any other address item (spec/POE_API.md 8.5: the queue is re-read on every refresh). */
+    fun assignItemQueue(id: String, queue: String?, statusText: String?): StoreResult = change { s ->
+        Subscriptions.setQueueInfo(s, id, queue, statusText, null)
     }
 
     fun mirror() {

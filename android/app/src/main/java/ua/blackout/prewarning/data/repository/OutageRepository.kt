@@ -17,16 +17,17 @@ import ua.blackout.prewarning.core.StreetKey
 import ua.blackout.prewarning.core.Subscription
 import ua.blackout.prewarning.core.SubscriptionStore
 import ua.blackout.prewarning.core.Subscriptions
+import ua.blackout.prewarning.core.SwitchWindow
 import ua.blackout.prewarning.data.KYIV_ZONE
 import ua.blackout.prewarning.data.model.BlackoutSlot
 import ua.blackout.prewarning.data.model.SelectedAddressQuery
 import ua.blackout.prewarning.data.model.SlotStatus
 import ua.blackout.prewarning.data.model.UserSettings
-import ua.blackout.prewarning.data.parser.FetchStatus
-import ua.blackout.prewarning.data.parser.ZtoeAddressLookup
-import ua.blackout.prewarning.data.parser.ZtoeParser
-import ua.blackout.prewarning.data.poweron.PowerOnClient
-import ua.blackout.prewarning.data.poweron.PowerOnTarget
+import ua.blackout.prewarning.data.poe.AddressStatusFetch
+import ua.blackout.prewarning.data.poe.FetchStatus
+import ua.blackout.prewarning.data.poe.PoeAddressLookup
+import ua.blackout.prewarning.data.poe.PoeClient
+import ua.blackout.prewarning.data.poe.PoeScheduleSync
 import ua.blackout.prewarning.notification.NotificationHelper
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -44,13 +45,15 @@ data class OutageSnapshot(
     val tomorrowPublished: Boolean,
     val site: SiteSnapshot?,
     val poweron: PowerOnSnapshot?,
-    val hasAddress: Boolean
+    val hasAddress: Boolean,
+    /** POE switching half-hours of the queue (spec/OUTAGE_ENGINE.md 3.5). */
+    val switching: List<SwitchWindow> = emptyList()
 ) {
     val today: LocalDate get() = now.toLocalDate()
 
-    fun dayView(date: LocalDate): DayView = OutageEngine.dayView(outages, date, now)
+    fun dayView(date: LocalDate): DayView = OutageEngine.dayView(outages, date, now, switching = switching)
 
-    fun status(): StatusInfo = OutageEngine.status(outages, now)
+    fun status(): StatusInfo = OutageEngine.status(outages, now, switching = switching)
 
     /** The planned schedule is unknown and nothing else is known either: screens go grey. */
     val isUnclear: Boolean
@@ -101,7 +104,8 @@ data class OutageSnapshot(
                 endTimeStr = endStr,
                 status = if (s.off) SlotStatus.POWER_OFF else SlotStatus.POWER_ON,
                 isEmergency = s.emergency,
-                isPlanned = s.planned
+                isPlanned = s.planned,
+                isSwitching = s.switching
             )
         }
     }
@@ -131,13 +135,18 @@ class OutageRepository(context: Context) {
     private val appContext: Context = context.applicationContext
     private val schedule = ScheduleRepository(appContext)
     private val store = OutageStateStore(appContext)
+    private val client: PoeClient get() = PoeAddressLookup.client
+
+    init {
+        PoeAddressLookup.init(appContext)
+    }
 
     /** Stable key of the selected address; survives duplicate-street merges because it uses the canonical street key. */
     fun addressKey(query: SelectedAddressQuery?): String? {
         query ?: return null
         if (query.house.isBlank()) return null
         val streetName = try {
-            ZtoeAddressLookup.findStreetById(query.streetId)?.nameUk
+            PoeAddressLookup.findStreetById(query.streetId)?.nameUk
         } catch (_: Exception) {
             null
         } ?: query.streetId
@@ -168,18 +177,21 @@ class OutageRepository(context: Context) {
             tomorrowPublished = q.isNotBlank() && schedule.hasTomorrowSchedule(q),
             site = store.site(),
             poweron = poweron,
-            hasAddress = key != null
+            hasAddress = key != null,
+            switching = if (q.isBlank()) emptyList() else OutageEngine.switchWindows(
+                now.toLocalDate(), schedule.todayCells(q), schedule.tomorrowCells(q), schedule.yesterdayCells(q)
+            )
         )
 
     /**
-     * The outages of one queue and address key (either may be absent), local state only. One ztoe
+     * The outages of one queue and address key (either may be absent), local state only. One POE
      * fetch caches all 12 queues, so this works for every subscription (spec/SUBSCRIPTIONS.md 8.1).
      */
     fun outagesFor(queue: String?, key: String?, now: LocalDateTime = LocalDateTime.now(KYIV_ZONE)): List<Outage> {
         val today = now.toLocalDate()
         val q = queue.orEmpty()
         val planned = if (q.isNotBlank()) {
-            OutageEngine.buildPlanned(today, schedule.todayOffCells(q), schedule.tomorrowOffCells(q), schedule.yesterdayOffCells(q))
+            OutageEngine.buildPlannedCells(today, schedule.todayCells(q), schedule.tomorrowCells(q), schedule.yesterdayCells(q))
         } else {
             emptyList()
         }
@@ -189,7 +201,8 @@ class OutageRepository(context: Context) {
     }
 
     /**
-     * Refreshes ztoe (planned) and PowerOn (emergency + repair works) for the selected address.
+     * Refreshes the POE queue tables and the per-house status (emergency «пошкодження», repair works,
+     * the house's queue) for the selected address and the other subscriptions.
      * Runs on a worker thread. A source that fails keeps its previous data and is reported as such;
      * it never counts as "no outage". [shownId] is the item the main screen shows: it is polled whatever
      * its switches (spec/SUBSCRIPTIONS.md 8.4).
@@ -205,13 +218,13 @@ class OutageRepository(context: Context) {
             null
         }
 
-        // One fetch caches all 12 queues. A primary without a queue still fetches for the other addresses.
-        val ztoeQueue = settings.queue.ifBlank {
-            subs?.first?.let { s -> Subscriptions.alertOrder(s).firstNotNullOfOrNull { it.queue } }.orEmpty()
-        }
-        if (ztoeQueue.isNotBlank()) {
+        // One POE request per day caches all 12 queues. A primary without a queue still fetches for the
+        // other addresses, and an address whose queue is not known yet gets it from the per-house status.
+        val anyQueue = settings.queue.isNotBlank() || settings.selectedAddressQuery != null ||
+            subs?.first?.items?.any { it.queue != null || it.address != null } == true
+        if (anyQueue && (forceNetwork || !schedule.isCacheFresh(1L))) {
             try {
-                val res = ZtoeParser.fetchFullSchedule(settings.cityUrl, ztoeQueue, appContext, forceNetwork)
+                val res = PoeScheduleSync.refresh(appContext)
                 store.saveSite(res.siteState, nowMs, res.notice)
                 if (settings.queue.isNotBlank()) {
                     fetchStatus = res.status
@@ -225,11 +238,21 @@ class OutageRepository(context: Context) {
         var events: List<EmergencyEvent> = emptyList()
         val query = settings.selectedAddressQuery
         val key = addressKey(query)
+        var queueChanged = false
         if (query != null && key != null) {
-            val polled = pollPowerOn(query, key, nowMs)
-            poweronOk = polled?.first ?: false
-            events = polled?.second.orEmpty()
+            val polled = pollPoe(query, key)
+            poweronOk = polled?.ok ?: false
+            events = polled?.events.orEmpty()
             store.savePowerOn(poweronOk, nowMs)
+            polled?.status?.let { st ->
+                val queue = st.status.queue.orEmpty()
+                val statusText = if (queue.isEmpty()) PoeAddressLookup.NO_QUEUE_TEXT else null
+                if (queue != settings.queue || statusText != settings.customQueueStatusText) {
+                    // into the primary subscription, which is mirrored back into the settings keys
+                    runCatching { SubscriptionSync(appContext).assignPrimaryQueue(queue, statusText, null) }
+                    queueChanged = true
+                }
+            }
             if (notify && events.isNotEmpty() && settings.emergencyNotificationsEnabled) {
                 val primary = subs?.first?.primary
                 NotificationHelper.postEmergencyEvents(
@@ -240,11 +263,12 @@ class OutageRepository(context: Context) {
             }
         }
         if (subs != null) refreshOtherAddresses(settings, subs.first, subs.second, key, nowMs, notify, shownId)
-        return RefreshOutcome(siteState, fetchStatus, poweronOk, events, snapshot(settings))
+        val current = if (queueChanged) runCatching { SettingsRepository(appContext).getSettings() }.getOrDefault(settings) else settings
+        return RefreshOutcome(siteState, fetchStatus, poweronOk, events, snapshot(current))
     }
 
     /**
-     * PowerOn for every other subscription that wants emergency alerts, plus the one the main screen
+     * The per-house status for every other subscription that wants emergency alerts, plus the one the main screen
      * shows (spec/SUBSCRIPTIONS.md 8.4): own request, own failure, own ledger, own status line.
      */
     private fun refreshOtherAddresses(
@@ -269,12 +293,19 @@ class OutageRepository(context: Context) {
             if (!alerts && item.id != shownId && item.id !in onWidgets) continue
             val key = a.key
             if (key == primaryKey) continue
-            val polled = pollPowerOn(SelectedAddressQuery(a.remSlug, a.settlementId, a.streetId, a.house), key, nowMs)
-            store.savePowerOn(key, polled?.first ?: false, nowMs)
+            val polled = pollPoe(SelectedAddressQuery(a.remSlug, a.settlementId, a.streetId, a.house), key)
+            store.savePowerOn(key, polled?.ok ?: false, nowMs)
             if (polled == null) continue
-            if (notify && alerts && polled.second.isNotEmpty()) {
+            polled.status?.let { st ->
+                val queue = st.status.queue
+                val statusText = if (queue == null) PoeAddressLookup.NO_QUEUE_TEXT else null
+                if (queue != item.queue || statusText != item.queueStatusText) {
+                    runCatching { SubscriptionSync(appContext).assignItemQueue(item.id, queue, statusText) }
+                }
+            }
+            if (notify && alerts && polled.events.isNotEmpty()) {
                 NotificationHelper.postEmergencyEvents(
-                    appContext, settings, key, polled.second, addressLine(item), enabled = true, subscriptionId = item.id,
+                    appContext, settings, key, polled.events, addressLine(item), enabled = true, subscriptionId = item.id,
                     plannedSpans = OutageEngine.plannedSpans(outagesFor(item.queue, key)),
                     plannedAlertsOn = Subscriptions.plannedActive(master, item)
                 )
@@ -286,43 +317,35 @@ class OutageRepository(context: Context) {
     private fun addressLine(item: Subscription): String =
         item.address?.text?.takeIf { it.isNotBlank() } ?: Subscriptions.displayLabel(item)
 
-    /** One PowerOn query: saves ids, ledger and repairs under [key]. Null when it failed or could not be built. */
-    private fun pollPowerOn(query: SelectedAddressQuery, key: String, nowMs: Long): Pair<Boolean, List<EmergencyEvent>>? = try {
-        ZtoeAddressLookup.initDiskCache(appContext)
-        val target = buildTarget(query, key, nowMs)
-        if (target == null) {
+    /** One per-house status: confirmed or not, the ledger events, and the confirmed answer (for the queue). */
+    private data class Poll(val ok: Boolean, val events: List<EmergencyEvent>, val status: AddressStatusFetch.Confirmed?)
+
+    /**
+     * Asks POE about one house (E4) and saves the ledger and repair works under [key]. The street's
+     * merged ids are tried in turn until POE answers for one. An unavailable answer leaves the ledger
+     * and the repairs as they were (spec/POE_API.md section 9). Null only when it could not be built.
+     */
+    private fun pollPoe(query: SelectedAddressQuery, key: String): Poll? = try {
+        val cityId = query.settlementId.toLongOrNull()
+        if (cityId == null || query.house.isBlank()) {
             null
         } else {
             val now = LocalDateTime.now(KYIV_ZONE)
-            val result = PowerOnClient().fetch(target, now.toLocalDate(), now)
-            result.ids?.let { if (it.cityIds.isNotEmpty() || it.streetIds.isNotEmpty()) store.saveIds(key, it, nowMs) }
-            val ledger = EmergencyLedger.reconcile(store.ledger(key), result.emergency, now)
+            val today = now.toLocalDate()
+            val street = PoeAddressLookup.findStreetById(query.streetId)
+            val ids = (street?.allIds ?: listOf(query.streetId)).mapNotNull { it.toLongOrNull() }
+            var fetch: AddressStatusFetch = AddressStatusFetch.Unavailable("unresolved")
+            for (sid in ids) {
+                fetch = client.addressStatus(cityId, sid, query.house, today)
+                if (fetch is AddressStatusFetch.Confirmed) break
+            }
+            val ledger = EmergencyLedger.reconcile(store.ledger(key), PoeClient.emergencyFetch(fetch, today), now)
             store.saveLedger(key, ledger.entries)
-            result.repairs?.let { store.saveRepairs(key, it) }
-            (result.emergency is EmergencyFetch.Confirmed) to ledger.events
+            val confirmed = fetch as? AddressStatusFetch.Confirmed
+            if (confirmed != null) store.saveRepairs(key, confirmed.status.repairs)
+            Poll(confirmed != null, ledger.events, confirmed)
         }
     } catch (_: Exception) {
         null
-    }
-
-    private fun buildTarget(query: SelectedAddressQuery, key: String, nowMs: Long): PowerOnTarget? {
-        val rem = ZtoeAddressLookup.getRems().firstOrNull { it.id == query.remId }
-            ?: ZtoeAddressLookup.ZTOE_REM_OPTIONS.firstOrNull { it.id == query.remId }
-        val settlement = ZtoeAddressLookup.findSettlementById(query.settlementId) ?: return null
-        val street = ZtoeAddressLookup.findStreetById(query.streetId) ?: return null
-        val streetKey = StreetKey.of(street.nameUk)
-        val names = ZtoeAddressLookup.getStreetsForSettlement(settlement.id)
-            .filter { StreetKey.of(it.nameUk) == streetKey }
-            .map { it.nameUk }
-            .ifEmpty { listOf(street.nameUk) }
-        val cached = store.ids(key)?.takeIf { nowMs - it.second in 0 until PowerOnClient.IDS_TTL_MS }
-        return PowerOnTarget(
-            remOtgId = rem?.ztoeOtgId,
-            settlementName = settlement.nameUk,
-            streetNames = names,
-            house = query.house,
-            cachedCityIds = cached?.first?.cityIds.orEmpty(),
-            cachedStreetIds = cached?.first?.streetIds.orEmpty()
-        )
     }
 }

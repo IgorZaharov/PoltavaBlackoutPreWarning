@@ -13,10 +13,12 @@ export interface BlackoutSlot {
   startTimeStr: string; // "14:00" or "14:30"
   endTimeStr: string; // "18:00" or "15:00"
   status: SlotStatus;
-  /** Part of an emergency outage (PowerOn). */
+  /** Part of an emergency outage (POE «пошкодження»). */
   isEmergency?: boolean;
-  /** Part of a planned outage (ztoe table or PowerOn planned works). A cell can be both planned and emergency. */
+  /** Part of a planned outage (POE queue table or repair works). A cell can be both planned and emergency. */
   isPlanned?: boolean;
+  /** POE switching half-hour (spec/OUTAGE_ENGINE.md 3.5): power may still be off; never counts as off. */
+  isSwitching?: boolean;
   rawLabel?: string;
 }
 

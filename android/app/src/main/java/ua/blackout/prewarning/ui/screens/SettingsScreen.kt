@@ -113,14 +113,14 @@ import ua.blackout.prewarning.core.Subscription
 import ua.blackout.prewarning.core.SubscriptionStore
 import ua.blackout.prewarning.core.Subscriptions
 import ua.blackout.prewarning.data.model.SelectedAddressQuery
-import ua.blackout.prewarning.data.parser.AddressLookupResult
-import ua.blackout.prewarning.data.parser.FetchStatus
-import ua.blackout.prewarning.data.parser.ZtoeAddressLookup
-import ua.blackout.prewarning.data.parser.ZtoeParser
-import ua.blackout.prewarning.data.parser.ZtoeHouseLookupResult
-import ua.blackout.prewarning.data.parser.ZtoeRemOption
-import ua.blackout.prewarning.data.parser.ZtoeSettlementOption
-import ua.blackout.prewarning.data.parser.ZtoeStreetOption
+import ua.blackout.prewarning.data.poe.AddressLookupResult
+import ua.blackout.prewarning.data.poe.FetchStatus
+import ua.blackout.prewarning.data.poe.PoeAddressLookup
+import ua.blackout.prewarning.data.poe.PoeBranchOption
+import ua.blackout.prewarning.data.poe.PoeHouseLookupResult
+import ua.blackout.prewarning.data.poe.PoeScheduleSync
+import ua.blackout.prewarning.data.poe.PoeSettlementOption
+import ua.blackout.prewarning.data.poe.PoeStreetOption
 import ua.blackout.prewarning.ui.AppStrings
 import ua.blackout.prewarning.ui.components.spinWhile
 import ua.blackout.prewarning.ui.components.GlassCard
@@ -223,7 +223,7 @@ fun SettingsScreen(
         }
     }
 
-    val isUrlInValidList = remember(siteUrl) { ZtoeParser.isValidUrl(siteUrl, context) }
+    val isUrlInValidList = remember(siteUrl) { PoeScheduleSync.isValidUrl(siteUrl, context) }
     var urlFetchStatus by remember { mutableStateOf(FetchStatus.SUCCESS) }
     var isVerifyingUrl by remember { mutableStateOf(false) }
     var urlChecked by remember { mutableStateOf(false) }
@@ -231,15 +231,14 @@ fun SettingsScreen(
     // Live URL verification against valid-urls.json + the real table; waits until the page is on screen
     LaunchedEffect(siteUrl, currentQueue, isVisible) {
         if (!isVisible) return@LaunchedEffect
-        if (!ZtoeParser.isValidUrl(siteUrl, context)) {
+        if (!PoeScheduleSync.isValidUrl(siteUrl, context)) {
             urlFetchStatus = FetchStatus.NO_QUEUES_FOUND
             urlChecked = true
             return@LaunchedEffect
         }
         isVerifyingUrl = true
-        val verifyQueue = currentQueue.ifBlank { "1.1" }
         val res = withContext(Dispatchers.IO) {
-            ZtoeParser.fetchFullSchedule(siteUrl, verifyQueue, context)
+            PoeScheduleSync.refresh(context)
         }
         urlFetchStatus = res.status
         isVerifyingUrl = false
@@ -1192,15 +1191,19 @@ private fun ActionButton(
     }
 }
 
-private fun ZtoeRemOption.displayName(lang: String) = if (lang == "uk") nameUk else nameEn
-// Settlements and streets keep their Ukrainian names in both languages: the live ztoe lists have no English
-// names, so translating only the built-in ones mixed the two (owner request 2026-11-15).
+private fun PoeBranchOption.displayName(lang: String) = if (lang == "uk") nameUk else nameEn
+// Settlements and streets keep their Ukrainian names in both languages: POE lists have no English names
+// (owner request 2026-11-15, kept for the Poltava app).
 @Suppress("UNUSED_PARAMETER")
-private fun ZtoeSettlementOption.displayName(lang: String) = nameUk
+private fun PoeSettlementOption.displayName(lang: String) = nameUk
 @Suppress("UNUSED_PARAMETER")
-private fun ZtoeStreetOption.displayName(lang: String) = nameUk
+private fun PoeStreetOption.displayName(lang: String) = nameUk
 
-/** Loading flags of one level of the REM, city, street, house cascade; [retry] re-runs its fetch with forceRefresh. */
+/** First-launch cascade: Полтавська об'єднана філія (spec/branches.json) and місто Полтава (POE city_id 11389). */
+private const val DEFAULT_BRANCH = "poltavska"
+private const val DEFAULT_SETTLEMENT = "11389"
+
+/** Loading flags of one level of the branch, city, street, house cascade; [retry] re-runs its load. */
 private class LevelState {
     var loading by mutableStateOf(false)
     var failed by mutableStateOf(false)
@@ -1220,23 +1223,23 @@ private fun AddressLookupDialog(
     onApply: (queue: String, statusText: String?, addressLabel: String, query: SelectedAddressQuery) -> Unit,
     onShowAppBanner: (String) -> Unit
 ) {
-    // The cascade starts from the saved address, or from Zhytomyr city on a first launch. After that a REM
-    // never picks a city for the user: choosing another REM clears city, street and house.
-    var selectedRemId by remember { mutableStateOf(saved?.remId?.ifBlank { "zhytomyr" } ?: "zhytomyr") }
-    var selectedSettlementId by remember { mutableStateOf(saved?.settlementId?.ifBlank { "zt_city" } ?: "zt_city") }
+    // The cascade starts from the saved address, or from Poltava city (Полтавська об'єднана філія) on a first
+    // launch. After that a branch never picks a city for the user: choosing another branch clears city, street and house.
+    var selectedRemId by remember { mutableStateOf(saved?.remId?.ifBlank { DEFAULT_BRANCH } ?: DEFAULT_BRANCH) }
+    var selectedSettlementId by remember { mutableStateOf(saved?.settlementId?.ifBlank { DEFAULT_SETTLEMENT } ?: DEFAULT_SETTLEMENT) }
     var selectedStreetId by remember { mutableStateOf(saved?.streetId ?: "") }
     var selectedHouse by remember { mutableStateOf(saved?.house ?: "") }
 
-    var allRems by remember { mutableStateOf(ZtoeAddressLookup.getRems()) }
-    var settlementsList by remember { mutableStateOf(ZtoeAddressLookup.getSettlementsForRem(selectedRemId)) }
+    var allRems by remember { mutableStateOf(PoeAddressLookup.getRems()) }
+    var settlementsList by remember { mutableStateOf(PoeAddressLookup.getSettlementsForRem(selectedRemId)) }
     var streetsList by remember {
         mutableStateOf(
-            if (selectedSettlementId.isNotBlank()) ZtoeAddressLookup.getStreetsForSettlement(selectedSettlementId) else emptyList()
+            if (selectedSettlementId.isNotBlank()) PoeAddressLookup.getStreetsForSettlement(selectedSettlementId) else emptyList()
         )
     }
     var housesList by remember {
         mutableStateOf(
-            if (selectedStreetId.isNotBlank()) ZtoeAddressLookup.getHousesForStreet(selectedStreetId) else emptyList()
+            if (selectedStreetId.isNotBlank()) PoeAddressLookup.getHousesForStreet(selectedStreetId) else emptyList()
         )
     }
     val remsState = remember { LevelState() }
@@ -1264,29 +1267,26 @@ private fun AddressLookupDialog(
         addressLookupResult = null
     }
 
-    // REM list. A retry forces a fresh fetch; otherwise the in-memory cache is used.
-    LaunchedEffect(siteUrl, remsState.retry) {
+    // Branch list (spec/branches.json) and the bundled POE address directory, loaded off the main thread
+    val appContext = LocalContext.current.applicationContext
+    LaunchedEffect(remsState.retry) {
         remsState.loading = true
         remsState.failed = false
-        val fetched = withContext(Dispatchers.IO) {
-            runCatching { ZtoeAddressLookup.fetchRemsFromZtoe(siteUrl, forceRefresh = remsState.retry > 0) }.getOrNull()
-        }
-        if (!fetched.isNullOrEmpty()) allRems = fetched
+        withContext(Dispatchers.IO) { runCatching { PoeAddressLookup.init(appContext) } }
+        allRems = PoeAddressLookup.getRems()
+        settlementsList = PoeAddressLookup.getSettlementsForRem(selectedRemId)
         remsState.failed = allRems.isEmpty()
         remsState.loading = false
     }
 
     // City list of the chosen REM. Never selects a city by itself; only drops a choice that no longer exists.
-    LaunchedEffect(selectedRemId, siteUrl, settlementsState.retry) {
-        settlementsList = ZtoeAddressLookup.getSettlementsForRem(selectedRemId)
+    LaunchedEffect(selectedRemId, settlementsState.retry) {
         settlementsState.loading = true
         settlementsState.failed = false
-        val fetched = withContext(Dispatchers.IO) {
-            runCatching {
-                ZtoeAddressLookup.fetchSettlementsForRem(selectedRemId, siteUrl, forceRefresh = settlementsState.retry > 0)
-            }.getOrDefault(emptyList())
+        settlementsList = withContext(Dispatchers.IO) {
+            runCatching { PoeAddressLookup.init(appContext) }
+            PoeAddressLookup.getSettlementsForRem(selectedRemId)
         }
-        if (fetched.isNotEmpty()) settlementsList = fetched
         settlementsState.failed = settlementsList.isEmpty()
         settlementsState.loading = false
         if (selectedSettlementId.isNotBlank() && settlementsList.isNotEmpty() && settlementsList.none { it.id == selectedSettlementId }) {
@@ -1295,71 +1295,56 @@ private fun AddressLookupDialog(
         }
     }
 
-    // Street list (the fetch also bulk-indexes the houses of the whole settlement)
-    LaunchedEffect(selectedRemId, selectedSettlementId, siteUrl, streetsState.retry) {
+    // Street list of the settlement (bundled POE address directory, spelling variants merged)
+    LaunchedEffect(selectedRemId, selectedSettlementId, streetsState.retry) {
         if (selectedSettlementId.isBlank()) {
             streetsList = emptyList()
             streetsState.loading = false
             streetsState.failed = false
             return@LaunchedEffect
         }
-        streetsList = ZtoeAddressLookup.getStreetsForSettlement(selectedSettlementId)
         streetsState.loading = true
         streetsState.failed = false
-        val fetched = withContext(Dispatchers.IO) {
-            runCatching {
-                ZtoeAddressLookup.fetchStreetsForSettlement(
-                    selectedRemId, selectedSettlementId, siteUrl, forceRefresh = streetsState.retry > 0
-                )
-            }.getOrDefault(emptyList())
-        }
-        if (fetched.isNotEmpty()) {
-            streetsList = fetched
-            allRems = ZtoeAddressLookup.getRems()
-            settlementsList = ZtoeAddressLookup.getSettlementsForRem(selectedRemId)
-            if (selectedStreetId.isNotBlank()) {
-                val bulkIndexed = ZtoeAddressLookup.getHousesForStreet(selectedStreetId)
-                if (bulkIndexed.isNotEmpty()) housesList = bulkIndexed
-            }
+        streetsList = withContext(Dispatchers.IO) {
+            runCatching { PoeAddressLookup.init(appContext) }
+            PoeAddressLookup.getStreetsForSettlement(selectedSettlementId)
         }
         streetsState.failed = streetsList.isEmpty()
         streetsState.loading = false
     }
 
-    // House list of the chosen street (served from the bulk index when it is already there)
-    LaunchedEffect(selectedRemId, selectedSettlementId, selectedStreetId, siteUrl, housesState.retry) {
+    // House list of the chosen street: live from POE (address search, E3), cached per street
+    LaunchedEffect(selectedRemId, selectedSettlementId, selectedStreetId, housesState.retry) {
         if (selectedStreetId.isBlank()) {
             housesList = emptyList()
             housesState.loading = false
             housesState.failed = false
             return@LaunchedEffect
         }
-        housesList = ZtoeAddressLookup.getHousesForStreet(selectedStreetId)
+        housesList = PoeAddressLookup.getHousesForStreet(selectedStreetId)
         housesState.loading = true
         housesState.failed = false
         val fetched = withContext(Dispatchers.IO) {
             runCatching {
-                ZtoeAddressLookup.fetchHousesForStreet(
-                    selectedRemId, selectedSettlementId, selectedStreetId, siteUrl, forceRefresh = housesState.retry > 0
-                )
-            }.getOrDefault(emptyList())
+                PoeAddressLookup.fetchHousesForStreet(selectedRemId, selectedSettlementId, selectedStreetId)
+            }.getOrNull()
         }
-        if (fetched.isNotEmpty()) housesList = fetched
+        if (!fetched.isNullOrEmpty()) housesList = fetched
         housesState.failed = housesList.isEmpty()
         housesState.loading = false
     }
 
     val currentRem = allRems.firstOrNull { it.id == selectedRemId }
     val currentSettlement = if (selectedSettlementId.isBlank()) null else {
-        settlementsList.find { it.id == selectedSettlementId } ?: ZtoeAddressLookup.findSettlementById(selectedSettlementId)
+        settlementsList.find { it.id == selectedSettlementId } ?: PoeAddressLookup.findSettlementById(selectedSettlementId)
     }
     val currentStreet = if (selectedStreetId.isBlank()) null else {
-        streetsList.find { it.id == selectedStreetId } ?: ZtoeAddressLookup.findStreetById(selectedStreetId)
+        streetsList.find { it.id == selectedStreetId } ?: PoeAddressLookup.findStreetById(selectedStreetId)
     }
     val currentHouseRecord = housesList.find { it.house.equals(selectedHouse, ignoreCase = true) }
 
-    // Queries the site when street and house are chosen. Nothing closes or applies until the user presses the button.
-    LaunchedEffect(selectedRemId, selectedSettlementId, selectedStreetId, selectedHouse, siteUrl) {
+    // Asks POE (per-house status, E4) when street and house are chosen. Nothing closes or applies until the user presses the button.
+    LaunchedEffect(selectedRemId, selectedSettlementId, selectedStreetId, selectedHouse) {
         addressLookupResult = null
         addressCheckFailed = false
         if (selectedStreetId.isBlank() || selectedHouse.isBlank()) {
@@ -1369,12 +1354,13 @@ private fun AddressLookupDialog(
         isCheckingAddressOnSite = true
         val res = withContext(Dispatchers.IO) {
             runCatching {
-                ZtoeAddressLookup.checkAddressOnZtoeWebsite(
-                    remId = selectedRemId,
-                    settlementId = selectedSettlementId,
-                    streetId = selectedStreetId,
-                    house = selectedHouse,
-                    siteUrl = siteUrl
+                PoeAddressLookup.checkAddress(
+                    SelectedAddressQuery(
+                        remId = selectedRemId,
+                        settlementId = selectedSettlementId,
+                        streetId = selectedStreetId,
+                        house = selectedHouse
+                    )
                 )
             }.getOrNull()
         }
@@ -1553,7 +1539,7 @@ private fun AddressLookupDialog(
                                 if (item.id != selectedStreetId) {
                                     selectedStreetId = item.id
                                     selectedHouse = ""
-                                    housesList = ZtoeAddressLookup.getHousesForStreet(item.id)
+                                    housesList = PoeAddressLookup.getHousesForStreet(item.id)
                                     addressLookupResult = null
                                 }
                             },
@@ -1588,7 +1574,7 @@ private fun AddressLookupDialog(
                         val validLookupResult = addressLookupResult?.takeIf {
                             it.house.equals(selectedHouse, ignoreCase = true)
                         }
-                        val matchedRecord: ZtoeHouseLookupResult? = when {
+                        val matchedRecord: PoeHouseLookupResult? = when {
                             validLookupResult != null && currentHouseRecord != null -> validLookupResult.copy(
                                 queue = validLookupResult.queue.ifEmpty { currentHouseRecord.queue },
                                 statusText = validLookupResult.statusText ?: currentHouseRecord.statusText

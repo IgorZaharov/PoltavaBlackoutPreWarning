@@ -45,18 +45,6 @@ export default defineConfig(() => {
           target: 'https://www.poe.pl.ua',
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/proxy-poe/, '')
-        },
-        '/proxy-ztoe-poweron': {
-          target: 'https://api-ztoe-poweron.inneti.net',
-          changeOrigin: true,
-          secure: false,
-          rewrite: (path) => path.replace(/^\/proxy-ztoe-poweron/, '')
-        },
-        '/proxy-ztoe': {
-          target: 'https://www.ztoe.com.ua',
-          changeOrigin: true,
-          secure: false,
-          rewrite: (path) => path.replace(/^\/proxy-ztoe/, '')
         }
       }
     },
