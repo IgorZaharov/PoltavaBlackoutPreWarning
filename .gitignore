@@ -4,9 +4,13 @@ dist/
 coverage/
 .DS_Store
 *.log
+!docs/research/directory/*.log
 .env*
 !.env.example
 .aistudio/
 .omc/
 public/assets/aistudio/*.png
 
+# Python
+__pycache__/
+*.pyc

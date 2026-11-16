@@ -1,0 +1,3 @@
+# Live API samples: keep byte-exact for parser tests
+docs/research/fixtures/** -text
+docs/research/directory/** -text
