@@ -1,3 +1,8 @@
+# LF in the working tree on every OS: the tests compare file text with "\n", and CI runs on Linux
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
 # Live API samples: keep byte-exact for parser tests
 docs/research/fixtures/** -text
 docs/research/directory/** -text
