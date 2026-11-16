@@ -2,13 +2,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import { execSync } from 'node:child_process';
-import {
-  QUEUES,
-  parseZtoeHtmlFull,
-  getChartHalfHourBlocks,
-  getBlackoutIntervals,
-  calculateOutageCountdown,
-} from '../src/services/ztoeParser';
+import { QUEUES } from '../src/services/poeScheduleSync';
+import { PoeSchedule } from '../src/core/poeSchedule';
+import { parseLocalDate, plusDays, type LocalDate } from '../src/core/localTime';
+import type { ScheduleCell } from '../src/core/outageModels';
+import { ScheduleCache } from '../src/services/scheduleCache';
+import { OutageStateStore } from '../src/services/outageStore';
+import { OutageRepository } from '../src/services/outageRepository';
+import { createMemoryStorage } from '../src/services/storage';
+import type { UserSettings } from '../src/types';
 import { translations } from '../src/services/i18n';
 import {
   DEFAULT_DONATIONS,
@@ -21,118 +23,74 @@ import {
 
 const ROOT_DIR = process.cwd();
 
-function getKyivDateDdMmYyyy(offsetDays = 0): { ddMmYyyy: string; isoDate: string } {
-  const target = new Date(Date.now() + offsetDays * 86400000);
-  const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Europe/Kyiv',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(target);
-  const day = parts.find((p) => p.type === 'day')?.value || '01';
-  const month = parts.find((p) => p.type === 'month')?.value || '01';
-  const year = parts.find((p) => p.type === 'year')?.value || '2026';
-  return {
-    ddMmYyyy: `${day}.${month}.${year}`,
-    isoDate: `${year}-${month}-${day}`,
-  };
+/**
+ * The production path on local state only: a repository on memory storage, a fixed clock and the POE
+ * tables of [day] (and tomorrow) written into its cache. No network: the refresh is never called.
+ */
+function repositoryWithTables(
+  day: LocalDate,
+  nowMs: number,
+  today: Record<string, readonly ScheduleCell[]> | null,
+  tomorrow: Record<string, readonly ScheduleCell[]> | null = null
+): OutageRepository {
+  const schedule = new ScheduleCache(createMemoryStorage());
+  if (today) schedule.saveAllCellsBatch(today, tomorrow, day, nowMs);
+  return new OutageRepository({
+    schedule,
+    store: new OutageStateStore(createMemoryStorage()),
+    nowMs: () => nowMs,
+    subscriptions: () => ({ store: { primaryId: null, items: [] }, master: true }),
+  });
 }
 
-function buildRealisticZtoeHtml(ddMmYyyy: string): string {
-  const headerCols = Array.from({ length: 24 }, (_, h) => {
-    const s = String(h).padStart(2, '0') + ':00';
-    const e = String(h + 1).padStart(2, '0') + ':00';
-    return `<td>${s}-${e}</td>`;
-  }).join('');
-
-  const rows = QUEUES.map((q, qIdx) => {
-    const cells = Array.from({ length: 48 }, (_, slotIdx) => {
-      const isOff = (slotIdx + qIdx * 3) % 16 >= 4 && (slotIdx + qIdx * 3) % 16 <= 9;
-      const bg = isOff ? '#ff3333' : '#ffffff';
-      return `<td style="background:${bg}"></td>`;
-    }).join('');
-    return `<tr><td><b>${q.id}</b></td>${cells}</tr>`;
-  }).join('\n');
-
-  return `
-    <html>
-      <body>
-        <table width="100%" height="100%" border="0">
-          <tr><td>
-            <table>
-              <tr><td colspan="49">Графік погодинних відключень електроенергії на ${ddMmYyyy}</td></tr>
-              <tr><td>Черга / Підчерга</td>${headerCols}</tr>
-              ${rows}
-            </table>
-          </td></tr>
-        </table>
-      </body>
-    </html>
-  `;
+/** Every queue with the same cells: OFF in [offFrom, offTo), a switching half-hour after the block. */
+function uniformDay(offFrom: number, offTo: number): Record<string, ScheduleCell[]> {
+  const out: Record<string, ScheduleCell[]> = {};
+  for (const q of QUEUES) {
+    out[q.id] = Array.from({ length: 48 }, (_, i): ScheduleCell => (i >= offFrom && i < offTo ? 'OFF' : i === offTo ? 'SWITCHING' : 'ON'));
+  }
+  return out;
 }
 
 async function runUnitTestA() {
-  console.log('--- Running Unit Test A: ZTOE Fetching, Parsing & Main/Widget Graph Parity ---');
+  console.log('--- Running Unit Test A: POE schedule, Main/Widget Graph Parity ---');
 
   // 1. Verify /valid-urls.json
   const validUrlsPath = path.join(ROOT_DIR, 'valid-urls.json');
   assert.ok(fs.existsSync(validUrlsPath), 'Missing /valid-urls.json in repository root');
   const validUrls: string[] = JSON.parse(fs.readFileSync(validUrlsPath, 'utf-8'));
   assert.ok(
-    validUrls.includes('https://www.ztoe.com.ua/unhooking-search.php'),
-    '/valid-urls.json must include https://www.ztoe.com.ua/unhooking-search.php'
+    validUrls.includes('https://www.poe.pl.ua/disconnection/power-outages/'),
+    '/valid-urls.json must include https://www.poe.pl.ua/disconnection/power-outages/'
   );
   assert.ok(
     validUrls.includes('https://example.com'),
     '/valid-urls.json must include https://example.com'
   );
 
-  // 2. Select random queue (e.g. 1.1 .. 6.2)
+  // 2. Select random queue (e.g. 1.1 .. 6.2) of the recorded POE page of 2026-11-16
   const randomQueue = QUEUES[Math.floor(Math.random() * QUEUES.length)].id;
-  const { ddMmYyyy } = getKyivDateDdMmYyyy(0);
-  console.log(`Selected random queue: ${randomQueue} for Today (${ddMmYyyy})`);
+  const day = parseLocalDate('2026-11-16');
+  const table = PoeSchedule.parseDay(fs.readFileSync(path.join(ROOT_DIR, 'spec/fixtures/poe/poe_newgpv_2026-11-16.html'), 'utf-8'), day);
+  assert.equal(table.kind, 'PUBLISHED', 'The recorded POE page must parse');
+  console.log(`Selected random queue: ${randomQueue} for 2026-11-16 (recorded POE page)`);
 
-  // 3. Attempt live fetch from ztoe.com.ua; fall back to realistic ZTOE HTML structure if blocked in CI
-  let html = '';
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 7000);
-    const response = await fetch('https://www.ztoe.com.ua/unhooking-search.php', {
-      signal: controller.signal,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Android 14; Mobile; rv:130.0) Gecko/130.0 Firefox/130.0',
-      },
-    });
-    clearTimeout(timer);
-    if (response.ok) {
-      const buffer = await response.arrayBuffer();
-      html = new TextDecoder('windows-1251').decode(buffer);
-      if (!html.includes('Черга') && !html.includes('черга')) {
-        html = new TextDecoder('utf-8').decode(buffer);
-      }
-    }
-  } catch {
-    // Offline or regional firewall in CI runner
-  }
-
-  let fullResult = html ? parseZtoeHtmlFull(html, randomQueue, new Date()) : null;
-  if (!fullResult || !fullResult.hasTodayTable || !fullResult.todaySlots) {
-    console.log('Live site table for today not reachable from runner; verifying with ZTOE leaf-table HTML fixture.');
-    const fixtureHtml = buildRealisticZtoeHtml(ddMmYyyy);
-    fullResult = parseZtoeHtmlFull(fixtureHtml, randomQueue, new Date());
-  }
-
-  assert.ok(
-    fullResult && fullResult.hasTodayTable && fullResult.todaySlots && fullResult.todaySlots.length === 48,
-    `Expected 48 half-hour slots for queue ${randomQueue}, got ${fullResult?.todaySlots?.length}`
-  );
-
-  const slots = fullResult.todaySlots;
+  // 3. The slots the main screen and the widgets draw, through the repository (local state only)
+  const nowMs = Date.UTC(2026, 10, 16, 10, 0); // 12:00 Kyiv
+  const repo = repositoryWithTables(day, nowMs, table.queues);
+  const settings = { queue: randomQueue } as UserSettings;
+  const slots = repo.snapshot(settings).slotsFor(day);
+  assert.equal(slots.length, 48, `Expected 48 half-hour slots for queue ${randomQueue}, got ${slots.length}`);
   const offSlotsCount = slots.filter((s) => s.status === 'POWER_OFF').length;
-  console.log(`Determined ${offSlotsCount} half-hour blackout slots for queue ${randomQueue} on ${ddMmYyyy}`);
+  console.log(`Determined ${offSlotsCount} half-hour blackout slots for queue ${randomQueue}`);
+  assert.ok(!slots.some((s) => s.isSwitching && s.status === 'POWER_OFF'), 'The switching half-hour is never drawn as off');
 
   // 4. Verify Main Window graph blocks vs Big Widget graph blocks match 100%
-  const mainWindowGraphBlocks = getChartHalfHourBlocks(slots);
+  const mainWindowGraphBlocks = Array.from({ length: 24 }, (_, hour) => ({
+    hour,
+    half1Off: slots[hour * 2].status === 'POWER_OFF',
+    half2Off: slots[hour * 2 + 1].status === 'POWER_OFF',
+  }));
 
   // Big Widget graph logic (24 hours x 2 half-hour blocks)
   const bigWidgetGraphBlocks = Array.from({ length: 24 }, (_, hour) => ({
@@ -329,41 +287,20 @@ function runUnitTestB() {
   // 10. Verify Bug 1 & Bug 2:
   // - Bug 1: When today's blackouts are over and tomorrow's schedule is available, "Next period" shows tomorrow's 1st blackout (not today's 1st blackout).
   // - Bug 2: Switching Today / Tomorrow tabs updates "blackout hours for this day" below the 24h timeline.
-  const baseDate = new Date('2026-11-02T12:00:00+02:00');
-  const buildTwoDayHtml = (todayDateDdMmYyyy: string, tomorrowDateDdMmYyyy: string): string => {
-    const headerCells = Array.from({ length: 24 }, (_, i) => {
-      const s = String(i).padStart(2, '0') + ':00';
-      const e = String(i + 1).padStart(2, '0') + ':00';
-      return `<td>${s}-${e}</td>`;
-    }).join('');
-    const allQueues = ['1.1', '1.2', '2.1', '2.2', '3.1', '3.2', '4.1', '4.2', '5.1', '5.2', '6.1', '6.2'];
-    const makeTable = (dateHeader: string, offSlotStart: number, offSlotEndExclusive: number) => {
-      const rows = allQueues
-        .map((q) => {
-          const cells = Array.from({ length: 48 }, (_, idx) => {
-            const bg = idx >= offSlotStart && idx < offSlotEndExclusive ? '#ff0000' : '#ffffff';
-            return `<td style="background: ${bg};"></td>`;
-          }).join('');
-          return `<tr><td>1</td><td>${q}</td>${cells}</tr>`;
-        })
-        .join('\n');
-      return `<table><tr><td colspan="50">Графік погодинних відключень на ${dateHeader}</td></tr><tr><td>Черга</td><td>Підчерга</td>${headerCells}</tr>${rows}</table>`;
-    };
-    // Today: blackout 08:00–10:00 (slots 16..20). Tomorrow: blackout 14:00–17:00 (slots 28..34).
-    return `<html><body>${makeTable(todayDateDdMmYyyy, 16, 20)}${makeTable(tomorrowDateDdMmYyyy, 28, 34)}</body></html>`;
-  };
-
-  const twoDayHtml = buildTwoDayHtml('02.11.2026', '03.11.2026');
-  const parsedTwoDay = parseZtoeHtmlFull(twoDayHtml, '1.1', baseDate);
-  assert.ok(parsedTwoDay.hasTodayTable && parsedTwoDay.todaySlots, 'Must parse Today schedule table');
-  assert.ok(parsedTwoDay.hasTomorrowTable && parsedTwoDay.tomorrowSlots, 'Must parse Tomorrow schedule table');
-
-  const todayIntervals = getBlackoutIntervals(parsedTwoDay.todaySlots!);
-  const tomorrowIntervals = getBlackoutIntervals(parsedTwoDay.tomorrowSlots!);
-  assert.equal(todayIntervals.length, 1);
-  assert.equal(`${todayIntervals[0].start} – ${todayIntervals[0].end}`, '08:00 – 10:00');
-  assert.equal(tomorrowIntervals.length, 1);
-  assert.equal(`${tomorrowIntervals[0].start} – ${tomorrowIntervals[0].end}`, '14:00 – 17:00');
+  // Today: blackout 08:00–10:00 (slots 16..19). Tomorrow: blackout 14:00–17:00 (slots 28..33). POE tables.
+  const nov2 = parseLocalDate('2026-11-02');
+  const lateEveningMs = Date.UTC(2026, 10, 2, 19, 0); // 21:00 Kyiv
+  const twoDayRepo = repositoryWithTables(nov2, lateEveningMs, uniformDay(16, 20), uniformDay(28, 34));
+  const twoDaySnapshot = twoDayRepo.snapshot({ queue: '1.1' } as UserSettings);
+  const rowsOf = (d: LocalDate) =>
+    twoDaySnapshot.dayView(d).rows.map((r) => {
+      const hm = (x: number) => new Date(x).toISOString().substring(11, 16);
+      return `${hm(r.from)} – ${hm(r.to)}`;
+    });
+  const todayIntervals = rowsOf(nov2);
+  const tomorrowIntervals = rowsOf(plusDays(nov2, 1));
+  assert.deepEqual(todayIntervals, ['08:00 – 10:00']);
+  assert.deepEqual(tomorrowIntervals, ['14:00 – 17:00']);
   assert.notDeepEqual(
     todayIntervals,
     tomorrowIntervals,
@@ -371,34 +308,14 @@ function runUnitTestB() {
   );
 
   // At 21:00 today (after today's 08:00–10:00 blackout has ended), Next period must be tomorrow's 1st blackout (14:00 – 17:00), NOT today's 1st blackout (08:00 – 10:00)
-  const lateEveningNow = new Date(2026, 10, 2, 21, 0, 0);
-  const countdownWithTomorrow = calculateOutageCountdown(
-    {
-      dateStr: '2026-11-02',
-      dayLabel: 'Сьогодні',
-      queue: '1.1',
-      city: 'Житомир (ZTOE)',
-      slots: parsedTwoDay.todaySlots!,
-      lastUpdated: '21:00',
-      sourceUrl: 'https://www.ztoe.com.ua/unhooking-search.php'
-    },
-    lateEveningNow,
-    {
-      dateStr: '2026-11-03',
-      dayLabel: 'Завтра',
-      queue: '1.1',
-      city: 'Житомир (ZTOE)',
-      slots: parsedTwoDay.tomorrowSlots!,
-      lastUpdated: '21:00',
-      sourceUrl: 'https://www.ztoe.com.ua/unhooking-search.php'
-    }
-  );
+  const countdownWithTomorrow = twoDaySnapshot.scheduleStatus();
   assert.equal(
-    countdownWithTomorrow.slotDescription,
+    countdownWithTomorrow.nextSlotTime,
     '14:00 – 17:00',
     'Bug 1 regression check: Next period must show tomorrow 1st blackout (14:00 – 17:00), never today 1st blackout (08:00 – 10:00)'
   );
-  assert.equal(countdownWithTomorrow.formattedTimeLeft, '17:00:00');
+  assert.equal(countdownWithTomorrow.countdownText, '17:00:00');
+  assert.equal(twoDaySnapshot.status().restoreUntil !== null, true, 'The POE switching half-hour after the block gives the latest restore time');
 
   // Verify Android Kotlin source files also enforce content-based slot signature and tomorrow 1st blackout fallback
   const scheduleRepoKt = fs.readFileSync(
@@ -450,13 +367,13 @@ function runUnitTestB() {
       kyivZoneKt.includes('ZoneId.systemDefault()'),
     'KyivZone.kt must fallback from Europe/Kyiv to Europe/Kiev and ZoneId.systemDefault()'
   );
-  const ztoeParserKt = fs.readFileSync(
-    path.join(ROOT_DIR, 'android/app/src/main/java/ua/blackout/prewarning/data/parser/ZtoeParser.kt'),
+  const poeScheduleSyncKt = fs.readFileSync(
+    path.join(ROOT_DIR, 'android/app/src/main/java/ua/blackout/prewarning/data/poe/PoeScheduleSync.kt'),
     'utf-8'
   );
   assert.ok(
-    ztoeParserKt.includes('KYIV_ZONE') && !ztoeParserKt.includes('ZoneId.of("Europe/Kyiv")'),
-    'ZtoeParser.kt must use KYIV_ZONE instead of raw ZoneId.of("Europe/Kyiv")'
+    poeScheduleSyncKt.includes('KYIV_ZONE') && !poeScheduleSyncKt.includes('ZoneId.of("Europe/Kyiv")'),
+    'PoeScheduleSync.kt must use KYIV_ZONE instead of raw ZoneId.of("Europe/Kyiv")'
   );
   assert.ok(
     scheduleRepoKt.includes('KYIV_ZONE') && !scheduleRepoKt.includes('ZoneId.of("Europe/Kyiv")'),
@@ -467,7 +384,7 @@ function runUnitTestB() {
   assert.ok(fs.existsSync(handoverPath), 'HANDOVER.md must exist in repository root');
   const handoverMd = fs.readFileSync(handoverPath, 'utf-8');
   assert.ok(
-    handoverMd.includes('ZtoeParser.kt') &&
+    handoverMd.includes('ScheduleRepository.kt') &&
       handoverMd.includes('ScheduleRepository.kt') &&
       handoverMd.includes('AlarmScheduler.kt') &&
       handoverMd.includes('BlackoutGlanceWidget.kt') &&
@@ -523,7 +440,6 @@ async function runUnitTestC_CarriedOverChecks() {
   // «Житомирська Рулетка» is not part of «Світло в Полтаві» (owner decision D5). Its test (old Unit Test C)
   // also held these app checks; they are kept here unchanged apart from the Poltava application id.
   console.log('--- Running Unit Test C: Unclear schedule state, links and build configuration ---');
-  const { fetchFullSchedules } = await import('../src/services/ztoeParser');
   const read = (rel: string) => fs.readFileSync(path.join(ROOT_DIR, rel), 'utf-8');
   const KT = 'android/app/src/main/java/ua/blackout/prewarning/';
   // visible strings live in i18n.ts, so the view and its strings are checked together
@@ -534,22 +450,18 @@ async function runUnitTestC_CarriedOverChecks() {
   const aboutScreenKt = read(KT + 'ui/screens/AboutScreen.kt');
   const buildGradleKt = read('android/app/build.gradle.kts');
 
-  const invalidUrlRes = await fetchFullSchedules('https://invalid.offline.local', '1.1');
-  assert.equal(invalidUrlRes.status, 'NO_QUEUES_FOUND');
-  assert.equal(invalidUrlRes.todaySchedule.slots.length, 0, 'Unreachable/invalid site must not use cached results (slots must be empty)');
-  assert.equal(invalidUrlRes.todaySchedule.isUnclear, true, 'Unreachable/invalid site must mark schedule as isUnclear: true');
-
-  const noQueuesRes = await fetchFullSchedules('https://example.com', '1.1');
-  assert.ok(noQueuesRes.status === 'NO_QUEUES_FOUND' || noQueuesRes.status === 'NO_INTERNET');
-  assert.equal(noQueuesRes.todaySchedule.slots.length, 0, 'When no queues can be extracted or site unreachable, cached results must not be used');
-  assert.equal(noQueuesRes.todaySchedule.isUnclear, true, 'When no queues can be extracted or site unreachable, schedule must be marked isUnclear: true');
-
-  const unclearCountdown = calculateOutageCountdown(invalidUrlRes.todaySchedule);
-  assert.equal(unclearCountdown.isUnclear, true, 'calculateOutageCountdown must return isUnclear: true for empty/unclear schedule');
+  // No table cached for the queue (the site was never read, or could not be): the schedule is unclear,
+  // never "no outages", and nothing is taken from an old cache
+  const unclearRepo = repositoryWithTables(parseLocalDate('2026-11-16'), Date.UTC(2026, 10, 16, 10, 0), null);
+  const unclearSnapshot = unclearRepo.snapshot({ queue: '1.1' } as UserSettings);
+  assert.equal(unclearSnapshot.isUnclear, true, 'A queue without a table must be unclear');
+  assert.equal(unclearSnapshot.slotsFor(unclearSnapshot.today).length, 0, 'An unclear day has no cells (the drum goes grey)');
+  const unclearCountdown = unclearSnapshot.scheduleStatus();
+  assert.equal(unclearCountdown.isUnclear, true, 'scheduleStatus must return isUnclear: true for an unclear schedule');
   assert.equal(
-    unclearCountdown.slotDescription,
+    unclearCountdown.nextSlotTime,
     '--:-- - --:--',
-    'calculateOutageCountdown must set next period to "--:-- - --:--" when schedule is unclear'
+    'scheduleStatus must set next period to "--:-- - --:--" when schedule is unclear'
   );
   assert.equal(translations.uk.statusUnclear, 'Невідомо');
   assert.equal(translations.en.statusUnclear, 'Unclear');
@@ -616,20 +528,16 @@ async function runUnitTestC_CarriedOverChecks() {
     'android/app/build.gradle.kts must set compileSdk = 36, targetSdk = 36, applicationId to ua.blackout.prewarning.poltava, use storePassword/keyPassword "android" for debug.keystore, enable buildConfig, disable release lint blockers, import java.util.Base64 at top-level, and support signing .aab bundles via GitHub Secrets'
   );
 
-  // Verify ZtoeParser.kt does not match #ffffff as #ff (which caused ZtoeParserTest:201 failure) and filters leaf tables
-  const ztoeParserKtText = fs.readFileSync(
-    path.join(ROOT_DIR, 'android/app/src/main/java/ua/blackout/prewarning/data/parser/ZtoeParser.kt'),
-    'utf-8'
-  );
+  // The POE schedule parser reads the three cell classes and never treats the switching half-hour as off
+  const poeScheduleKt = fs.readFileSync(path.join(ROOT_DIR, 'android/app/src/main/java/ua/blackout/prewarning/core/PoeSchedule.kt'), 'utf-8');
   assert.ok(
-    !ztoeParserKtText.includes('contains("#ff")') &&
-      ztoeParserKtText.includes('attr.contains("#ff3333")') &&
-      ztoeParserKtText.includes('attr.contains("#ff0000")') &&
-      ztoeParserKtText.includes('table.select("table").size == 1'),
-    'ZtoeParser.kt must match explicit red color codes (#ff3333, #ff0000, etc.) without matching #ffffff and filter leaf tables'
+    poeScheduleKt.includes('"gpv-s2" in tokens -> ScheduleCell.OFF') &&
+      poeScheduleKt.includes('"gpv-s3" in tokens -> ScheduleCell.SWITCHING') &&
+      poeScheduleKt.includes('"gpv-s1" in tokens -> ScheduleCell.ON'),
+    'PoeSchedule.kt must map gpv-s1 / gpv-s2 / gpv-s3 to on / off / switching'
   );
 
-  // Verify NotificationHelper.kt, AlertRegistry.kt, ScheduleSyncWorker.kt, SettingsScreen.kt, Models.kt, and ZtoeParserTest.kt
+  // Verify NotificationHelper.kt, AlertRegistry.kt, ScheduleSyncWorker.kt, SettingsScreen.kt, Models.kt, and AppInvariantsTest.kt
   const notificationHelperKt = fs.readFileSync(
     path.join(ROOT_DIR, 'android/app/src/main/java/ua/blackout/prewarning/notification/NotificationHelper.kt'),
     'utf-8'
@@ -640,13 +548,13 @@ async function runUnitTestC_CarriedOverChecks() {
     'NotificationHelper.kt must define createNotificationChannels(context: Context) and isTest parameter'
   );
 
-  const ztoeParserTestKt = fs.readFileSync(
-    path.join(ROOT_DIR, 'android/app/src/test/java/ua/blackout/prewarning/ZtoeParserTest.kt'),
+  const appInvariantsTestKt = fs.readFileSync(
+    path.join(ROOT_DIR, 'android/app/src/test/java/ua/blackout/prewarning/AppInvariantsTest.kt'),
     'utf-8'
   );
   assert.ok(
-    ztoeParserTestKt.includes('import org.junit.Assert.assertFalse'),
-    'ZtoeParserTest.kt must import org.junit.Assert.assertFalse'
+    appInvariantsTestKt.includes('import org.junit.Assert.assertFalse'),
+    'AppInvariantsTest.kt must import org.junit.Assert.assertFalse'
   );
 
   // Verify SettingsScreen.kt matches Emulator 100%: Site URL, Language selector, Test notification & Refresh buttons, and Frosted Glass / Orange colors
@@ -689,17 +597,10 @@ async function runUnitTestC_CarriedOverChecks() {
 async function runUnitTestE_AddressLookupAndUnsetQueue() {
   console.log('--- Running Unit Test E: Address Lookup, Duplicate Streets, First-Launch Unselected Queue, Emergency Switch & Widgets (1.4.0) ---');
 
-  const {
-    ZTOE_REM_OPTIONS,
-    ZTOE_FULL_NO_OUTAGE_MESSAGE,
-    ZTOE_STREET_OPTIONS,
-    parseZtoeAddressLookupTableHtml,
-    parseZtoeRemOptionsHtml,
-    parseZtoeSettlementOptionsHtml,
-    parseZtoeStreetOptionsHtml,
-    mergeStreets,
-    findStreetById,
-  } = await import('../src/services/ztoeAddressLookup');
+  const { getRems, getSettlementsForRem, getStreetsForSettlement, findStreetById, findSettlementById, usePoeDirectory } = await import(
+    '../src/services/poeAddressLookup'
+  );
+  const { PoeDirectoryIndex } = await import('../src/services/poeDirectory');
   const {
     DEFAULT_SETTINGS,
     loadUserSettings,
@@ -732,62 +633,24 @@ async function runUnitTestE_AddressLookupAndUnsetQueue() {
   assert.equal(resetSettings.selectedAddressQuery, undefined, 'resetAllAppDataToFirstLaunch must clear selectedAddressQuery');
   assert.equal(loadUserSettings().queue, '', 'loadUserSettings after reset must return empty queue');
 
-  // 2. All 19 REMs, option parsers with entity decoding, house table with queue and no-queue rows
-  assert.equal(ZTOE_REM_OPTIONS.length, 19, 'ZTOE_REM_OPTIONS must include all 19 Zhytomyroblenergo REMs');
-  const parsedRems = parseZtoeRemOptionsHtml(
-    '<select name="rem_id"><option value="0">--Оберіть РЕМ--</option><option value="7">Житомирський РЕМ</option></select>'
-  );
-  assert.ok(parsedRems.length >= 19, 'parseZtoeRemOptionsHtml must keep all 19 REMs');
+  // 2. All 28 POE branches (spec/branches.json) and the bundled address directory
+  assert.equal(getRems().length, 28, 'The picker must offer all 28 POE branches');
+  usePoeDirectory(PoeDirectoryIndex.fromJson(read('poe_directory.json')));
+  const poltavaBranchSettlements = getSettlementsForRem('poltavska');
+  assert.ok(poltavaBranchSettlements.some((s) => s.id === '11389' && s.nameUk === 'місто Полтава'), 'Полтавська об’єднана філія must list місто Полтава');
+  assert.equal(findSettlementById('11389')?.branchIds.length, 9, 'місто Полтава belongs to 9 branches (ids are global)');
 
-  const sampleSelectHtml = `
-    <select name="naspunkt_id">
-      <option value="0">--Оберіть населений пункт--</option>
-      <option value="16657">місто Житомир</option>
-      <option value="99999">село Кам&#039;янка</option>
-    </select>
-    <select name="vulica_id">
-      <option value="0">--Оберіть вулицю--</option>
-      <option value="173934">вул. Київська</option>
-      <option value="888888">вул. В&#039;ячеслава Чорновола</option>
-    </select>`;
-  const parsedSettlements = parseZtoeSettlementOptionsHtml('zhytomyr', sampleSelectHtml);
-  assert.equal(parsedSettlements.length, 2);
-  assert.equal(parsedSettlements[0].id, 'zt_city');
-  assert.equal(parsedSettlements[1].nameUk, "с. Кам'янка", 'City selector must decode &#039; into an apostrophe');
-  const parsedStreets = parseZtoeStreetOptionsHtml('zt_city', sampleSelectHtml);
-  assert.equal(parsedStreets.length, 2);
-  assert.equal(parsedStreets[0].id, 'zt_kyivska');
-  assert.equal(parsedStreets[1].nameUk, "вул. В'ячеслава Чорновола", 'Street selector must decode &#039; into an apostrophe');
+  // 3. Duplicate streets: spelling variants of one street are ONE option that keeps every id
+  const poltavaStreets = getStreetsForSettlement('11389');
+  assert.ok(poltavaStreets.length > 900 && poltavaStreets.length <= 1044, 'Poltava streets come from the snapshot, variants merged');
+  assert.equal(new Set(poltavaStreets.map((s) => s.nameUk.toLowerCase())).size, poltavaStreets.length, 'No duplicate street names after the merge');
+  assert.equal(findStreetById('1227174')?.nameUk.trim(), 'вул. Соборності', 'findStreetById must resolve a POE street id');
 
-  const parsedQueueRows = parseZtoeAddressLookupTableHtml(
-    '<table><tr><th>Будинок</th><th>Черга</th><th>Підчерга</th></tr><tr><td>15</td><td>5</td><td>2</td></tr></table>'
-  );
-  assert.equal(parsedQueueRows.find((r) => r.house === '15')?.queue, '5.2');
-  const parsedNoQueueRows = parseZtoeAddressLookupTableHtml(
-    '<table><tr><th>Будинок</th><th>Черга</th><th>Підчерга</th></tr><tr><td>104</td><td colspan="2">В цей час не вимикається, за винятком випадків аварійних відключень</td></tr></table>'
-  );
-  assert.equal(parsedNoQueueRows.find((r) => r.house === '104')?.queue, '');
-  assert.ok(ZTOE_FULL_NO_OUTAGE_MESSAGE.startsWith('В цей час не вимикається'));
-
-  // 3. Duplicate streets: apostrophe / spacing variants become ONE option that keeps every id
-  const merged = mergeStreets([
-    { id: 'st_176316', settlementId: 'zt_city', ztoeVulicaId: '176316', nameUk: "вул. В'ячеслава Чорновола", nameEn: '' },
-    { id: 'st_174295', settlementId: 'zt_city', ztoeVulicaId: '174295', nameUk: 'вул. В’ячеслава Чорновола', nameEn: '' },
-    { id: 'st_1', settlementId: 'zt_city', ztoeVulicaId: '1', nameUk: 'вул. С.П.Корольова', nameEn: '' },
-    { id: 'st_2', settlementId: 'zt_city', ztoeVulicaId: '2', nameUk: 'вул. С.П. Корольова', nameEn: '' },
-  ]);
-  assert.equal(merged.length, 2, 'Duplicate streets must merge into one option each');
-  const chornovola = merged.find((s) => s.allIds.includes('st_176316'));
-  assert.ok(chornovola && chornovola.allIds.includes('st_174295'), 'Merged street must keep all ids');
-  assert.deepEqual([...(chornovola!.ztoeVulicaIds ?? [])].sort(), ['174295', '176316']);
-  const keys = ZTOE_STREET_OPTIONS.map((s) => `${s.settlementId}|${s.nameUk.toLowerCase().replace(/[’ʼ‘´`]/g, "'").replace(/\s+/g, ' ')}`);
-  assert.equal(new Set(keys).size, keys.length, 'The static street list must not contain duplicate streets');
-  assert.ok(findStreetById('zt_kyivska'), 'findStreetById must resolve a static street id');
-
-  // 4. Production code no longer carries the demo emergency (вул. Київська 37) or fake houses
-  const addressLookupKt = read(KT + 'data/parser/ZtoeAddressLookup.kt');
-  assert.ok(!addressLookupKt.includes('getKyivska37DemoEmergencyOutage'), 'ZtoeAddressLookup.kt must not contain the demo emergency');
-  assert.ok(!/fun\s+\w*[Dd]efaultHouses/.test(addressLookupKt), 'ZtoeAddressLookup.kt must not invent default house lists');
+  // 4. The inherited Zhytomyr data layer is gone from Android and the web
+  for (const gone of [KT + 'data/parser/ZtoeAddressLookup.kt', KT + 'data/parser/ZtoeParser.kt', KT + 'data/poweron/PowerOnClient.kt', 'src/services/ztoeParser.ts', 'src/services/ztoeAddressLookup.ts', 'src/services/poweronClient.ts']) {
+    assert.ok(!fs.existsSync(path.join(ROOT_DIR, gone)), `${gone} must be removed (P3)`);
+  }
+  usePoeDirectory(null);
 
   // 5. Alert switches (multi-address step 2): per-address "Аварійні" ON by default; the master switch is a
   //    kill switch for planned AND emergency alerts (owner decision 1, spec/SUBSCRIPTIONS.md section 7);
@@ -1009,6 +872,18 @@ function runUnitTestG_IosPort() {
     for (const dir of ['public', 'android/app/src/main/assets', 'ios/Resources']) {
       assert.equal(read(`${dir}/${name}`), canonical, `${dir}/${name} must be identical to /${name}`);
     }
+  }
+
+  // poe_directory.json (POE address directory snapshot, docs/POLTAVA_PORT_PLAN.md section 4.4): the root
+  // file is canonical; public/ and the Android assets hold byte-identical copies (iOS from milestone I2).
+  {
+    const canonical = read('poe_directory.json');
+    for (const dir of ['public', 'android/app/src/main/assets']) {
+      assert.equal(read(`${dir}/poe_directory.json`), canonical, `${dir}/poe_directory.json must be identical to /poe_directory.json`);
+    }
+    const dir = JSON.parse(canonical);
+    assert.equal(dir.branches.length, 28, 'poe_directory.json must list the 28 POE branches');
+    assert.ok(dir.settlements.length > 1500, 'poe_directory.json must list the settlements of the whole oblast');
   }
 
   // Invariants shared with Android and web.

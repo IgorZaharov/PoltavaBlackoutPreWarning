@@ -47,6 +47,8 @@ Address (fields are what 1.4.0 already stores in `zt_user_settings`, see `PERSIS
 
 An address is valid only if `remSlug`, `settlementId`, `streetId` and `house` are all non-blank.
 
+**«Світло в Полтаві» (POE).** The model is unchanged; POE addresses fill the same fields (`POE_API.md` section 4): `remSlug` = branch `slug` from `branches.json`, `settlementId` = POE `city_id` as text, `streetId` = POE `street_id` as text, `streetName` = the POE street name, `house` = the POE house name exactly as listed (POE matches houses by name), `text` = the human-readable line. `queue` comes from the per-house status (`gp_qnum_1`.`gp_qnum_2`) and is **null for houses that are in no queue**; such an item has no planned outages, keeps its emergency and repair data, and shows the no-queue card on the main screen. `queueStatusText` holds the POE `gav_message` line for display.
+
 **Address key** (derived, never stored): `settlementId|StreetKey(streetName or, if blank, streetId)|HouseKey(house)`.
 It is exactly the key 1.4.0 uses for `ledger_*`, `repair_*`, `ids_*` and the emergency alert keys
 (`PERSISTENCE.md` section 3, `NOTIFICATIONS.md`). Per-address state therefore stays keyed by the

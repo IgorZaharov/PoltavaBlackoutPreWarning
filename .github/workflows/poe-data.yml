@@ -1,0 +1,70 @@
+name: POE data (live probe and address directory)
+
+# docs/POLTAVA_PORT_PLAN.md sections 4.4 and 8:
+# - probe: every day, reads the live POE endpoints through the web client and fails loudly when
+#   today's schedule or a per-house status can not be read (site format change);
+# - directory: every week, re-crawls the address directory and commits poe_directory.json (and its
+#   synced copies) to main when it changed. The commit is made by github-actions[bot], for which
+#   build-apk.yml skips its "Publish GitHub Release" step.
+
+on:
+  schedule:
+    - cron: '15 5 * * *'   # probe, daily 05:15 UTC
+    - cron: '0 2 * * 1'    # directory, Mondays 02:00 UTC
+  workflow_dispatch:
+    inputs:
+      job:
+        description: 'What to run'
+        type: choice
+        options: [probe, directory, both]
+        default: probe
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    name: Live probe of www.poe.pl.ua
+    if: github.event_name == 'workflow_dispatch' && inputs.job != 'directory' || github.event_name == 'schedule' && github.event.schedule == '15 5 * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+      - name: Probe the POE endpoints
+        run: npx tsx scripts/poe-live-probe.ts
+
+  directory:
+    name: Re-crawl the POE address directory
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' && inputs.job != 'probe' || github.event_name == 'schedule' && github.event.schedule == '0 2 * * 1')
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Crawl (about 1 700 requests, one at a time)
+        run: python -X utf8 scripts/crawl_poe_directory.py "$RUNNER_TEMP/poe_streets.json" --compact poe_directory.json
+      - name: Update the synced copies
+        run: |
+          cp poe_directory.json public/poe_directory.json
+          cp poe_directory.json android/app/src/main/assets/poe_directory.json
+      - name: Commit when the directory changed (ignoring the crawl time stamp)
+        run: |
+          git show HEAD:poe_directory.json > "$RUNNER_TEMP/old.json"
+          if python3 -c "import json,sys; a,b=(json.load(open(p,encoding='utf-8')) for p in sys.argv[1:]); [d.pop('crawledAt',None) for d in (a,b)]; sys.exit(0 if a==b else 1)" "$RUNNER_TEMP/old.json" poe_directory.json; then
+            echo "Directory unchanged."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add poe_directory.json public/poe_directory.json android/app/src/main/assets/poe_directory.json
+          python3 scripts/build_android_zip.py
+          git add public/PoltavaBlackoutPreWarning.zip
+          git commit -m "Update the POE address directory snapshot"
+          git push

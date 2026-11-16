@@ -1,7 +1,7 @@
 /**
- * Tests of the web SERVICE layer that mirrors the Android 1.4.0 logic: the PowerOn client (a port of
- * PowerOnClientTest.kt), the ztoe site-state classification and schedule cache, the outage repository
- * with a fake clock and fake network, the duplicate-street merge, and the alert planning.
+ * Tests of the web SERVICE layer that mirrors the Android logic: the schedule cache, the outage
+ * repository on POE data with a fake clock and a fake POE site, and the alert planning. The POE client
+ * itself is tested in tests/poe-client.test.ts.
  *
  * Run: tsx tests/services.test.ts
  */
@@ -10,14 +10,9 @@ import { formatLocalDateTime, fromInstant, parseLocalDate, parseLocalDateTime, t
 import { EmergencyFetch, eventKey, type EmergencyEvent } from '../src/core/emergencyLedger';
 import { makeOutage, type Span } from '../src/core/outageModels';
 import { buildPlanned } from '../src/core/outageEngine';
-import {
-  POWERON_BASE_URL,
-  PowerOnClient,
-  cityKey,
-  parseRows,
-  type HttpGet,
-  type PowerOnTarget,
-} from '../src/services/poweronClient';
+import { PoeClient, PoeConfig, type PoeHttpResult, type PoeTransport } from '../src/services/poeClient';
+import { DEFAULT_POE_URL, syncPoeSchedule } from '../src/services/poeScheduleSync';
+import { StreetKey, HouseKey } from '../src/core/addressKeys';
 import { createMemoryStorage } from '../src/services/storage';
 import {
   KEY_STORE as SUB_KEY_STORE,
@@ -38,29 +33,6 @@ import {
 import { ScheduleCache } from '../src/services/scheduleCache';
 import { OutageStateStore } from '../src/services/outageStore';
 import { OutageRepository, type AddressEvents, type AddressResolver } from '../src/services/outageRepository';
-import {
-  classifyFetchFailure,
-  applyEmergencyOutageToSchedule,
-  calculateOutageCountdown,
-  fetchFullSchedules,
-  fetchZtoeSchedule,
-  DEFAULT_ZTOE_URL,
-} from '../src/services/ztoeParser';
-import {
-  ZTOE_STREET_OPTIONS,
-  checkAddressOnZtoeWebsite,
-  fetchHousesForStreet,
-  getHousesForStreet,
-  findStreetById,
-  getStreetsForSettlement,
-  mergeHouseLists,
-  mergeStreets,
-  parseZtoeAddressLookupTableHtml,
-  parseZtoeSettlementHousesTableHtml,
-  parseZtoeStreetOptionsHtml,
-  resetAddressIndexCache,
-  seedAddressIndexForTests,
-} from '../src/services/ztoeAddressLookup';
 import {
   DEFAULT_SETTINGS,
   checkAndTriggerAdvanceAlert,
@@ -84,238 +56,61 @@ const tests: [string, () => void | Promise<void>][] = [];
 const test = (name: string, fn: () => void | Promise<void>) => void tests.push([name, fn]);
 
 // -------------------------------------------------------------------------------------------------
-// PowerOn client (port of PowerOnClientTest.kt)
-// -------------------------------------------------------------------------------------------------
-
-class FakeHttp {
-  readonly urls: string[] = [];
-  constructor(
-    private readonly routes: [string, string][],
-    private readonly failOn: string | null = null
-  ) {}
-  get: HttpGet = async (url: string) => {
-    this.urls.push(url);
-    if (this.failOn !== null && url.includes(this.failOn)) throw new Error('boom');
-    return this.routes.find(([k]) => url.includes(k))?.[1] ?? '[]';
-  };
-}
-
-const today = parseLocalDate('2026-11-12');
-const nowKyiv = dt('2026-11-12T23:57');
-
-const accident = (streetId: number, street: string, city: string, building: string, start: string, end: string, sub = 0) =>
-  `{"id":1,"city":{"id":333,"name":"${city}"},"street":{"id":${streetId},"name":"${street}"},"dateEvent":"${start}","datePlanIn":"${end}","koment":"МО","switchSubReason":${sub},"typeOff":1,"buildingNames":"${building}"}`;
-
-test('PowerOn: resolves city then ALL merged street ids and queries with dotted filters', async () => {
-  const http = new FakeHttp([
-    ['pw_cities?name=', '[{"id":333,"name":"Житомир"}]'],
-    ['pw_streets?city.id=333', '[{"id":33382,"name":"вул. Закам’янська"},{"id":33565,"name":"вул. Закам\'янська"},{"id":1,"name":"вул. Київська"}]'],
-    ['pw_accidents', '[' + accident(33565, "вул. Закам'янська", 'Житомир', '5, 7', '2026-11-12T20:00:00+00:00', '2026-11-13T01:00:00+00:00') + ']'],
-    ['pw_accident_planeds', '[]'],
-  ]);
-  const target: PowerOnTarget = { remOtgId: 6, settlementName: 'місто Житомир', streetNames: ["вул. Закам'янська", 'вул. Закам’янська'], house: '5' };
-  const result = await new PowerOnClient(http.get, POWERON_BASE_URL).fetch(target, today, nowKyiv);
-
-  assert.deepEqual(result.ids?.cityIds, [333]);
-  assert.deepEqual(result.ids?.streetIds, [33382, 33565]);
-  assert.equal(result.emergency.type, 'Confirmed');
-  const records = result.emergency.type === 'Confirmed' ? result.emergency.records : [];
-  assert.equal(records.length, 1);
-  assert.equal(records[0].id, 'pw_2026-11-12T20:00');
-
-  // The first request is the REM-scoped city lookup with the bare name (prefix stripped, URL encoded).
-  assert.ok(http.urls[0].includes('pw_cities?name=%D0%96%D0%B8%D1%82%D0%BE%D0%BC%D0%B8%D1%80&otg.id=6&pagination=false'), http.urls[0]);
-  const accidentsUrl = http.urls.find((u) => u.includes('pw_accidents')) as string;
-  assert.ok(accidentsUrl.includes('street.id[]=33382&street.id[]=33565'), accidentsUrl);
-  assert.ok(accidentsUrl.includes('switchSubReason[]=0&switchSubReason[]=1&switchSubReason[]=3'), accidentsUrl);
-  assert.ok(accidentsUrl.endsWith('pagination=false'), accidentsUrl);
-  // The ignored legacy parameter names must never be used.
-  assert.ok(http.urls.every((u) => !/[?&](city|street|otg|code_otg)=/.test(u)), 'legacy filter names used');
-  const planedsUrl = http.urls.find((u) => u.includes('pw_accident_planeds')) as string;
-  assert.ok(planedsUrl.includes('datePlanIn[after]=2026-11-12'), planedsUrl);
-});
-
-test('PowerOn: cached ids skip resolution', async () => {
-  const http = new FakeHttp([['pw_accidents', '[]'], ['pw_accident_planeds', '[]']]);
-  const target: PowerOnTarget = { remOtgId: 6, settlementName: 'м. Житомир', streetNames: ['вул. Київська'], house: '37', cachedCityIds: [333], cachedStreetIds: [1] };
-  await new PowerOnClient(http.get, POWERON_BASE_URL).fetch(target, today, nowKyiv);
-  assert.ok(http.urls.every((u) => !u.includes('pw_cities') && !u.includes('pw_streets')));
-  assert.ok(http.urls[0].includes('street.id[]=1'));
-});
-
-test('PowerOn: a failed accidents request is Unavailable, not "no outage"', async () => {
-  const http = new FakeHttp([['pw_accident_planeds', '[]']], 'pw_accidents');
-  const target: PowerOnTarget = { remOtgId: 6, settlementName: 'м. Житомир', streetNames: ['вул. Київська'], house: '37', cachedCityIds: [333], cachedStreetIds: [1] };
-  const result = await new PowerOnClient(http.get, POWERON_BASE_URL).fetch(target, today, nowKyiv);
-  assert.equal(result.emergency.type, 'Unavailable');
-  assert.deepEqual(result.repairs, []);
-});
-
-test('PowerOn: failed planned works keep emergencies confirmed and repairs unknown (null)', async () => {
-  const http = new FakeHttp([['pw_accidents', '[]']], 'pw_accident_planeds');
-  const target: PowerOnTarget = { remOtgId: 6, settlementName: 'м. Житомир', streetNames: ['вул. Київська'], house: '37', cachedCityIds: [333], cachedStreetIds: [1] };
-  const result = await new PowerOnClient(http.get, POWERON_BASE_URL).fetch(target, today, nowKyiv);
-  assert.equal(result.emergency.type, 'Confirmed');
-  assert.equal(result.repairs, null);
-});
-
-test('PowerOn: a resolution failure is Unavailable', async () => {
-  const http = new FakeHttp([], 'pw_cities');
-  const target: PowerOnTarget = { remOtgId: 6, settlementName: 'м. Житомир', streetNames: ['вул. Київська'], house: '37' };
-  const result = await new PowerOnClient(http.get, POWERON_BASE_URL).fetch(target, today, nowKyiv);
-  assert.equal(result.emergency.type, 'Unavailable');
-});
-
-test('PowerOn: city scope fallback filters rows by street key', async () => {
-  const http = new FakeHttp([
-    ['pw_cities?name=', '[{"id":502,"name":"Липники"}]'],
-    ['pw_streets?city.id=502', '[{"id":9,"name":"вул. Інша"}]'],
-    [
-      'pw_accidents',
-      '[' +
-        accident(62411, 'вул. Лісна', 'Липники', '10', '2026-11-12T20:00:00+00:00', '2026-11-13T01:00:00+00:00') +
-        ',' +
-        accident(62412, 'вул. Польова', 'Липники', '10', '2026-11-12T21:00:00+00:00', '2026-11-13T02:00:00+00:00') +
-        ']',
-    ],
-    ['pw_accident_planeds', '[]'],
-  ]);
-  const target: PowerOnTarget = { remOtgId: 7, settlementName: 'с. Липники', streetNames: ['вул. Лісна'], house: '10' };
-  const result = await new PowerOnClient(http.get, POWERON_BASE_URL).fetch(target, today, nowKyiv);
-  const records = result.emergency.type === 'Confirmed' ? result.emergency.records : [];
-  assert.equal(records.length, 1);
-  assert.equal(records[0].id, 'pw_2026-11-12T20:00');
-  assert.ok((http.urls.find((u) => u.includes('pw_accidents')) as string).includes('city.id[]=502'));
-});
-
-test('PowerOn: parses a plain array and a hydra collection; cityKey ignores prefix, apostrophe and case', () => {
-  const row = accident(1, 'вул. Київська', 'Житомир', '37', '2026-11-12T20:00:00+00:00', '2026-11-13T01:00:00+00:00');
-  const plain = parseRows(`[${row}]`);
-  const hydra = parseRows(`{"hydra:member":[${row}],"hydra:totalItems":1}`);
-  assert.equal(plain.length, 1);
-  assert.deepEqual(plain, hydra);
-  assert.equal(plain[0].streetName, 'вул. Київська');
-  assert.equal(plain[0].cityId, 333);
-  assert.equal(plain[0].switchSubReason, 0);
-  assert.deepEqual(parseRows('not json'), []);
-  assert.equal(cityKey('місто Житомир'), cityKey('Житомир'));
-  assert.equal(cityKey('с. Кам&#039;янка'), cityKey('Кам’янка'));
-});
-
-// -------------------------------------------------------------------------------------------------
-// ztoe: fixture page, site state, schedule cache
+// POE pages and per-house answers for the repository tests
 // -------------------------------------------------------------------------------------------------
 
 const QUEUE_IDS = ['1.1', '1.2', '2.1', '2.2', '3.1', '3.2', '4.1', '4.2', '5.1', '5.2', '6.1', '6.2'];
+const MONTHS = ['січня', 'лютого', 'березня', 'квітня', 'травня', 'червня', 'липня', 'серпня', 'вересня', 'жовтня', 'листопада', 'грудня'];
 
-/** off: half-hour index ranges [from, to) of queue 2.2; every other queue is on all day. */
-function dayTable(dateLabel: string, off22: [number, number][]): string {
+/**
+ * A POE schedule fragment (spec/POE_API.md section 3) for [iso] where queue 2.2 is off in the half-hour
+ * ranges [off22] (and switching in [sw22]); every other queue is on all day.
+ */
+function poePage(iso: string, off22: [number, number][], sw22: [number, number][] = []): string {
+  const [y, m, d] = iso.split('-').map(Number);
   const rows = QUEUE_IDS.map((q) => {
     const cells = Array.from({ length: 48 }, (_, i) => {
-      const isOff = q === '2.2' && off22.some(([a, b]) => i >= a && i < b);
-      return `<td style="background:${isOff ? '#ff0000' : '#00ff00'}">&nbsp;</td>`;
+      const s = q === '2.2' && off22.some(([a, b]) => i >= a && i < b) ? 2 : q === '2.2' && sw22.some(([a, b]) => i >= a && i < b) ? 3 : 1;
+      return `<td class="gpv-c gpv-s${s}"></td>`;
     }).join('');
-    return `<tr><td>${q}</td>${cells}</tr>`;
+    return `<tr><td class="gpv-q">${q}</td>${cells}</tr>`;
   }).join('');
-  return `<table><tr><td>Графік погодинних відключень на ${dateLabel}</td></tr>${rows}</table>`;
+  return `<div class="gpvinfodetail">Графік на <b>${d} ${MONTHS[m - 1]} ${y} року</b><table class="gpv-table"><tbody>${rows}</tbody></table><p>Оновлено: ${d} ${MONTHS[m - 1]} ${y} 08:00</p></div>`;
 }
 
-const page = (...tables: string[]) => `<html><body><div>Графіки</div>${tables.join('')}</body></html>`;
-// 23:00-24:00 is half-hour cells 46..48, 00:00-01:00 is cells 0..2
-const PAGE_12_AND_13 = page(dayTable('12.11.2026', [[46, 48]]), dayTable('13.11.2026', [[0, 2]]));
-const PAGE_12_ONLY = page(dayTable('12.11.2026', [[46, 48]]));
+// 23:00-24:00 is half-hour cells 46..48, 00:00-01:00 is cells 0..2, then the switching half-hour 01:00-01:30
+const POE_PAGES: Record<string, string> = {
+  '12-11-2026': poePage('2026-11-12', [[46, 48]]),
+  '13-11-2026': poePage('2026-11-13', [[0, 2]], [[2, 3]]),
+};
 
-test('ztoe: classifies the site state and never wipes the cache on failure', async () => {
-  const cache = new ScheduleCache(createMemoryStorage());
-  const now = new Date(kyivMs('2026-11-12T22:30'));
-  const base = { cache, now };
-
-  // 1. a page with tables -> AVAILABLE_WITH_TABLE, cached for all queues
-  const ok = await fetchZtoeSchedule(DEFAULT_ZTOE_URL, '2.2', { ...base, fetchHtml: async () => PAGE_12_AND_13 });
-  assert.equal(ok.siteState, 'AVAILABLE_WITH_TABLE');
-  assert.equal(ok.status, 'SUCCESS');
-  assert.equal(ok.todaySlots.length, 48);
-  assert.equal(ok.hasTomorrowSchedule, true);
-  assert.equal(cache.todayOffCells('2.2', today)?.filter(Boolean).length, 2);
-  assert.equal(cache.todayOffCells('6.2', today)?.some(Boolean), false);
-  assert.equal(cache.tomorrowOffCells('2.2', today)?.filter(Boolean).length, 2);
-
-  // 2. the site does not answer (internet works) -> SITE_UNREACHABLE, cache untouched
-  const down = await fetchZtoeSchedule(DEFAULT_ZTOE_URL, '2.2', { ...base, isOnline: () => true, fetchHtml: async () => { throw new TypeError('Failed to fetch'); } });
-  assert.equal(down.siteState, 'SITE_UNREACHABLE');
-  assert.equal(down.failure, 'CONNECT');
-  assert.equal(down.status, 'NO_INTERNET');
-  assert.equal(cache.todayOffCells('2.2', today)?.filter(Boolean).length, 2, 'cache survived the failure');
-
-  // 3. HTTP error and timeout are SITE_UNREACHABLE too
-  const http500 = await fetchZtoeSchedule(DEFAULT_ZTOE_URL, '2.2', { ...base, fetchHtml: async () => { throw new Error('HTTP_500'); } });
-  assert.equal(http500.failure, 'HTTP_ERROR');
-  assert.equal(http500.siteState, 'SITE_UNREACHABLE');
-  const abort = new Error('aborted');
-  abort.name = 'AbortError';
-  const timeout = await fetchZtoeSchedule(DEFAULT_ZTOE_URL, '2.2', { ...base, fetchHtml: async () => { throw abort; } });
-  assert.equal(timeout.failure, 'TIMEOUT');
-  assert.equal(timeout.siteState, 'SITE_UNREACHABLE');
-
-  // 4. offline device -> NO_INTERNET without a request
-  let requests = 0;
-  const offline = await fetchZtoeSchedule(DEFAULT_ZTOE_URL, '2.2', { ...base, isOnline: () => false, fetchHtml: async () => { requests++; return ''; } });
-  assert.equal(offline.siteState, 'NO_INTERNET');
-  assert.equal(requests, 0);
-
-  // 5. the link drops during the request: classified after the failure -> NO_INTERNET
-  let online = true;
-  const dropped = await fetchZtoeSchedule(DEFAULT_ZTOE_URL, '2.2', {
-    ...base,
-    isOnline: () => online,
-    fetchHtml: async () => {
-      online = false;
-      throw new TypeError('Failed to fetch');
-    },
-  });
-  assert.equal(dropped.siteState, 'NO_INTERNET');
-
-  // 6. 200 without a table -> AVAILABLE_NO_TABLE, cache untouched
-  const noTable = await fetchZtoeSchedule(DEFAULT_ZTOE_URL, '2.2', { ...base, fetchHtml: async () => '<html><body>Графік ще не опубліковано</body></html>' });
-  assert.equal(noTable.siteState, 'AVAILABLE_NO_TABLE');
-  assert.equal(noTable.status, 'NO_QUEUES_FOUND');
-  assert.equal(cache.todayOffCells('2.2', today)?.filter(Boolean).length, 2);
-
-  // 7. a URL outside valid-urls.json drops the cache (a schedule from another source is meaningless)
-  const invalid = await fetchZtoeSchedule('https://evil.example/schedule', '2.2', { ...base, fetchHtml: async () => PAGE_12_AND_13 });
-  assert.equal(invalid.siteState, 'AVAILABLE_NO_TABLE');
-  assert.equal(cache.todayOffCells('2.2', today), null);
-});
-
-test('ztoe: a page without a table but with the "УВАГА! ВАЖЛИВА ІНФОРМАЦІЯ!" notice carries its text, and the store keeps it only while there is no table', async () => {
-  const cache = new ScheduleCache(createMemoryStorage());
-  const page = '<html><body><h3>УВАГА! ВАЖЛИВА ІНФОРМАЦІЯ!\r\n<br>\r\nГрафіки погодинних відключень електроенергії наразі не діють.\r\n<br>\r\n<br>';
-  const res = await fetchZtoeSchedule(DEFAULT_ZTOE_URL, '2.2', { cache, isOnline: () => true, now: new Date('2026-11-13T10:00:00Z'), fetchHtml: async () => page });
-  assert.equal(res.siteState, 'AVAILABLE_NO_TABLE');
-  assert.equal(res.notice, 'УВАГА! ВАЖЛИВА ІНФОРМАЦІЯ!\nГрафіки погодинних відключень електроенергії наразі не діють.');
-
-  const store = new OutageStateStore(createMemoryStorage());
-  store.saveSite('AVAILABLE_NO_TABLE', 1, res.notice ?? null);
-  assert.equal(store.site()?.notice, res.notice);
-  store.saveSite('SITE_UNREACHABLE', 2);
-  assert.equal(store.site()?.notice, null, 'hidden while the site is unreachable');
-  store.saveSite('AVAILABLE_NO_TABLE', 3, res.notice ?? null);
-  store.saveSite('AVAILABLE_WITH_TABLE', 4);
-  assert.equal(store.site()?.notice, null);
-  store.saveSite('AVAILABLE_NO_TABLE', 5, null);
-  assert.equal(store.site()?.notice, null, 'a table page answer forgot the old notice');
-});
-
-test('ztoe: classifyFetchFailure maps errors to the platform-neutral failure kinds', () => {
-  const abort = new Error('x');
-  abort.name = 'AbortError';
-  assert.equal(classifyFetchFailure(abort), 'TIMEOUT');
-  assert.equal(classifyFetchFailure(new Error('HTTP_503')), 'HTTP_ERROR');
-  assert.equal(classifyFetchFailure(new TypeError('Failed to fetch')), 'CONNECT');
-  assert.equal(classifyFetchFailure(new Error('getaddrinfo ENOTFOUND www.ztoe.com.ua')), 'DNS');
-  assert.equal(classifyFetchFailure(new Error('unable to verify the first certificate')), 'TLS');
-  assert.equal(classifyFetchFailure('weird'), 'OTHER');
-});
+/** E4 answer for one house: an emergency 22:00-23:30 («пошкодження») or nothing; queue 2.2. */
+function poeHouseAnswer(emergency: boolean): string {
+  return JSON.stringify([
+    emergency
+      ? {
+          fn_accident_message:
+            'зареєстрована аварійна перерва в електропостачанні 12.11.2026 р. з 22 годин(и) 00 хвилин(и). Очікуваний час закінчення перерви в електропостачанні: 12.11.2026 р. о 23 годин(и) 30 хвилин(и).',
+          message_type: 3,
+          accident_str: '12.11.2026 22:00',
+          accident_id: 4242,
+          gav_message: 'Заживлено від ТП-1 та залучено до ГПВ (черга 2-2).',
+          gp_qnum_1: '2',
+          gp_qnum_2: '2',
+          planned_message: null,
+        }
+      : {
+          fn_accident_message: 'не зареєстровано перерв в електропостачанні',
+          message_type: 0,
+          accident_str: null,
+          accident_id: null,
+          gav_message: 'Заживлено від ТП-1 та залучено до ГПВ (черга 2-2).',
+          gp_qnum_1: '2',
+          gp_qnum_2: '2',
+          planned_message: null,
+        },
+  ]);
+}
 
 test('schedule cache: yesterday tail, midnight rollover, tomorrow validity', () => {
   const cache = new ScheduleCache(createMemoryStorage());
@@ -344,64 +139,62 @@ test('schedule cache: yesterday tail, midnight rollover, tomorrow validity', () 
 // Outage repository (fake clock, fake ztoe, fake PowerOn)
 // -------------------------------------------------------------------------------------------------
 
-const KYIVSKA: AddressResolver = {
-  rem: (id) => (id === 'zhytomyr' ? { id: 'zhytomyr', ztoeRemId: '7', ztoeOtgId: '6', nameUk: 'Житомирський РЕМ', nameEn: 'Zhytomyr REM' } : undefined),
-  settlement: (id) => (id === 'zt_city' ? { id: 'zt_city', remId: 'zhytomyr', nameUk: 'м. Житомир', nameEn: 'Zhytomyr' } : undefined),
-  street: (id) =>
-    ['zt_kyivska', 'st_173934', 'st_999001'].includes(id)
-      ? { id: 'zt_kyivska', allIds: ['zt_kyivska', 'st_999001'], settlementId: 'zt_city', nameUk: 'вул. Київська', nameEn: 'Kyivska' }
-      : undefined,
-  streetsForSettlement: () => [{ id: 'zt_kyivska', allIds: ['zt_kyivska', 'st_999001'], settlementId: 'zt_city', nameUk: 'вул. Київська', nameEn: 'Kyivska' }],
+const SOBORNOSTI: AddressResolver = {
+  // two spellings of the street in the POE directory, merged by StreetKey into one option
+  street: (id) => (['1227174', '1227175'].includes(id) ? { nameUk: 'вул. Соборності', allIds: ['1227174', '1227175'] } : undefined),
 };
+
+/** The address key of a house on вул. Соборності, місто Полтава (spec/SUBSCRIPTIONS.md section 1). */
+const addrKey = (house: string) => `11389|${StreetKey.of('вул. Соборності')}|${HouseKey.of(house)}`;
 
 const settings22: UserSettings = {
   ...DEFAULT_SETTINGS,
   queue: '2.2',
-  url: DEFAULT_ZTOE_URL,
-  selectedAddress: 'м. Житомир, вул. Київська, 37',
-  selectedAddressQuery: { remId: 'zhytomyr', settlementId: 'zt_city', streetId: 'zt_kyivska', house: '37' },
+  url: DEFAULT_POE_URL,
+  selectedAddress: 'місто Полтава, вул. Соборності, буд. 37',
+  selectedAddressQuery: { remId: 'poltavska', settlementId: '11389', streetId: '1227174', house: '37' },
 };
 
 function makeRepo(subscriptions?: () => { store: SubscriptionStore; master: boolean }) {
   const clock = { ms: kyivMs('2026-11-12T22:30') };
   const online = { value: true };
-  const ztoe = { html: PAGE_12_AND_13 as string | null };
-  const poweron = { accidents: [] as string[], fail: false };
+  /** The POE schedule pages are down (network error) while true. */
+  const site = { down: false };
+  /** Houses of вул. Соборності with an emergency; the per-house status fails while [fail]. */
+  const poe = { offHouses: [] as string[], fail: false };
   const notified: { key: string; events: readonly EmergencyEvent[] }[] = [];
   const notifiedOther: AddressEvents[] = [];
-  const http: HttpGet = async (url) => {
-    if (poweron.fail) throw new Error('network down');
-    if (url.includes('pw_cities')) return '[{"id":333,"name":"Житомир"}]';
-    if (url.includes('pw_streets')) return '[{"id":1,"name":"вул. Київська"}]';
-    if (url.includes('pw_accident_planeds')) return '[]';
-    if (url.includes('pw_accidents')) return `[${poweron.accidents.join(',')}]`;
-    return '[]';
+  const queueWrites: [string | null, string | null][] = [];
+  const ok = (body: string): PoeHttpResult => ({ kind: 'ok', body });
+  const transport: PoeTransport = async (endpoint, _field, json) => {
+    const req = JSON.parse(json);
+    if (endpoint === PoeConfig.ADDRESS_STATUS) {
+      if (poe.fail) return { kind: 'failed', reason: 'network' };
+      return ok(poeHouseAnswer(poe.offHouses.includes(req.house)));
+    }
+    if (endpoint === PoeConfig.SCHEDULE) return site.down ? { kind: 'failed', reason: 'network' } : ok(POE_PAGES[req.date_in] ?? '');
+    if (endpoint === PoeConfig.MEASURES) return site.down ? { kind: 'failed', reason: 'network' } : ok('[]');
+    return ok('[]');
   };
+  const client = new PoeClient(transport, () => clock.ms);
   const repo = new OutageRepository({
     schedule: new ScheduleCache(createMemoryStorage()),
     store: new OutageStateStore(createMemoryStorage()),
-    powerOn: new PowerOnClient(http, POWERON_BASE_URL),
-    address: KYIVSKA,
+    poe: client,
+    syncSchedule: (options) => syncPoeSchedule({ ...options, client, isOnline: () => online.value }),
+    address: SOBORNOSTI,
     nowMs: () => clock.ms,
     notify: (_s, key, events) => void notified.push({ key, events }),
     subscriptions: subscriptions ?? (() => ({ store: { primaryId: null, items: [] }, master: true })),
+    assignQueue: (_s, itemId, queue) => void queueWrites.push([itemId, queue]),
     notifyOther: (_s, other) => void notifiedOther.push(other),
-    ztoeOptions: {
-      isOnline: () => online.value,
-      fetchHtml: async () => {
-        if (ztoe.html === null) throw new TypeError('Failed to fetch');
-        return ztoe.html;
-      },
-    },
   });
-  return { repo, clock, online, ztoe, poweron, notified, notifiedOther };
+  return { repo, clock, online, site, poe, notified, notifiedOther, queueWrites };
 }
 
-const ACCIDENT_22_00_TO_23_30 = accident(1, 'вул. Київська', 'Житомир', '35, 37, 39', '2026-11-12T22:00:00+00:00', '2026-11-12T23:30:00+00:00');
-
 test('repository: emergency + planned merge into one block, cells carry isPlanned and isEmergency', async () => {
-  const { repo, poweron, notified } = makeRepo();
-  poweron.accidents.push(ACCIDENT_22_00_TO_23_30);
+  const { repo, poe, notified, queueWrites } = makeRepo();
+  poe.offHouses.push('35', '37', '39');
   const out = await repo.refresh(settings22);
 
   assert.equal(out.siteState, 'AVAILABLE_WITH_TABLE');
@@ -410,7 +203,8 @@ test('repository: emergency + planned merge into one block, cells carry isPlanne
   assert.deepEqual(out.events.map((e) => e.kind), ['START']);
   assert.equal(notified.length, 1);
   assert.equal(notified[0].key, repo.addressKey(settings22.selectedAddressQuery));
-  assert.equal(notified[0].key, 'zt_city|' + 'byл kиїbcьka' + '|37');
+  assert.equal(notified[0].key, addrKey('37'));
+  assert.deepEqual(queueWrites, [], 'POE confirms the stored queue 2.2: nothing is written');
 
   const snap = out.snapshot;
   assert.equal(snap.hasAddress, true);
@@ -440,15 +234,15 @@ test('repository: emergency + planned merge into one block, cells carry isPlanne
 });
 
 test('repository: a failed source keeps its previous data and never becomes "no outage"', async () => {
-  const { repo, poweron, ztoe, online, clock, notified } = makeRepo();
-  poweron.accidents.push(ACCIDENT_22_00_TO_23_30);
+  const { repo, poe, site, online, clock, notified } = makeRepo();
+  poe.offHouses.push('35', '37', '39');
   await repo.refresh(settings22);
   notified.length = 0;
 
   // both sources fail (the internet works, the sites do not answer)
   clock.ms = kyivMs('2026-11-12T22:40');
-  ztoe.html = null;
-  poweron.fail = true;
+  site.down = true;
+  poe.fail = true;
   const failed = await repo.refresh(settings22);
   assert.equal(failed.siteState, 'SITE_UNREACHABLE');
   assert.equal(failed.poweronOk, false);
@@ -469,11 +263,11 @@ test('repository: a failed source keeps its previous data and never becomes "no 
   assert.equal(offline.siteState, 'NO_INTERNET');
   assert.equal(offline.snapshot.plannedKnown, true);
 
-  // recovery: PowerOn answers again WITHOUT the emergency -> it ends (END event), the planned block stays
+  // recovery: POE answers again WITHOUT the emergency -> it ends (END event), the planned block stays
   online.value = true;
-  ztoe.html = PAGE_12_AND_13;
-  poweron.fail = false;
-  poweron.accidents.length = 0;
+  site.down = false;
+  poe.fail = false;
+  poe.offHouses.length = 0;
   clock.ms = kyivMs('2026-11-12T22:45');
   const ended = await repo.refresh(settings22);
   assert.deepEqual(ended.events.map((e) => e.kind), ['END']);
@@ -487,10 +281,10 @@ test('repository: a failed source keeps its previous data and never becomes "no 
 });
 
 test('repository: midnight rollover keeps the block over midnight whole (yesterday tail)', async () => {
-  const { repo, ztoe, clock } = makeRepo();
+  const { repo, site, clock } = makeRepo();
   await repo.refresh(settings22); // 12.11 22:30 caches 12.11 and 13.11
   clock.ms = kyivMs('2026-11-13T00:10');
-  ztoe.html = null; // site down after midnight
+  site.down = true; // site down after midnight
   const out = await repo.refresh(settings22);
   const snap = out.snapshot;
   assert.equal(snap.plannedKnown, true, 'tomorrow table was promoted to today');
@@ -502,10 +296,13 @@ test('repository: midnight rollover keeps the block over midnight whole (yesterd
   assert.equal(rows[0].continuesFromPrevDay, true);
   assert.equal(rows[0].durationMinutes, 120, 'real length of the whole 23:00-01:00 block');
   assert.equal(rows[0].inDayMinutes, 60);
+  // POE: the switching half-hour after the block is the latest restore time
+  assert.equal(st.restoreUntil !== null && formatLocalDateTime(st.restoreUntil), '2026-11-13T01:30');
+  assert.equal(snap.slotsFor(snap.today).find((s) => s.startTimeStr === '01:00')?.isSwitching, true);
 });
 
 test('repository: no queue / no address / unclear states', async () => {
-  const { repo, ztoe } = makeRepo();
+  const { repo, site } = makeRepo();
   const none = repo.snapshot({ ...DEFAULT_SETTINGS, queue: '', selectedAddressQuery: undefined });
   assert.equal(none.hasAddress, false);
   assert.equal(none.isUnclear, false);
@@ -513,7 +310,7 @@ test('repository: no queue / no address / unclear states', async () => {
   assert.deepEqual(none.slotsFor(none.today).some((s) => s.status === 'POWER_OFF'), false);
 
   // a queue with nothing cached and nothing else known: grey
-  ztoe.html = null;
+  site.down = true;
   const unclear = (await repo.refresh({ ...settings22, selectedAddressQuery: undefined })).snapshot;
   assert.equal(unclear.plannedKnown, false);
   assert.equal(unclear.isUnclear, true);
@@ -524,195 +321,12 @@ test('repository: no queue / no address / unclear states', async () => {
 
 test('repository: the address key survives a duplicate-street merge', () => {
   const { repo } = makeRepo();
-  const a = repo.addressKey({ remId: 'zhytomyr', settlementId: 'zt_city', streetId: 'zt_kyivska', house: '37' });
-  const b = repo.addressKey({ remId: 'zhytomyr', settlementId: 'zt_city', streetId: 'st_999001', house: '№ 37' });
+  const a = repo.addressKey({ remId: 'poltavska', settlementId: '11389', streetId: '1227174', house: '37' });
+  const b = repo.addressKey({ remId: 'poltavska', settlementId: '11389', streetId: '1227175', house: '№ 37' });
   assert.equal(a, b);
-  assert.equal(repo.addressKey({ remId: 'zhytomyr', settlementId: 'zt_city', streetId: 'zt_kyivska', house: '  ' }), null);
+  assert.equal(a, addrKey('37'));
+  assert.equal(repo.addressKey({ remId: 'poltavska', settlementId: '11389', streetId: '1227174', house: '  ' }), null);
   assert.equal(repo.addressKey(undefined), null);
-});
-
-// -------------------------------------------------------------------------------------------------
-// Duplicate streets (spec/ADDRESS_KEY.md section 5)
-// -------------------------------------------------------------------------------------------------
-
-test('streets: duplicates of one settlement merge into ONE option keeping all ids', () => {
-  const merged = mergeStreets([
-    { id: 'st_176316', settlementId: 'zt_city', ztoeVulicaId: '176316', nameUk: "вул. В'ячеслава Липинського", nameEn: 'a' },
-    { id: 'st_174295', settlementId: 'zt_city', ztoeVulicaId: '174295', nameUk: 'вул. В’ячеслава Липинського', nameEn: 'b' },
-    { id: 'st_1', settlementId: 'zt_city', ztoeVulicaId: '1', nameUk: 'вул. Шевченка', nameEn: 'c' },
-    { id: 'st_2', settlementId: 'zt_city', ztoeVulicaId: '2', nameUk: 'вул. Тараса Шевченка', nameEn: 'd' },
-    { id: 'st_3', settlementId: 'other', ztoeVulicaId: '3', nameUk: "вул. В'ячеслава Липинського", nameEn: 'e' },
-  ]);
-  assert.equal(merged.length, 4, 'Шевченка is not Тараса Шевченка, and another settlement stays apart');
-  const vya = merged[0];
-  assert.equal(vya.nameUk, "вул. В'ячеслава Липинського", 'the first display name stays');
-  // canonical id: no static id here, so the member with the lowest ztoe id leads
-  assert.equal(vya.id, 'st_174295');
-  assert.deepEqual(vya.allIds, ['st_174295', 'st_176316']);
-  assert.deepEqual(vya.ztoeVulicaIds, ['174295', '176316']);
-  assert.equal(vya.ztoeVulicaId, '174295');
-  // a static (non st_) id wins as the canonical one, whatever the order
-  const withStatic = mergeStreets([
-    { id: 'st_173935', settlementId: 'zt_city', ztoeVulicaId: '173935', nameUk: 'вул. Київська ', nameEn: 'x' },
-    { id: 'zt_kyivska', settlementId: 'zt_city', ztoeVulicaId: '173934', poweronStreetId: '4757', nameUk: 'вул. Київська', nameEn: 'y' },
-  ]);
-  assert.equal(withStatic.length, 1);
-  assert.equal(withStatic[0].id, 'zt_kyivska');
-  assert.deepEqual(withStatic[0].allIds, ['zt_kyivska', 'st_173935']);
-  assert.equal(withStatic[0].nameUk, 'вул. Київська ', 'the display name is the first one seen');
-  assert.deepEqual(mergeStreets(withStatic), withStatic, 'merging is idempotent');
-});
-
-test('streets: ztoe <select> duplicates parse to one option; any merged id resolves; houses are the union', () => {
-  resetAddressIndexCache(true);
-  const html =
-    '<select name="vulica_id"><option value="0">Оберіть</option>' +
-    '<option value="176316">вул. В\'ячеслава Липинського</option>' +
-    '<option value="174295">вул. В&#039;ячеслава  Липинського</option>' +
-    '<option value="174537">вул. Закам\'янська</option><option value="174536">вул. Закам’янська</option>' +
-    '<option value="5">вул. Шевченка</option><option value="6">вул. Тараса Шевченка</option></select>';
-  const streets = parseZtoeStreetOptionsHtml('zt_city', html);
-  assert.equal(streets.length, 4);
-  const vya = streets.find((s) => s.nameUk.includes('Липинського'))!;
-  assert.deepEqual(vya.ztoeVulicaIds, ['174295', '176316']);
-  assert.equal(vya.allIds.length, 2);
-
-  // houses of both ids, with the 34-А / 34А / 34A variants of one house
-  const rows = (street: string, ...houses: string[]) => houses.map((h) => `<tr><td>Житомирський</td><td>м. Житомир</td><td>${street}</td><td>${h}</td><td>1</td><td>2</td><td></td></tr>`).join('');
-  const table =
-    '<table><tr><th>РЕМ</th><th>Населений пункт</th><th>Вулиця</th><th>Будинки</th><th>Черга</th><th>Підчерга</th><th>Примітка</th></tr>' +
-    rows("вул. В'ячеслава Липинського", '1', '34-А') +
-    rows('вул. В’ячеслава Липинського', '2', '34А') +
-    rows('вул. Шевченка', '7') +
-    rows('вул. Тараса Шевченка', '9') +
-    '</table>';
-  seedAddressIndexForTests({ streetsBySettlementId: { zt_city: streets } });
-  const indexed = parseZtoeSettlementHousesTableHtml('zt_city', streets, table);
-  // only streets that have rows are indexed, and only under the merged option's primary id
-  assert.deepEqual(Object.keys(indexed).sort(), [vya.id, 'st_5', 'st_6'].sort());
-  assert.deepEqual(indexed[vya.id].map((h) => h.house), ['1', '2', '34-А'], 'one list, 34-А and 34А are one house');
-
-  // any id resolves the one option, and its houses
-  for (const id of vya.allIds) {
-    assert.equal(findStreetById(id)?.id, vya.id);
-    assert.deepEqual(getHousesForStreet(id).map((h) => h.house), ['1', '2', '34-А']);
-  }
-  assert.equal(findStreetById('st_174295')?.id, vya.id);
-  assert.equal(findStreetById('176316')?.id, vya.id, 'a bare ztoe vulica id resolves too');
-  assert.equal(getStreetsForSettlement('zt_city').length, 4);
-  // strict equality: Шевченка never picks up the houses of Тараса Шевченка
-  const shev = streets.find((s) => s.nameUk === 'вул. Шевченка')!;
-  assert.deepEqual(getHousesForStreet(shev.id).map((h) => h.house), ['7']);
-  resetAddressIndexCache(true);
-});
-
-test('streets: the houses table may omit the street type, but only for a unique option', () => {
-  resetAddressIndexCache(true);
-  const row = (street: string, house: string) =>
-    `<tr><td>Житомирський</td><td>м. Житомир</td><td>${street}</td><td>${house}</td><td>3</td><td>1</td><td></td></tr>`;
-  const head = '<tr><th>РЕМ</th><th>Населений пункт</th><th>Вулиця</th><th>Будинки</th><th>Черга</th><th>Підчерга</th><th>Примітка</th></tr>';
-  const only = mergeStreets([{ id: 'st_1', settlementId: 'zt_city', ztoeVulicaId: '1', nameUk: 'вул. Київська', nameEn: 'k' }]);
-  assert.deepEqual(Object.keys(parseZtoeSettlementHousesTableHtml('zt_city', only, `<table>${head}${row('Київська', '5')}</table>`)), ['st_1']);
-  const both = mergeStreets([
-    { id: 'st_1', settlementId: 'zt_city', ztoeVulicaId: '1', nameUk: 'вул. Київська', nameEn: 'k' },
-    { id: 'st_2', settlementId: 'zt_city', ztoeVulicaId: '2', nameUk: 'пров. Київська', nameEn: 'k' },
-  ]);
-  assert.deepEqual(parseZtoeSettlementHousesTableHtml('zt_city', both, `<table>${head}${row('Київська', '5')}</table>`), {}, 'ambiguous: no guess');
-  assert.deepEqual(Object.keys(parseZtoeSettlementHousesTableHtml('zt_city', both, `<table>${head}${row('пров. Київська', '5')}</table>`)), ['st_2'], 'exact key still works');
-  resetAddressIndexCache(true);
-});
-
-test('streets: an old index with duplicates heals on load, and old ids keep resolving', () => {
-  resetAddressIndexCache(true);
-  seedAddressIndexForTests({
-    streetsBySettlementId: {
-      zt_city: [
-        { id: 'st_1', settlementId: 'zt_city', ztoeVulicaId: '1', nameUk: 'вул. Закам\'янська', nameEn: 'a' },
-        { id: 'st_2', settlementId: 'zt_city', ztoeVulicaId: '2', nameUk: 'вул. Закам’янська', nameEn: 'b' },
-      ],
-    },
-    housesByStreetId: { st_1: [{ house: '5', queue: '' }], st_2: [{ house: '5', queue: '1.2' }, { house: '7', queue: '2.1' }] },
-  });
-  assert.equal(getStreetsForSettlement('zt_city').length, 1);
-  const houses = getHousesForStreet('st_2');
-  assert.deepEqual(houses.map((h) => [h.house, h.queue]), [['5', '1.2'], ['7', '2.1']], 'the entry with a queue wins, one entry per HouseKey');
-  assert.deepEqual(getHousesForStreet('st_1'), houses);
-  resetAddressIndexCache(true);
-});
-
-test('streets: no demo emergency and no fake default houses in production data', () => {
-  resetAddressIndexCache(true);
-  assert.deepEqual(getHousesForStreet('zt_kyivska'), []);
-  assert.ok(ZTOE_STREET_OPTIONS.every((s) => s.allIds.includes(s.id)));
-  const rows = parseZtoeAddressLookupTableHtml('<table><tr><td>37</td><td>2</td><td>2</td></tr></table>');
-  assert.ok(rows.every((r) => r.emergencyOutage === undefined));
-  // name comparison is by key equality: a street filter never matches by substring
-  const table =
-    '<table><tr><th>РЕМ</th><th>Населений пункт</th><th>Вулиця</th><th>Будинки</th><th>Черга</th><th>Підчерга</th><th>Примітка</th></tr>' +
-    '<tr><td>Житомирський</td><td>м. Житомир</td><td>вул. Тараса Шевченка</td><td>9</td><td>1</td><td>1</td><td></td></tr>' +
-    '<tr><td>Житомирський</td><td>м. Житомир</td><td>вул. Шевченка</td><td>7</td><td>2</td><td>2</td><td></td></tr></table>';
-  assert.deepEqual(parseZtoeAddressLookupTableHtml(table, 'вул. Шевченка').map((r) => r.house), ['7']);
-  assert.deepEqual(mergeHouseLists([[{ house: '1', queue: '' }], [{ house: ' 1 ', queue: '3.1' }]]).map((h) => h.queue), ['3.1']);
-});
-
-test('streets: checkAddressOnZtoeWebsite asks once per merged vulica id and unions the rows', async () => {
-  resetAddressIndexCache(true);
-  const streets = [
-    { id: 'zt_kyivska', settlementId: 'zt_city', ztoeVulicaId: '111', nameUk: "вул. Закам'янська", nameEn: 'a' },
-    { id: 'st_222', settlementId: 'zt_city', ztoeVulicaId: '222', nameUk: 'вул. Закам’янська', nameEn: 'b' },
-  ];
-  seedAddressIndexForTests({ streetsBySettlementId: { zt_city: streets } });
-  const bodies: string[] = [];
-  const table = (street: string, house: string, q: string, sub: string) =>
-    `<table><tr><th>РЕМ</th><th>Населений пункт</th><th>Вулиця</th><th>Будинки</th><th>Черга</th><th>Підчерга</th><th>Примітка</th></tr>` +
-    `<tr><td>Житомирський</td><td>м. Житомир</td><td>${street}</td><td>${house}</td><td>${q}</td><td>${sub}</td><td></td></tr></table><p>Черга Будинки Оберіть</p>`;
-  const realFetch = globalThis.fetch;
-  globalThis.fetch = (async (_url: unknown, init?: { body?: string }) => {
-    bodies.push(String(init?.body));
-    const html = String(init?.body).includes('vulica_id=222') ? table('вул. Закам’янська', '34А, 36', '4', '2') : table("вул. Закам'янська", '1', '1', '1');
-    return { ok: true, arrayBuffer: async () => new TextEncoder().encode(html).buffer } as unknown as Response;
-  }) as typeof fetch;
-  try {
-    const res = await checkAddressOnZtoeWebsite({ remId: 'zhytomyr', settlementId: 'zt_city', streetId: 'st_222', house: '34-А' });
-    assert.equal(res?.queue, '4.2');
-    assert.equal(bodies.length, 2);
-    assert.ok(bodies.some((b) => b.includes('vulica_id=111')) && bodies.some((b) => b.includes('vulica_id=222')));
-    // all=1: without it ztoe lists only the first 10 records of a street
-    assert.ok(bodies.every((b) => b.includes('all=1')));
-    assert.equal(res?.emergencyOutage, undefined);
-  } finally {
-    globalThis.fetch = realFetch;
-    resetAddressIndexCache(true);
-  }
-});
-
-test('streets: the street request asks for every record (all=1) and keeps only rows of that street', async () => {
-  resetAddressIndexCache(true);
-  seedAddressIndexForTests({
-    streetsBySettlementId: { zt_city: [{ id: 'st_173934', settlementId: 'zt_city', ztoeVulicaId: '173934', nameUk: 'вул. Київська', nameEn: 'k' }] },
-  });
-  const row = (street: string, houses: string, q: string, sub: string) =>
-    `<tr><td>Житомирський</td><td>місто Житомир</td><td>${street}</td><td>${houses}</td><td>${q}</td><td>${sub}</td><td>побутові споживачі</td></tr>`;
-  const head = '<table><tr><th>РЕМ</th><th>Населений пункт</th><th>Назва вулиці, провулка, тощо</th><th>Будинки</th><th>Черга</th><th>Підчерга</th><th>Примітка</th></tr>';
-  const bodies: string[] = [];
-  const realFetch = globalThis.fetch;
-  globalThis.fetch = (async (_url: unknown, init?: { body?: string }) => {
-    const body = String(init?.body);
-    bodies.push(body);
-    // with all=1 the whole street (and, if ztoe ignored vulica_id, another street too); without it the first page only
-    const html = body.includes('all=1')
-      ? head + row('вул. Київська', '1, 3', '1', '2') + row('вул. Київська', '124, 99', '5', '1') + row('вул. Лесі Українки', '7', '2', '1') + '</table><p>Черга Будинки</p>'
-      : head + row('вул. Київська', '1, 3', '1', '2') + '</table><p>Черга Будинки</p>';
-    return { ok: true, arrayBuffer: async () => new TextEncoder().encode(html).buffer } as unknown as Response;
-  }) as typeof fetch;
-  try {
-    const houses = await fetchHousesForStreet('zhytomyr', 'zt_city', 'st_173934');
-    assert.deepEqual(houses.map((h) => h.house).sort(), ['1', '124', '3', '99'], 'every record of the street, none of another street');
-    assert.ok(bodies.length === 1 && bodies[0].includes('vulica_id=173934') && bodies[0].includes('all=1'));
-  } finally {
-    globalThis.fetch = realFetch;
-    resetAddressIndexCache(true);
-  }
 });
 
 // -------------------------------------------------------------------------------------------------
@@ -800,10 +414,10 @@ test('alerts: legacy checkAndTriggerAdvanceAlert is engine based (one notificati
 });
 
 const kyivAddr = (house: string): SubscriptionAddress => ({
-  remSlug: 'zhytomyr',
-  settlementId: 'zt_city',
-  streetId: 'zt_kyivska',
-  streetName: 'вул. Київська',
+  remSlug: 'poltavska',
+  settlementId: '11389',
+  streetId: '1227174',
+  streetName: 'вул. Соборності',
   house,
   text: '',
 });
@@ -830,7 +444,7 @@ test('alerts: one merged warning per queue and span for every address (spec/SUBS
     fired.map((r) => r.message),
     [
       `Черга 1.1: відключення о 14:00 (через 15${NBSP}хв), орієнтовно до 15:00 (1${NBSP}год).`,
-      `Київська 37 · Київська 39 (черга 2.2): відключення о 14:00 (через 15${NBSP}хв), орієнтовно до 16:00 (2${NBSP}год).`,
+      `Соборності 37 · Соборності 39 (черга 2.2): відключення о 14:00 (через 15${NBSP}хв), орієнтовно до 16:00 (2${NBSP}год).`,
     ],
     'two addresses on queue 2.2 share one warning; the planned-off address on 3.1 gets none'
   );
@@ -863,20 +477,20 @@ test('repository: emergencies are polled for every address that wants them, each
     primaryId: 'aaaa0001',
     items: [
       makeSubscription('aaaa0001', { address: kyivAddr('37'), queue: '2.2', queueSource: 'LOOKUP', createdAtMs: 1 }),
-      makeSubscription('aaaa0002', { address: { ...kyivAddr('39'), text: 'м. Житомир, вул. Київська, 39' }, queue: '2.2', queueSource: 'LOOKUP', createdAtMs: 2 }),
+      makeSubscription('aaaa0002', { address: { ...kyivAddr('39'), text: 'місто Полтава, вул. Соборності, буд. 39' }, queue: '2.2', queueSource: 'LOOKUP', createdAtMs: 2 }),
       makeSubscription('aaaa0003', { address: kyivAddr('41'), queue: '2.2', queueSource: 'LOOKUP', createdAtMs: 3 }),
       makeSubscription('aaaa0004', { address: kyivAddr('35'), queue: '2.2', queueSource: 'LOOKUP', emergencyAlerts: false, createdAtMs: 4 }),
     ],
   };
   const master = { value: true };
-  const { repo, poweron, notified, notifiedOther } = makeRepo(() => ({ store, master: master.value }));
-  poweron.accidents.push(ACCIDENT_22_00_TO_23_30);
+  const { repo, poe, notified, notifiedOther } = makeRepo(() => ({ store, master: master.value }));
+  poe.offHouses.push('35', '37', '39');
   const out = await repo.refresh(settings22);
   assert.deepEqual(out.events.map((e) => e.kind), ['START'], 'the primary as before');
   assert.equal(notified.length, 1);
   // 39 is in the outage list (35, 37, 39), 41 is not, 35 has its emergency switch off
   assert.deepEqual(out.otherEvents.map((o) => [o.itemId, o.addressKey, o.addressLine, o.events.map((e) => e.kind)]), [
-    ['aaaa0002', 'zt_city|' + 'byл kиїbcьka' + '|39', 'м. Житомир, вул. Київська, 39', ['START']],
+    ['aaaa0002', addrKey('39'), 'місто Полтава, вул. Соборності, буд. 39', ['START']],
   ]);
   assert.equal(notifiedOther.length, 1);
   assert.equal(out.snapshot.poweron?.ok, true, 'the status line is the primary fetch');
@@ -884,7 +498,7 @@ test('repository: emergencies are polled for every address that wants them, each
   const again = await repo.refresh(settings22);
   assert.deepEqual(again.otherEvents, []);
 
-  // a primary without a queue ("не вимикається") still fetches ztoe for the other addresses
+  // a primary without a queue still fetches the POE tables for the other addresses
   const noQueue = makeRepo(() => ({ store, master: true }));
   const primaryNoQueue = await noQueue.repo.refresh({ ...settings22, queue: '' });
   assert.equal(primaryNoQueue.fetchStatus, null, 'the primary itself has no table to report');
@@ -892,7 +506,7 @@ test('repository: emergencies are polled for every address that wants them, each
 
   // the master switch stops polling the other addresses
   master.value = false;
-  poweron.accidents.length = 0;
+  poe.offHouses.length = 0;
   const off = await repo.refresh(settings22);
   assert.deepEqual(off.otherEvents, [], 'no END for an address while the master is off');
 });
@@ -905,8 +519,8 @@ test('repository: the address shown on the main view is polled whatever its swit
       makeSubscription('aaaa0004', { address: kyivAddr('39'), queue: '3.1', queueSource: 'LOOKUP', plannedAlerts: false, emergencyAlerts: false, createdAtMs: 4 }),
     ],
   };
-  const { repo, poweron, notifiedOther } = makeRepo(() => ({ store, master: true }));
-  poweron.accidents.push(ACCIDENT_22_00_TO_23_30);
+  const { repo, poe, notifiedOther } = makeRepo(() => ({ store, master: true }));
+  poe.offHouses.push('35', '37', '39');
   const shown = store.items[1];
   assert.equal(repo.snapshotFor(shown).poweron, null, 'never polled yet: no status line');
 
@@ -933,8 +547,8 @@ test('repository: an address shown on a widget is polled whatever its switches, 
       makeSubscription('aaaa0004', { address: kyivAddr('39'), queue: '3.1', queueSource: 'LOOKUP', plannedAlerts: false, emergencyAlerts: false, createdAtMs: 4 }),
     ],
   };
-  const { repo, poweron, notifiedOther } = makeRepo(() => ({ store, master: true }));
-  poweron.accidents.push(ACCIDENT_22_00_TO_23_30);
+  const { repo, poe, notifiedOther } = makeRepo(() => ({ store, master: true }));
+  poe.offHouses.push('35', '37', '39');
   const onWidget = store.items[1];
 
   const out = await repo.refresh(settings22, false, true, null, [onWidget.id]);
@@ -1048,53 +662,6 @@ test('alerts: formatWhen and duration formatting', () => {
     plannedAlertBody('uk', '', '22:00', '24:00', 0, 120, true),
     `відключення розпочинається зараз, о 22:00, орієнтовно до 24:00 (2${NBSP}год), можливе продовження.`
   );
-});
-
-// -------------------------------------------------------------------------------------------------
-// Legacy wrappers over the engine
-// -------------------------------------------------------------------------------------------------
-
-test('legacy: applyEmergencyOutageToSchedule and calculateOutageCountdown are engine wrappers', async () => {
-  const cells = Array.from({ length: 48 }, (_, i) => i >= 46);
-  const mk = (dateStr: string, off: boolean[]) => ({
-    dateStr,
-    dayLabel: 'x',
-    queue: '2.2',
-    city: 'c',
-    sourceUrl: '',
-    lastUpdated: '',
-    isUnclear: false,
-    slots: off.map((o, i) => ({
-      id: `${dateStr}_${i}`,
-      startHour: Math.floor(i / 2),
-      endHour: Math.floor((i + 1) / 2),
-      startMinute: (i % 2) * 30,
-      endMinute: ((i + 1) % 2) * 30,
-      startTimeStr: '',
-      endTimeStr: '',
-      status: o ? ('POWER_OFF' as const) : ('POWER_ON' as const),
-    })),
-  });
-  const today12 = mk('2026-11-12', cells);
-  const merged = applyEmergencyOutageToSchedule(today12, { id: 'e', startTime: '12.11.2026 20:00', estimatedRestoreTime: '12.11.2026 21:30' }, false)!;
-  assert.equal(merged.slots.length, 48);
-  assert.deepEqual(
-    merged.slots.map((s, i) => (s.isEmergency ? i : -1)).filter((i) => i >= 0),
-    [40, 41, 42]
-  );
-  assert.equal(merged.slots[46].status, 'POWER_OFF');
-  assert.equal(merged.slots[46].isEmergency, undefined);
-  assert.equal(applyEmergencyOutageToSchedule(today12, null, false), today12);
-
-  // an outage 23:00-01:00 across midnight: countdown at 23:30 runs to 01:00 when tomorrow starts off
-  const tomorrow = mk('2026-11-13', Array.from({ length: 48 }, (_, i) => i < 2));
-  const info = calculateOutageCountdown(today12, new Date(2026, 10, 12, 23, 30, 0), tomorrow);
-  assert.equal(info.isCurrentlyBlackout, true);
-  assert.equal(info.formattedTimeLeft, '01:30:00');
-  assert.equal(info.slotDescription, '23:00 – 01:00');
-  const unclear = calculateOutageCountdown({ ...today12, slots: [], isUnclear: true }, new Date());
-  assert.equal(unclear.isUnclear, true);
-  assert.equal(unclear.slotDescription, '--:-- - --:--');
 });
 
 test('core: fromInstant gives the Kyiv wall clock', () => {

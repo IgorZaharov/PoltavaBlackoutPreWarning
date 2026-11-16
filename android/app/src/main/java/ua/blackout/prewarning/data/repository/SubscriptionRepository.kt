@@ -10,7 +10,7 @@ import ua.blackout.prewarning.core.StoreResult
 import ua.blackout.prewarning.core.SubscriptionStore
 import ua.blackout.prewarning.core.Subscriptions
 import ua.blackout.prewarning.data.model.UserSettings
-import ua.blackout.prewarning.data.parser.ZtoeAddressLookup
+import ua.blackout.prewarning.data.poe.PoeAddressLookup
 import java.security.SecureRandom
 
 /**
@@ -63,7 +63,7 @@ class SubscriptionRepository(
         fun resolveStreetName(streetId: String?): String? {
             if (streetId.isNullOrBlank()) return null
             return try {
-                ZtoeAddressLookup.findStreetById(streetId)?.nameUk
+                PoeAddressLookup.findStreetById(streetId)?.nameUk
             } catch (_: Exception) {
                 null
             }

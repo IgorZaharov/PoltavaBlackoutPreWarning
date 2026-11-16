@@ -72,10 +72,20 @@ data class Span(
     val kinds: Set<OutageKind>
 )
 
-/** State of one half-hour cell of a day on the drum chart. */
-data class SlotState(val planned: Boolean, val emergency: Boolean) {
+/**
+ * State of one half-hour cell of a day on the drum chart. [switching] (POE only, spec/OUTAGE_ENGINE.md
+ * section 3.5) marks the half-hour in which power comes back; it is never set together with [planned]
+ * and never counts as off.
+ */
+data class SlotState(val planned: Boolean, val emergency: Boolean, val switching: Boolean = false) {
     val off: Boolean get() = planned || emergency
 }
+
+/** One cell of a POE day table (spec/POE_API.md section 3): gpv-s1, gpv-s2, gpv-s3. */
+enum class ScheduleCell { ON, OFF, SWITCHING }
+
+/** A run of [ScheduleCell.SWITCHING] cells: power may still be off until [end]. */
+data class SwitchWindow(val start: LocalDateTime, val end: LocalDateTime)
 
 /** One outage as it appears in a day's list, clipped to that day. */
 data class DayRow(
@@ -107,7 +117,9 @@ data class StatusInfo(
     /** "HH:mm – HH:mm" of the current or next span, or "Відключень немає". */
     val nextSlotTime: String,
     val currentSpan: Span?,
-    val nextSpan: Span?
+    val nextSpan: Span?,
+    /** End of the switching half-hour right after the shown span (POE): power is back by then at the latest. */
+    val restoreUntil: LocalDateTime? = null
 )
 
 data class AlertSpec(

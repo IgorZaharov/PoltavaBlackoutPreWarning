@@ -1,24 +1,22 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, AlertTriangle, Bell, ExternalLink, Globe, HelpCircle, Loader2, Pencil, Plus, RotateCcw, Send, Sliders, Star, Trash2, Vibrate, Volume2, X, Zap, RefreshCw, GripVertical, Clock } from 'lucide-react';
 import { Language, UserSettings } from '../types';
-import { QUEUES, DEFAULT_ZTOE_URL, verifyZtoeSiteAndData } from '../services/ztoeParser';
+import { QUEUES, DEFAULT_POE_URL, verifyPoeSite } from '../services/poeScheduleSync';
 import {
-  checkAddressOnZtoeWebsite,
+  checkAddress,
+  ensurePoeDirectory,
   fetchHousesForStreet,
-  fetchRemsFromZtoe,
-  fetchSettlementsForRem,
-  fetchStreetsForSettlement,
   findSettlementById,
   findStreetById,
   getHousesForStreet,
   getRems,
   getSettlementsForRem,
   getStreetsForSettlement,
-  type ZtoeHouseLookupResult,
-  type ZtoeRemOption,
-  type ZtoeSettlementOption,
-  type ZtoeStreetOption
-} from '../services/ztoeAddressLookup';
+  type PoeHouseLookupResult,
+  type PoeBranchOption,
+  type PoeSettlementOption,
+  type PoeStreetOption
+} from '../services/poeAddressLookup';
 import { getSubscriptionSync, type SyncResult } from '../services/subscriptionSync';
 import {
   ERR_DUPLICATE,
@@ -72,9 +70,12 @@ interface SettingsViewProps {
 }
 
 const displayName = (o: { nameUk: string; nameEn: string }, lang: 'uk' | 'en') => (lang === 'uk' ? o.nameUk : o.nameEn);
-// Settlements and streets keep their Ukrainian names in both languages: the live ztoe lists have no English
-// names, so translating only the built-in ones mixed the two (mirrors SettingsScreen.kt).
+// Settlements and streets keep their Ukrainian names in both languages: POE lists have no English names
+// (mirrors SettingsScreen.kt).
 const placeName = (o: { nameUk: string }) => o.nameUk;
+/** First-launch cascade: Полтавська об'єднана філія (spec/branches.json) and місто Полтава (POE city_id 11389). */
+const DEFAULT_BRANCH = 'poltavska';
+const DEFAULT_SETTLEMENT = '11389';
 const sameHouse = (a: string, b: string) => a.toLowerCase() === b.toLowerCase() || (HouseKey.of(a) !== '' && HouseKey.of(a) === HouseKey.of(b));
 
 // ---------------------------------------------------------------------------------------------
@@ -212,7 +213,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     let isMounted = true;
     setVerification((prev) => ({ ...prev, isChecking: true }));
     const timer = setTimeout(async () => {
-      const res = await verifyZtoeSiteAndData(settings.url, settings.queue || '1.1');
+      const res = await verifyPoeSite(settings.url);
       if (isMounted) setVerification({ isChecking: false, status: res.status });
     }, 350);
     return () => {
@@ -549,7 +550,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           aria-label={t.siteAddressTitle}
           value={settings.url}
           onChange={(e) => onUpdateSettings({ ...settings, url: e.target.value })}
-          placeholder={DEFAULT_ZTOE_URL}
+          placeholder={DEFAULT_POE_URL}
           className={`min-h-14 w-full rounded-2xl border bg-white/[0.08] px-4 py-2 font-mono text-sm text-white focus:outline-none ${
             !verification.isChecking && !isSiteVerified ? 'border-[#EF4444]/40 focus:border-[#EF4444]' : 'border-white/20 focus:border-[#FF5E3A]'
           }`}
@@ -874,17 +875,17 @@ const AddressLookupDialog: React.FC<AddressLookupDialogProps> = ({ settings, lan
   const siteUrl = settings.url;
   const saved = settings.selectedAddressQuery;
 
-  // The cascade starts from the saved address, or from Zhytomyr city on a first launch. After that a REM
-  // never picks a city for the user: choosing another REM clears city, street and house.
-  const [selectedRemId, setSelectedRemId] = useState<string>(saved?.remId || 'zhytomyr');
-  const [selectedSettlementId, setSelectedSettlementId] = useState<string>(saved?.settlementId || 'zt_city');
+  // The cascade starts from the saved address, or from Poltava city (Полтавська об'єднана філія) on a first
+  // launch. After that a branch never picks a city for the user: choosing another branch clears city, street and house.
+  const [selectedRemId, setSelectedRemId] = useState<string>(saved?.remId || DEFAULT_BRANCH);
+  const [selectedSettlementId, setSelectedSettlementId] = useState<string>(saved?.settlementId || DEFAULT_SETTLEMENT);
   const [selectedStreetId, setSelectedStreetId] = useState<string>(saved?.streetId || '');
   const [selectedHouse, setSelectedHouse] = useState<string>(saved?.house || '');
 
-  const [allRems, setAllRems] = useState<ZtoeRemOption[]>(() => getRems());
-  const [settlementsList, setSettlementsList] = useState<ZtoeSettlementOption[]>(() => getSettlementsForRem(selectedRemId));
-  const [streetsList, setStreetsList] = useState<ZtoeStreetOption[]>(() => (selectedSettlementId ? getStreetsForSettlement(selectedSettlementId) : []));
-  const [housesList, setHousesList] = useState<ZtoeHouseLookupResult[]>(() => (selectedStreetId ? getHousesForStreet(selectedStreetId) : []));
+  const [allRems, setAllRems] = useState<PoeBranchOption[]>(() => getRems());
+  const [settlementsList, setSettlementsList] = useState<PoeSettlementOption[]>(() => getSettlementsForRem(selectedRemId));
+  const [streetsList, setStreetsList] = useState<PoeStreetOption[]>(() => (selectedSettlementId ? getStreetsForSettlement(selectedSettlementId) : []));
+  const [housesList, setHousesList] = useState<PoeHouseLookupResult[]>(() => (selectedStreetId ? getHousesForStreet(selectedStreetId) : []));
   const [rems, setRems] = useState<LevelState>(initialLevel);
   const [settlements, setSettlements] = useState<LevelState>(initialLevel);
   const [streets, setStreets] = useState<LevelState>(initialLevel);
@@ -892,7 +893,7 @@ const AddressLookupDialog: React.FC<AddressLookupDialogProps> = ({ settings, lan
 
   const [isChecking, setIsChecking] = useState(false);
   const [checkFailed, setCheckFailed] = useState(false);
-  const [lookup, setLookup] = useState<ZtoeHouseLookupResult | null>(null);
+  const [lookup, setLookup] = useState<PoeHouseLookupResult | null>(null);
 
   const patch = (set: React.Dispatch<React.SetStateAction<LevelState>>, p: Partial<LevelState>) => set((s) => ({ ...s, ...p }));
 
@@ -908,91 +909,49 @@ const AddressLookupDialog: React.FC<AddressLookupDialogProps> = ({ settings, lan
     clearBelowSettlement();
   };
 
-  // REM list. A retry forces a fresh fetch; otherwise the in-memory cache is used.
+  // Branch list (spec/branches.json) and the bundled POE address directory (public/poe_directory.json)
+  const [directoryVersion, setDirectoryVersion] = useState(0);
   useEffect(() => {
     let cancelled = false;
     patch(setRems, { loading: true, failed: false });
     (async () => {
-      let fetched: ZtoeRemOption[] | null = null;
-      try {
-        fetched = await fetchRemsFromZtoe(siteUrl, rems.retry > 0);
-      } catch {
-        fetched = null;
-      }
+      await ensurePoeDirectory();
       if (cancelled) return;
-      const next = fetched && fetched.length > 0 ? fetched : getRems();
+      const next = getRems();
       setAllRems(next);
+      setDirectoryVersion((v) => v + 1);
       patch(setRems, { loading: false, failed: next.length === 0 });
     })();
     return () => {
       cancelled = true;
     };
-  }, [siteUrl, rems.retry]);
+  }, [rems.retry]);
 
-  // City list of the chosen REM. Never selects a city by itself; only drops a choice that no longer exists.
+  // City list of the chosen branch. Never selects a city by itself; only drops a choice that no longer exists.
   useEffect(() => {
-    let cancelled = false;
-    setSettlementsList(getSettlementsForRem(selectedRemId));
-    patch(setSettlements, { loading: true, failed: false });
-    (async () => {
-      let fetched: ZtoeSettlementOption[] = [];
-      try {
-        fetched = await fetchSettlementsForRem(selectedRemId, siteUrl, settlements.retry > 0);
-      } catch {
-        fetched = [];
-      }
-      if (cancelled) return;
-      const list = fetched.length > 0 ? fetched : getSettlementsForRem(selectedRemId);
-      setSettlementsList(list);
-      patch(setSettlements, { loading: false, failed: list.length === 0 });
-      if (selectedSettlementId && list.length > 0 && !list.some((s) => s.id === selectedSettlementId)) {
-        setSelectedSettlementId('');
-        clearBelowSettlement();
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    const list = getSettlementsForRem(selectedRemId);
+    setSettlementsList(list);
+    patch(setSettlements, { loading: false, failed: list.length === 0 });
+    if (selectedSettlementId && list.length > 0 && !list.some((s) => s.id === selectedSettlementId)) {
+      setSelectedSettlementId('');
+      clearBelowSettlement();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedRemId, siteUrl, settlements.retry]);
+  }, [selectedRemId, settlements.retry, directoryVersion]);
 
-  // Street list (the fetch also bulk-indexes the houses of the whole settlement)
+  // Street list of the settlement (bundled POE address directory, spelling variants merged)
   useEffect(() => {
     if (!selectedSettlementId) {
       setStreetsList([]);
       patch(setStreets, { loading: false, failed: false });
       return;
     }
-    let cancelled = false;
-    setStreetsList(getStreetsForSettlement(selectedSettlementId));
-    patch(setStreets, { loading: true, failed: false });
-    (async () => {
-      let fetched: ZtoeStreetOption[] = [];
-      try {
-        fetched = await fetchStreetsForSettlement(selectedRemId, selectedSettlementId, siteUrl, streets.retry > 0);
-      } catch {
-        fetched = [];
-      }
-      if (cancelled) return;
-      const list = fetched.length > 0 ? fetched : getStreetsForSettlement(selectedSettlementId);
-      setStreetsList(list);
-      if (fetched.length > 0) {
-        setAllRems(getRems());
-        setSettlementsList(getSettlementsForRem(selectedRemId));
-        if (selectedStreetId) {
-          const bulk = getHousesForStreet(selectedStreetId);
-          if (bulk.length > 0) setHousesList(bulk);
-        }
-      }
-      patch(setStreets, { loading: false, failed: list.length === 0 });
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedRemId, selectedSettlementId, siteUrl, streets.retry]);
+    const list = getStreetsForSettlement(selectedSettlementId);
+    setStreetsList(list);
+    patch(setStreets, { loading: false, failed: list.length === 0 });
+  }, [selectedSettlementId, streets.retry, directoryVersion]);
 
-  // House list of the chosen street (served from the bulk index when it is already there)
+  // House list of the chosen street: live from POE (address search, E3), cached per street
   useEffect(() => {
     if (!selectedStreetId) {
       setHousesList([]);
@@ -1003,9 +962,9 @@ const AddressLookupDialog: React.FC<AddressLookupDialogProps> = ({ settings, lan
     setHousesList(getHousesForStreet(selectedStreetId));
     patch(setHouses, { loading: true, failed: false });
     (async () => {
-      let fetched: ZtoeHouseLookupResult[] = [];
+      let fetched: PoeHouseLookupResult[] = [];
       try {
-        fetched = await fetchHousesForStreet(selectedRemId, selectedSettlementId, selectedStreetId, siteUrl, houses.retry > 0);
+        fetched = (await fetchHousesForStreet(selectedRemId, selectedSettlementId, selectedStreetId)) ?? [];
       } catch {
         fetched = [];
       }
@@ -1017,7 +976,7 @@ const AddressLookupDialog: React.FC<AddressLookupDialogProps> = ({ settings, lan
     return () => {
       cancelled = true;
     };
-  }, [selectedRemId, selectedSettlementId, selectedStreetId, siteUrl, houses.retry]);
+  }, [selectedRemId, selectedSettlementId, selectedStreetId, houses.retry, directoryVersion]);
 
   const currentRem = allRems.find((r) => r.id === selectedRemId);
   const currentSettlement = selectedSettlementId
@@ -1026,7 +985,7 @@ const AddressLookupDialog: React.FC<AddressLookupDialogProps> = ({ settings, lan
   const currentStreet = selectedStreetId ? streetsList.find((s) => s.id === selectedStreetId) ?? findStreetById(selectedStreetId) : undefined;
   const currentHouseRecord = housesList.find((h) => sameHouse(h.house, selectedHouse));
 
-  // Queries the site when street and house are chosen. Nothing closes or applies until the user presses the button.
+  // Asks POE (per-house status, E4) when street and house are chosen. Nothing closes or applies until the user presses the button.
   useEffect(() => {
     setLookup(null);
     setCheckFailed(false);
@@ -1037,12 +996,9 @@ const AddressLookupDialog: React.FC<AddressLookupDialogProps> = ({ settings, lan
     let cancelled = false;
     setIsChecking(true);
     (async () => {
-      let res: ZtoeHouseLookupResult | null = null;
+      let res: PoeHouseLookupResult | null = null;
       try {
-        res = await checkAddressOnZtoeWebsite(
-          { remId: selectedRemId, settlementId: selectedSettlementId, streetId: selectedStreetId, house: selectedHouse },
-          siteUrl
-        );
+        res = await checkAddress({ remId: selectedRemId, settlementId: selectedSettlementId, streetId: selectedStreetId, house: selectedHouse });
       } catch {
         res = null;
       }
@@ -1065,7 +1021,7 @@ const AddressLookupDialog: React.FC<AddressLookupDialogProps> = ({ settings, lan
     return () => {
       cancelled = true;
     };
-  }, [selectedRemId, selectedSettlementId, selectedStreetId, selectedHouse, siteUrl]);
+  }, [selectedRemId, selectedSettlementId, selectedStreetId, selectedHouse, directoryVersion]);
 
   const selectedAddressStr =
     currentStreet && selectedHouse.trim() !== ''
@@ -1079,7 +1035,7 @@ const AddressLookupDialog: React.FC<AddressLookupDialogProps> = ({ settings, lan
 
   // Result card (shown when a house is selected)
   const validLookup = lookup && sameHouse(lookup.house, selectedHouse) ? lookup : null;
-  const matched: ZtoeHouseLookupResult | null = validLookup && currentHouseRecord
+  const matched: PoeHouseLookupResult | null = validLookup && currentHouseRecord
     ? { ...validLookup, queue: validLookup.queue || currentHouseRecord.queue, statusText: validLookup.statusText ?? currentHouseRecord.statusText }
     : validLookup ?? currentHouseRecord ?? (selectedHouse.trim() !== '' ? { house: selectedHouse, queue: '', addressLabel: selectedAddressStr } : null);
   // while the site answers, an address without a known queue cannot be confirmed yet
@@ -1094,7 +1050,7 @@ const AddressLookupDialog: React.FC<AddressLookupDialogProps> = ({ settings, lan
       {
         ...settings,
         queue: hasQueue ? matched.queue : '',
-        customQueueStatusText: hasQueue ? undefined : matched.statusText,
+        customQueueStatusText: hasQueue ? undefined : matched.statusText ?? undefined,
         selectedAddress: addressToSave,
         selectedAddressQuery: query,
         activeEmergencyOutage: null
@@ -1311,14 +1267,14 @@ const AddressLookupDialog: React.FC<AddressLookupDialogProps> = ({ settings, lan
               {lang === 'uk' ? (
                 <span>
                   1. Відкрийте сторінку пошуку черги на сайті{' '}
-                  <a href={settings.url || DEFAULT_ZTOE_URL} target="_blank" rel="noopener noreferrer" className={linkClass}>
+                  <a href={settings.url || DEFAULT_POE_URL} target="_blank" rel="noopener noreferrer" className={linkClass}>
                     https://www.ztoe.com.ua/unhooking-search.php <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                   </a>
                 </span>
               ) : (
                 <span>
                   1. Open the queue lookup page on{' '}
-                  <a href={settings.url || DEFAULT_ZTOE_URL} target="_blank" rel="noopener noreferrer" className={linkClass}>
+                  <a href={settings.url || DEFAULT_POE_URL} target="_blank" rel="noopener noreferrer" className={linkClass}>
                     https://www.ztoe.com.ua/unhooking-search.php <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                   </a>
                 </span>

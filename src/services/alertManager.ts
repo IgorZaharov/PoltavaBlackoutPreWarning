@@ -10,8 +10,7 @@
  */
 import type { Span } from '../core/outageModels';
 import { BlackoutSlot, DaySchedule, EmergencyOutageInfo, NotificationRecord, UserSettings } from '../types';
-import { DEFAULT_ZTOE_URL, legacyClock } from './ztoeParser';
-import { isValidEmergencyOutage } from './ztoeAddressLookup';
+import { DEFAULT_POE_URL, legacyClock } from './poeScheduleSync';
 import {
   emergencyChangedBody,
   emergencyEndBody,
@@ -47,6 +46,23 @@ import {
 import { getOutageStateStore } from './outageStore';
 import { getScheduleCache } from './scheduleCache';
 
+// Validation of the single legacy "active emergency" record (kept so a value written by an older build is
+// dropped instead of shown). Moved from the removed ztoe address lookup; mirrors LegacyEmergency in SettingsRepository.kt.
+const VALID_TIMESTAMP_REGEX = /^(\d{2}\.\d{2}(?:\.\d{2,4})?\s+)?\d{1,2}:\d{2}$/;
+
+function isValidOutageTimestamp(value: string | undefined | null): boolean {
+  if (!value || typeof value !== 'string') return false;
+  return VALID_TIMESTAMP_REGEX.test(value.trim());
+}
+
+export function isValidEmergencyOutage(info: EmergencyOutageInfo | null | undefined): info is EmergencyOutageInfo {
+  if (!info || typeof info !== 'object') return false;
+  if (!isValidOutageTimestamp(info.startTime) || !isValidOutageTimestamp(info.estimatedRestoreTime)) return false;
+  const combined = `${info.outageType || ''} ${info.startTime} ${info.estimatedRestoreTime}`.toLowerCase();
+  return !(combined.includes('не вимикається') || combined.includes('за винятком'));
+}
+
+
 const SETTINGS_KEY = 'zt_blackout_user_settings_v1';
 const NOTIFIED_SLOTS_KEY = 'zt_blackout_notified_slots_v1';
 const ALERT_LOG_KEY = 'zt_blackout_alert_log_v1';
@@ -56,7 +72,7 @@ const ALERT_LOG_KEY = 'zt_blackout_alert_log_v1';
 // =========================================================================================
 export const DEFAULT_SETTINGS: UserSettings = {
   city: 'Житомир (ZTOE)',
-  url: DEFAULT_ZTOE_URL,
+  url: DEFAULT_POE_URL,
   queue: '',
   customQueueStatusText: undefined,
   selectedAddress: undefined,

@@ -32,6 +32,46 @@ while ((match = entryRegex.exec(existingTs)) !== null) {
 
 const additionalFiles = [
   {
+    path: 'app/src/main/java/ua/blackout/prewarning/core/PoeSchedule.kt',
+    language: 'kotlin',
+    description: 'POE schedule page parser: 12 queues x 48 cells (on / off / switching)',
+  },
+  {
+    path: 'app/src/main/java/ua/blackout/prewarning/core/PoeMapper.kt',
+    language: 'kotlin',
+    description: 'POE per-house status and branch registry mapping (emergency, repair works, queue)',
+  },
+  {
+    path: 'app/src/main/java/ua/blackout/prewarning/data/poe/PoeTransport.kt',
+    language: 'kotlin',
+    description: 'POE request transport (form POST, gzip, timeouts)',
+  },
+  {
+    path: 'app/src/main/java/ua/blackout/prewarning/data/poe/PoeClient.kt',
+    language: 'kotlin',
+    description: 'POE endpoints: schedule, measures, address directory, per-house status, registry',
+  },
+  {
+    path: 'app/src/main/java/ua/blackout/prewarning/data/poe/PoeDirectoryIndex.kt',
+    language: 'kotlin',
+    description: 'Bundled POE address directory snapshot (branches, settlements, streets)',
+  },
+  {
+    path: 'app/src/main/java/ua/blackout/prewarning/data/poe/PoeBranches.kt',
+    language: 'kotlin',
+    description: 'The 28 POE branches with both id spaces (spec/branches.json)',
+  },
+  {
+    path: 'app/src/main/java/ua/blackout/prewarning/data/poe/PoeAddressLookup.kt',
+    language: 'kotlin',
+    description: 'Address picker and queue lookup on POE data',
+  },
+  {
+    path: 'app/src/main/java/ua/blackout/prewarning/data/poe/PoeScheduleSync.kt',
+    language: 'kotlin',
+    description: 'POE queue tables refresh and site state',
+  },
+  {
     path: 'app/src/main/java/ua/blackout/prewarning/core/Subscriptions.kt',
     language: 'kotlin',
     description: 'Multi-address subscriptions: model, repair, store operations and migration (spec/SUBSCRIPTIONS.md)',
@@ -60,11 +100,6 @@ const additionalFiles = [
     path: 'app/src/main/java/ua/blackout/prewarning/ui/components/FloatingShadow.kt',
     language: 'kotlin',
     description: 'Custom drop-shadow extension modifier with Gaussian BlurMaskFilter',
-  },
-  {
-    path: 'app/src/main/java/ua/blackout/prewarning/data/parser/ZtoeAddressLookup.kt',
-    language: 'kotlin',
-    description: 'ZTOE Address Queue Lookup & Emergency Outage Parser',
   },
   {
     path: 'app/src/main/res/xml/blackout_widget_big_info.xml',

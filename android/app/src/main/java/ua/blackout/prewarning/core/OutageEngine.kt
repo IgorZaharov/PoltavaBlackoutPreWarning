@@ -37,21 +37,67 @@ object OutageEngine {
         todayOff: List<Boolean>?,
         tomorrowOff: List<Boolean>?,
         yesterdayOff: List<Boolean>? = null
-    ): List<Outage> {
+    ): List<Outage> =
+        runs(today, todayOff, tomorrowOff, yesterdayOff).map { (s, e, may) ->
+            Outage(id = "planned_$s", kind = OutageKind.PLANNED, start = s, end = e, mayContinue = may)
+        }
+
+    /**
+     * POE day tables (spec/OUTAGE_ENGINE.md section 3.5): [buildPlanned] over the OFF cells. The
+     * switching half-hour counts as on, so a block closes where switching starts.
+     */
+    fun buildPlannedCells(
+        today: LocalDate,
+        todayCells: List<ScheduleCell>?,
+        tomorrowCells: List<ScheduleCell>?,
+        yesterdayCells: List<ScheduleCell>? = null
+    ): List<Outage> = buildPlanned(
+        today,
+        flags(todayCells, ScheduleCell.OFF),
+        flags(tomorrowCells, ScheduleCell.OFF),
+        flags(yesterdayCells, ScheduleCell.OFF)
+    )
+
+    /** The runs of SWITCHING cells of POE day tables, built like the OFF runs (section 3.5). */
+    fun switchWindows(
+        today: LocalDate,
+        todayCells: List<ScheduleCell>?,
+        tomorrowCells: List<ScheduleCell>?,
+        yesterdayCells: List<ScheduleCell>? = null
+    ): List<SwitchWindow> = runs(
+        today,
+        flags(todayCells, ScheduleCell.SWITCHING),
+        flags(tomorrowCells, ScheduleCell.SWITCHING),
+        flags(yesterdayCells, ScheduleCell.SWITCHING)
+    ).map { (s, e, _) -> SwitchWindow(s, e) }
+
+    private fun flags(cells: List<ScheduleCell>?, state: ScheduleCell): List<Boolean>? = cells?.map { it == state }
+
+    /**
+     * Maximal runs of true cells over the known days (yesterday, today, tomorrow) in chronological
+     * order, as (start, end, mayContinue). A run continues into the next day only when that day is
+     * known; at the end of the last known day it closes at midnight with mayContinue = true.
+     */
+    private fun runs(
+        today: LocalDate,
+        todayFlags: List<Boolean>?,
+        tomorrowFlags: List<Boolean>?,
+        yesterdayFlags: List<Boolean>?
+    ): List<Triple<LocalDateTime, LocalDateTime, Boolean>> {
         val days: List<Pair<LocalDate, List<Boolean>>> = listOf(
-            today.minusDays(1) to normalizeSlots(yesterdayOff),
-            today to normalizeSlots(todayOff),
-            today.plusDays(1) to normalizeSlots(tomorrowOff)
+            today.minusDays(1) to normalizeSlots(yesterdayFlags),
+            today to normalizeSlots(todayFlags),
+            today.plusDays(1) to normalizeSlots(tomorrowFlags)
         ).mapNotNull { (d, s) -> s?.let { d to it } }
         if (days.isEmpty()) return emptyList()
 
         val knownDates = days.map { it.first }.toSet()
-        val out = ArrayList<Outage>()
+        val out = ArrayList<Triple<LocalDateTime, LocalDateTime, Boolean>>()
         var runStart: LocalDateTime? = null
 
         fun close(end: LocalDateTime, mayContinue: Boolean) {
             val s = runStart ?: return
-            out.add(Outage(id = "planned_$s", kind = OutageKind.PLANNED, start = s, end = end, mayContinue = mayContinue))
+            out.add(Triple(s, end, mayContinue))
             runStart = null
         }
 
@@ -184,7 +230,8 @@ object OutageEngine {
         outages: List<Outage>,
         date: LocalDate,
         now: LocalDateTime,
-        zone: ZoneId = KYIV_ZONE
+        zone: ZoneId = KYIV_ZONE,
+        switching: List<SwitchWindow> = emptyList()
     ): DayView {
         val dayStart = date.atStartOfDay()
         val dayEnd = date.plusDays(1).atStartOfDay()
@@ -193,9 +240,11 @@ object OutageEngine {
         val slots = (0 until OutageConfig.SLOTS_PER_DAY).map { i ->
             val s = dayStart.plusMinutes(i.toLong() * OutageConfig.SLOT_MINUTES)
             val e = s.plusMinutes(OutageConfig.SLOT_MINUTES.toLong())
+            val planned = relevant.any { it.isPlannedLike && it.start.isBefore(e) && it.end.isAfter(s) }
             SlotState(
-                planned = relevant.any { it.isPlannedLike && it.start.isBefore(e) && it.end.isAfter(s) },
-                emergency = relevant.any { it.kind == OutageKind.EMERGENCY && it.start.isBefore(e) && it.end.isAfter(s) }
+                planned = planned,
+                emergency = relevant.any { it.kind == OutageKind.EMERGENCY && it.start.isBefore(e) && it.end.isAfter(s) },
+                switching = !planned && switching.any { it.start.isBefore(e) && it.end.isAfter(s) }
             )
         }
 
@@ -239,8 +288,13 @@ object OutageEngine {
     fun status(
         outages: List<Outage>,
         now: LocalDateTime,
-        zone: ZoneId = KYIV_ZONE
+        zone: ZoneId = KYIV_ZONE,
+        switching: List<SwitchWindow> = emptyList()
     ): StatusInfo {
+        // POE: the switching half-hour right after the shown span is when power is back at the latest.
+        fun restoreFor(span: Span): LocalDateTime? =
+            if (span.mayContinue) null else switching.firstOrNull { it.start == span.end }?.end
+
         // An overdue emergency has no known end: treat it as lasting just past now so it is "current".
         val openEnd = now.plusSeconds(1)
         val effective = outages
@@ -261,12 +315,12 @@ object OutageEngine {
                 )
             }
             val secs = secondsBetween(now, current.end, zone)
-            return StatusInfo(true, secs, formatCountdown(secs), formatSpan(current), current, null)
+            return StatusInfo(true, secs, formatCountdown(secs), formatSpan(current), current, null, restoreFor(current))
         }
         val next = all.firstOrNull { it.start.isAfter(now) }
         if (next != null) {
             val secs = secondsBetween(now, next.start, zone)
-            return StatusInfo(false, secs, formatCountdown(secs), formatSpan(next), null, next)
+            return StatusInfo(false, secs, formatCountdown(secs), formatSpan(next), null, next, restoreFor(next))
         }
         return StatusInfo(false, null, "--:--:--", "Відключень немає", null, null)
     }

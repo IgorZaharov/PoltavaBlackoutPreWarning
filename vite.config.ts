@@ -40,17 +40,11 @@ export default defineConfig(() => {
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
       proxy: {
-        '/proxy-ztoe-poweron': {
-          target: 'https://api-ztoe-poweron.inneti.net',
+        // POE sends no CORS headers for other origins (src/services/poeClient.ts, PoeConfig.DEV_PROXY_BASE)
+        '/proxy-poe': {
+          target: 'https://www.poe.pl.ua',
           changeOrigin: true,
-          secure: false,
-          rewrite: (path) => path.replace(/^\/proxy-ztoe-poweron/, '')
-        },
-        '/proxy-ztoe': {
-          target: 'https://www.ztoe.com.ua',
-          changeOrigin: true,
-          secure: false,
-          rewrite: (path) => path.replace(/^\/proxy-ztoe/, '')
+          rewrite: (path) => path.replace(/^\/proxy-poe/, '')
         }
       }
     },

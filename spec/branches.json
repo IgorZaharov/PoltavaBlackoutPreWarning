@@ -1,0 +1,230 @@
+{
+  "_doc": "Authoritative table of the 28 branches (філії / дільниці) of Полтаваобленерго. Two id spaces, like ztoe rem_id vs PowerOn otg.id: 'cabinetId' is filial_id of the address search (https://www.poe.pl.ua/customs/search-disconnection-cabinet.php, select #input-filial-main / #input-filial), 'registryId' is filialid of the outage registry (disconnection-gavapi.php, select #inputgav-filial on /disconnection/power-outages/). On 2026-11-16 cabinetId = registryId + 100 for every branch, but code must read both columns, never derive one from the other. 'slug' is the app's stable id (stored in a subscription address as remSlug). nameUk is the cabinet option label (apostrophe normalised to U+0027). settlementsOnCrawl is the number of settlements the cabinet listed for the branch on 2026-11-16 (docs/research/directory); a settlement can belong to several branches. See spec/POE_API.md.",
+  "probedAt": "2026-11-16",
+  "branches": [
+    {
+      "slug": "velykokokhnivska",
+      "cabinetId": 102,
+      "registryId": 2,
+      "nameUk": "Великокохнівська дільниця",
+      "nameEn": "Velykokokhnivka district",
+      "settlementsOnCrawl": 86
+    },
+    {
+      "slug": "hadiatska",
+      "cabinetId": 103,
+      "registryId": 3,
+      "nameUk": "Гадяцька дільниця",
+      "nameEn": "Hadiach district",
+      "settlementsOnCrawl": 93
+    },
+    {
+      "slug": "hlobynska",
+      "cabinetId": 104,
+      "registryId": 4,
+      "nameUk": "Глобинська дільниця",
+      "nameEn": "Hlobyne district",
+      "settlementsOnCrawl": 94
+    },
+    {
+      "slug": "horishnoplavnivska",
+      "cabinetId": 112,
+      "registryId": 12,
+      "nameUk": "Горішньоплавнівська дільниця",
+      "nameEn": "Horishni Plavni district",
+      "settlementsOnCrawl": 5
+    },
+    {
+      "slug": "hrebinkivska",
+      "cabinetId": 105,
+      "registryId": 5,
+      "nameUk": "Гребінківська дільниця",
+      "nameEn": "Hrebinka district",
+      "settlementsOnCrawl": 43
+    },
+    {
+      "slug": "dykanska",
+      "cabinetId": 106,
+      "registryId": 6,
+      "nameUk": "Диканська дільниця",
+      "nameEn": "Dykanka district",
+      "settlementsOnCrawl": 63
+    },
+    {
+      "slug": "zinkivska",
+      "cabinetId": 108,
+      "registryId": 8,
+      "nameUk": "Зіньківська дільниця",
+      "nameEn": "Zinkiv district",
+      "settlementsOnCrawl": 108
+    },
+    {
+      "slug": "karlivska",
+      "cabinetId": 109,
+      "registryId": 9,
+      "nameUk": "Карлівська дільниця",
+      "nameEn": "Karlivka district",
+      "settlementsOnCrawl": 37
+    },
+    {
+      "slug": "kobeliatska",
+      "cabinetId": 110,
+      "registryId": 10,
+      "nameUk": "Кобеляцька дільниця",
+      "nameEn": "Kobeliaky district",
+      "settlementsOnCrawl": 101
+    },
+    {
+      "slug": "kozelshchynska",
+      "cabinetId": 111,
+      "registryId": 11,
+      "nameUk": "Козельщинська дільниця",
+      "nameEn": "Kozelshchyna district",
+      "settlementsOnCrawl": 75
+    },
+    {
+      "slug": "kotelevska",
+      "cabinetId": 113,
+      "registryId": 13,
+      "nameUk": "Котелевська дільниця",
+      "nameEn": "Kotelva district",
+      "settlementsOnCrawl": 37
+    },
+    {
+      "slug": "krasnohorivska",
+      "cabinetId": 114,
+      "registryId": 14,
+      "nameUk": "Красногорівська дільниця",
+      "nameEn": "Krasnohorivka district",
+      "settlementsOnCrawl": 76
+    },
+    {
+      "slug": "kremenchutska",
+      "cabinetId": 115,
+      "registryId": 15,
+      "nameUk": "Кременчуцька об'єднана філія",
+      "nameEn": "Kremenchuk united branch",
+      "settlementsOnCrawl": 15
+    },
+    {
+      "slug": "lokhvytska",
+      "cabinetId": 116,
+      "registryId": 16,
+      "nameUk": "Лохвицька дільниця",
+      "nameEn": "Lokhvytsia district",
+      "settlementsOnCrawl": 82
+    },
+    {
+      "slug": "lubenska",
+      "cabinetId": 117,
+      "registryId": 17,
+      "nameUk": "Лубенська об'єднана філія",
+      "nameEn": "Lubny united branch",
+      "settlementsOnCrawl": 84
+    },
+    {
+      "slug": "mashivska",
+      "cabinetId": 118,
+      "registryId": 18,
+      "nameUk": "Машівська дільниця",
+      "nameEn": "Mashivka district",
+      "settlementsOnCrawl": 40
+    },
+    {
+      "slug": "myrhorodska",
+      "cabinetId": 119,
+      "registryId": 19,
+      "nameUk": "Миргородська об'єднана філія",
+      "nameEn": "Myrhorod united branch",
+      "settlementsOnCrawl": 95
+    },
+    {
+      "slug": "novosanzharska",
+      "cabinetId": 120,
+      "registryId": 20,
+      "nameUk": "Новосанжарська дільниця",
+      "nameEn": "Novi Sanzhary district",
+      "settlementsOnCrawl": 83
+    },
+    {
+      "slug": "orzhytska",
+      "cabinetId": 121,
+      "registryId": 21,
+      "nameUk": "Оржицька дільниця",
+      "nameEn": "Orzhytsia district",
+      "settlementsOnCrawl": 51
+    },
+    {
+      "slug": "pyriatynska",
+      "cabinetId": 122,
+      "registryId": 22,
+      "nameUk": "Пирятинська дільниця",
+      "nameEn": "Pyriatyn district",
+      "settlementsOnCrawl": 45
+    },
+    {
+      "slug": "poltavska-rem",
+      "cabinetId": 131,
+      "registryId": 31,
+      "nameUk": "Полтавська дільниця районних електромереж",
+      "nameEn": "Poltava district grid section",
+      "settlementsOnCrawl": 161
+    },
+    {
+      "slug": "poltavska",
+      "cabinetId": 123,
+      "registryId": 23,
+      "nameUk": "Полтавська об'єднана філія",
+      "nameEn": "Poltava united branch",
+      "settlementsOnCrawl": 17
+    },
+    {
+      "slug": "reshetylivska",
+      "cabinetId": 124,
+      "registryId": 24,
+      "nameUk": "Решетилівська дільниця",
+      "nameEn": "Reshetylivka district",
+      "settlementsOnCrawl": 77
+    },
+    {
+      "slug": "semenivska",
+      "cabinetId": 125,
+      "registryId": 25,
+      "nameUk": "Семенівська дільниця",
+      "nameEn": "Semenivka district",
+      "settlementsOnCrawl": 68
+    },
+    {
+      "slug": "khorolska",
+      "cabinetId": 126,
+      "registryId": 26,
+      "nameUk": "Хорольська дільниця",
+      "nameEn": "Khorol district",
+      "settlementsOnCrawl": 89
+    },
+    {
+      "slug": "chornukhynska",
+      "cabinetId": 127,
+      "registryId": 27,
+      "nameUk": "Чорнухинська дільниця",
+      "nameEn": "Chornukhy district",
+      "settlementsOnCrawl": 40
+    },
+    {
+      "slug": "chutivska",
+      "cabinetId": 128,
+      "registryId": 28,
+      "nameUk": "Чутівська дільниця",
+      "nameEn": "Chutove district",
+      "settlementsOnCrawl": 48
+    },
+    {
+      "slug": "shyshatska",
+      "cabinetId": 129,
+      "registryId": 29,
+      "nameUk": "Шишацька дільниця",
+      "nameEn": "Shyshaky district",
+      "settlementsOnCrawl": 72
+    }
+  ]
+}

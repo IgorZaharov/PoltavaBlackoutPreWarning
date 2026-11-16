@@ -140,9 +140,6 @@ dependencies {
     // Preferences & Local Storage
     implementation(libs.androidx.datastore.preferences)
 
-    // HTML Parsing for ztoe.com.ua
-    implementation(libs.jsoup)
-
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
 

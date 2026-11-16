@@ -4,7 +4,11 @@ Source: https://www.poe.pl.ua/customs/search-disconnection-cabinet.php, the endp
 https://www.poe.pl.ua/disconnection/poshuk-vidkliuchennia-za-osobovym-rakhunkom/
 Requests are sequential with a delay, to stay polite to the utility's server.
 
-Usage: python -X utf8 scripts/crawl_poe_directory.py OUT.json [--buildings]
+Usage: python -X utf8 scripts/crawl_poe_directory.py OUT.json [--buildings] [--compact poe_directory.json]
+
+--compact also writes the app snapshot: settlements deduplicated by their global id (a settlement may
+belong to several branches), junk rows such as "село _" dropped, streets as [id, name] pairs. Copy it to
+public/ and android/app/src/main/assets/ (npm test checks the copies).
 """
 import json
 import sys
@@ -76,6 +80,35 @@ def main():
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=1)
     print(f"done, failed requests: {failures}", file=sys.stderr)
+    if "--compact" in sys.argv:
+        path = sys.argv[sys.argv.index("--compact") + 1]
+        with open(path, "w", encoding="utf-8", newline="\n") as f:
+            json.dump(compact(result), f, ensure_ascii=False, separators=(",", ":"))
+        print(f"wrote {path}", file=sys.stderr)
+    if failures:
+        sys.exit(1)
+
+
+def is_junk(name):
+    parts = name.strip().split(None, 1)
+    rest = (parts[1] if len(parts) == 2 else (parts[0] if parts else "")).strip()
+    return not rest or set(rest) <= {"_", "-"}
+
+
+def compact(result):
+    merged = {}
+    for b in result["branches"]:
+        for s in b["settlements"]:
+            if is_junk(s["name"]):
+                continue
+            e = merged.setdefault(s["id"], {"id": s["id"], "name": s["name"], "branches": [], "streets": [[x["id"], x["name"]] for x in s["streets"]]})
+            e["branches"].append(b["cabinetId"])
+    return {
+        "source": result["source"],
+        "crawledAt": result["crawledAt"],
+        "branches": [{"cabinetId": b["cabinetId"], "registryId": b["registryId"], "name": b["name"]} for b in result["branches"]],
+        "settlements": sorted(merged.values(), key=lambda e: e["name"]),
+    }
 
 
 if __name__ == "__main__":

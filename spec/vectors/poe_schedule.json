@@ -1,0 +1,454 @@
+{
+ "_doc": "Golden cases for the POE schedule fragment parser (spec/POE_API.md section 3, PoeSchedule.parseDay). A case gives either 'fixture' (a file in spec/fixtures/poe/) or 'html' (inline, null allowed), the requested 'date', and the expected kind, stamp, reason and, when PUBLISHED, every queue as cell ranges per state ('off' = gpv-s2, 'switching' = gpv-s3).",
+ "cases": [
+  {
+   "name": "live page of 2026-11-16, all 12 queues",
+   "fixture": "poe_newgpv_2026-11-16.html",
+   "date": "2026-11-16",
+   "expect": {
+    "kind": "PUBLISHED",
+    "stamp": "15 листопада 2026 22:46",
+    "reason": null,
+    "queues": {
+     "1.1": {
+      "off": [
+       "04:00-07:00",
+       "10:00-13:00",
+       "16:00-19:00",
+       "22:00-24:00"
+      ],
+      "switching": [
+       "00:00-00:30",
+       "07:00-07:30",
+       "13:00-13:30",
+       "19:00-19:30"
+      ]
+     },
+     "1.2": {
+      "off": [
+       "00:00-00:30",
+       "04:30-07:30",
+       "10:30-13:30",
+       "16:30-19:30",
+       "22:30-24:00"
+      ],
+      "switching": [
+       "00:30-01:00",
+       "07:30-08:00",
+       "13:30-14:00",
+       "19:30-20:00"
+      ]
+     },
+     "2.1": {
+      "off": [
+       "00:00-01:00",
+       "05:00-08:00",
+       "11:00-14:00",
+       "17:00-20:00",
+       "23:00-24:00"
+      ],
+      "switching": [
+       "01:00-01:30",
+       "08:00-08:30",
+       "14:00-14:30",
+       "20:00-20:30"
+      ]
+     },
+     "2.2": {
+      "off": [
+       "00:00-01:30",
+       "05:30-08:30",
+       "11:30-14:30",
+       "17:30-20:30",
+       "23:30-24:00"
+      ],
+      "switching": [
+       "01:30-02:00",
+       "08:30-09:00",
+       "14:30-15:00",
+       "20:30-21:00"
+      ]
+     },
+     "3.1": {
+      "off": [
+       "00:00-02:00",
+       "06:00-09:00",
+       "12:00-15:00",
+       "18:00-21:00"
+      ],
+      "switching": [
+       "02:00-02:30",
+       "09:00-09:30",
+       "15:00-15:30",
+       "21:00-21:30"
+      ]
+     },
+     "3.2": {
+      "off": [
+       "00:00-02:30",
+       "06:30-09:30",
+       "12:30-15:30",
+       "18:30-21:30"
+      ],
+      "switching": [
+       "02:30-03:00",
+       "09:30-10:00",
+       "15:30-16:00",
+       "21:30-22:00"
+      ]
+     },
+     "4.1": {
+      "off": [
+       "00:00-04:00",
+       "07:00-10:00",
+       "13:00-16:00",
+       "19:00-22:00"
+      ],
+      "switching": [
+       "04:00-04:30",
+       "10:00-10:30",
+       "16:00-16:30",
+       "22:00-22:30"
+      ]
+     },
+     "4.2": {
+      "off": [
+       "00:30-04:30",
+       "07:30-10:30",
+       "13:30-16:30",
+       "19:30-22:00"
+      ],
+      "switching": [
+       "04:30-05:00",
+       "10:30-11:00",
+       "16:30-17:00",
+       "22:00-22:30"
+      ]
+     },
+     "5.1": {
+      "off": [
+       "01:00-05:00",
+       "08:00-11:00",
+       "14:00-17:00",
+       "20:00-22:00"
+      ],
+      "switching": [
+       "05:00-05:30",
+       "11:00-11:30",
+       "17:00-17:30",
+       "22:00-22:30"
+      ]
+     },
+     "5.2": {
+      "off": [
+       "01:30-05:30",
+       "08:30-11:30",
+       "14:30-17:30",
+       "20:30-22:30"
+      ],
+      "switching": [
+       "05:30-06:00",
+       "11:30-12:00",
+       "17:30-18:00",
+       "22:30-23:00"
+      ]
+     },
+     "6.1": {
+      "off": [
+       "02:00-06:00",
+       "09:00-12:00",
+       "15:00-18:00",
+       "21:00-23:00"
+      ],
+      "switching": [
+       "06:00-06:30",
+       "12:00-12:30",
+       "18:00-18:30",
+       "23:00-23:30"
+      ]
+     },
+     "6.2": {
+      "off": [
+       "02:30-06:30",
+       "09:30-12:30",
+       "15:30-18:30",
+       "21:30-23:30"
+      ],
+      "switching": [
+       "06:30-07:00",
+       "12:30-13:00",
+       "18:30-19:00",
+       "23:30-24:00"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "live page read for another day is invalid (date check)",
+   "fixture": "poe_newgpv_2026-11-16.html",
+   "date": "2026-11-17",
+   "expect": {
+    "kind": "INVALID",
+    "stamp": null,
+    "reason": "date_mismatch"
+   }
+  },
+  {
+   "name": "live: empty body = tomorrow not published yet",
+   "html": "",
+   "date": "2026-11-17",
+   "expect": {
+    "kind": "NOT_PUBLISHED",
+    "stamp": null,
+    "reason": null
+   }
+  },
+  {
+   "name": "null body = not published",
+   "html": null,
+   "date": "2026-11-17",
+   "expect": {
+    "kind": "NOT_PUBLISHED",
+    "stamp": null,
+    "reason": null
+   }
+  },
+  {
+   "name": "whitespace only = not published",
+   "html": "  \n\t ",
+   "date": "2026-11-17",
+   "expect": {
+    "kind": "NOT_PUBLISHED",
+    "stamp": null,
+    "reason": null
+   }
+  },
+  {
+   "name": "live: JSON error answer (HTTP 200) is invalid, never 'no outages'",
+   "html": "{\"type\":\"about:blank\",\"title\":\"Bad Request\",\"status\":400,\"detail\":\"Failed to read request\",\"instance\":\"/poeREST/abon/site/turnoff/schedule/get/v2\"}",
+   "date": "2026-11-16",
+   "expect": {
+    "kind": "INVALID",
+    "stamp": null,
+    "reason": "error_body"
+   }
+  },
+  {
+   "name": "constructed: minimal valid table",
+   "html": "<div class=\"gpvinfodetail\"> Графік на <b>1 січня 2027 року</b><p class=\"gpv-title\">Порядок відключення черг</p><table class=\"gpv-table\"><thead><tr><th class=\"gpv-q\">Черга</th></tr></thead><tbody><tr><td class=\"gpv-q\" title=\"Черга\">1.1</td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">1.2</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">2.1</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">2.2</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">3.1</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">3.2</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">4.1</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">4.2</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">5.1</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">5.2</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">6.1</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">6.2</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr></tbody></table><ul class=\"gpv-periods\"></ul><p class=\"gpv-note\">Оновлено: 1 січня 2027 08:00</p></div>",
+   "date": "2027-01-01",
+   "expect": {
+    "kind": "PUBLISHED",
+    "stamp": "1 січня 2027 08:00",
+    "reason": null,
+    "queues": {
+     "1.1": {
+      "off": [
+       "00:00-24:00"
+      ],
+      "switching": []
+     },
+     "1.2": {
+      "off": [
+       "10:00-13:00"
+      ],
+      "switching": [
+       "13:00-13:30"
+      ]
+     },
+     "2.1": {
+      "off": [
+       "10:00-13:00"
+      ],
+      "switching": [
+       "13:00-13:30"
+      ]
+     },
+     "2.2": {
+      "off": [
+       "10:00-13:00"
+      ],
+      "switching": [
+       "13:00-13:30"
+      ]
+     },
+     "3.1": {
+      "off": [
+       "10:00-13:00"
+      ],
+      "switching": [
+       "13:00-13:30"
+      ]
+     },
+     "3.2": {
+      "off": [
+       "10:00-13:00"
+      ],
+      "switching": [
+       "13:00-13:30"
+      ]
+     },
+     "4.1": {
+      "off": [
+       "10:00-13:00"
+      ],
+      "switching": [
+       "13:00-13:30"
+      ]
+     },
+     "4.2": {
+      "off": [
+       "10:00-13:00"
+      ],
+      "switching": [
+       "13:00-13:30"
+      ]
+     },
+     "5.1": {
+      "off": [
+       "10:00-13:00"
+      ],
+      "switching": [
+       "13:00-13:30"
+      ]
+     },
+     "5.2": {
+      "off": [
+       "10:00-13:00"
+      ],
+      "switching": [
+       "13:00-13:30"
+      ]
+     },
+     "6.1": {
+      "off": [
+       "10:00-13:00"
+      ],
+      "switching": [
+       "13:00-13:30"
+      ]
+     },
+     "6.2": {
+      "off": [
+       "10:00-13:00"
+      ],
+      "switching": [
+       "13:00-13:30"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "name": "constructed: a row with 47 cells",
+   "html": "<div class=\"gpvinfodetail\"> Графік на <b>1 січня 2027 року</b><p class=\"gpv-title\">Порядок відключення черг</p><table class=\"gpv-table\"><thead><tr><th class=\"gpv-q\">Черга</th></tr></thead><tbody><tr><td class=\"gpv-q\" title=\"Черга\">1.1</td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">1.2</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">2.1</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">2.2</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">3.1</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">3.2</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">4.1</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">4.2</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">5.1</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">5.2</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">6.1</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">6.2</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr></tbody></table><ul class=\"gpv-periods\"></ul><p class=\"gpv-note\">Оновлено: 1 січня 2027 08:00</p></div>",
+   "date": "2027-01-01",
+   "expect": {
+    "kind": "INVALID",
+    "stamp": null,
+    "reason": "bad_row"
+   }
+  },
+  {
+   "name": "constructed: queue 6.2 missing",
+   "html": "<div class=\"gpvinfodetail\"> Графік на <b>1 січня 2027 року</b><p class=\"gpv-title\">Порядок відключення черг</p><table class=\"gpv-table\"><thead><tr><th class=\"gpv-q\">Черга</th></tr></thead><tbody><tr><td class=\"gpv-q\" title=\"Черга\">1.1</td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">1.2</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">2.1</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">2.2</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">3.1</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">3.2</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">4.1</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">4.2</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">5.1</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">5.2</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">6.1</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr></tbody></table><ul class=\"gpv-periods\"></ul><p class=\"gpv-note\">Оновлено: 1 січня 2027 08:00</p></div>",
+   "date": "2027-01-01",
+   "expect": {
+    "kind": "INVALID",
+    "stamp": null,
+    "reason": "missing_queue"
+   }
+  },
+  {
+   "name": "constructed: unknown cell class",
+   "html": "<div class=\"gpvinfodetail\"> Графік на <b>1 січня 2027 року</b><p class=\"gpv-title\">Порядок відключення черг</p><table class=\"gpv-table\"><thead><tr><th class=\"gpv-q\">Черга</th></tr></thead><tbody><tr><td class=\"gpv-q\" title=\"Черга\">1.1</td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">1.2</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">2.1</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">2.2</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">3.1</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">3.2</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">4.1</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s9\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">4.2</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">5.1</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">5.2</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">6.1</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr><tr><td class=\"gpv-q\" title=\"Черга\">6.2</td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s2\"></td><td class=\"gpv-c gpv-s3\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td><td class=\"gpv-c gpv-s1\"></td></tr></tbody></table><ul class=\"gpv-periods\"></ul><p class=\"gpv-note\">Оновлено: 1 січня 2027 08:00</p></div>",
+   "date": "2027-01-01",
+   "expect": {
+    "kind": "INVALID",
+    "stamp": null,
+    "reason": "bad_row"
+   }
+  },
+  {
+   "name": "constructed (wording not seen live yet): published without outages",
+   "html": "<div class=\"gpvinfodetail\">17 листопада 2026 року графіки погодинних відключень не застосовуються.<p>Оновлено: 16 листопада 2026 21:00</p></div>",
+   "date": "2026-11-17",
+   "expect": {
+    "kind": "PUBLISHED",
+    "stamp": "16 листопада 2026 21:00",
+    "reason": null,
+    "queues": {
+     "1.1": {
+      "off": [],
+      "switching": []
+     },
+     "1.2": {
+      "off": [],
+      "switching": []
+     },
+     "2.1": {
+      "off": [],
+      "switching": []
+     },
+     "2.2": {
+      "off": [],
+      "switching": []
+     },
+     "3.1": {
+      "off": [],
+      "switching": []
+     },
+     "3.2": {
+      "off": [],
+      "switching": []
+     },
+     "4.1": {
+      "off": [],
+      "switching": []
+     },
+     "4.2": {
+      "off": [],
+      "switching": []
+     },
+     "5.1": {
+      "off": [],
+      "switching": []
+     },
+     "5.2": {
+      "off": [],
+      "switching": []
+     },
+     "6.1": {
+      "off": [],
+      "switching": []
+     },
+     "6.2": {
+      "off": [],
+      "switching": []
+     }
+    }
+   }
+  },
+  {
+   "name": "constructed: text without a table or a 'not applied' notice",
+   "html": "<div>17 листопада 2026 року інформація оновлюється</div>",
+   "date": "2026-11-17",
+   "expect": {
+    "kind": "INVALID",
+    "stamp": null,
+    "reason": "no_table"
+   }
+  },
+  {
+   "name": "constructed: no date in the header",
+   "html": "<div>Порядок відключення черг</div>",
+   "date": "2026-11-17",
+   "expect": {
+    "kind": "INVALID",
+    "stamp": null,
+    "reason": "no_date"
+   }
+  }
+ ]
+}

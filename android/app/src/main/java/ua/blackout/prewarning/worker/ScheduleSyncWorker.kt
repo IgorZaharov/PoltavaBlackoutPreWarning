@@ -9,10 +9,8 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import kotlinx.coroutines.CancellationException
-import ua.blackout.prewarning.data.parser.ZtoeAddressLookup
 import ua.blackout.prewarning.data.repository.OutageRepository
 import ua.blackout.prewarning.data.repository.SettingsRepository
-import ua.blackout.prewarning.data.repository.SubscriptionSync
 import ua.blackout.prewarning.notification.AlarmScheduler
 import ua.blackout.prewarning.widget.BlackoutGlanceWidget
 import java.util.concurrent.TimeUnit
@@ -26,25 +24,9 @@ class ScheduleSyncWorker(
         val appContext = context.applicationContext
         try {
             val settingsRepo = SettingsRepository(appContext)
-            val settings = settingsRepo.getSettings()
 
-            // A house without a queue may be given one by the site later. Only the two fields that
-            // belong to this check are written, so a setting the user changes meanwhile is never reverted.
-            val addressQuery = settings.selectedAddressQuery
-            if (addressQuery != null && settings.queue.isBlank()) {
-                try {
-                    ZtoeAddressLookup.initDiskCache(appContext)
-                    val lookup = ZtoeAddressLookup.checkAddressOnZtoeWebsite(addressQuery, settings.cityUrl)
-                    if (lookup != null && (lookup.queue != settings.queue || lookup.statusText != settings.customQueueStatusText)) {
-                        // through the subscription store, which writes the primary back into these keys
-                        SubscriptionSync(appContext).assignPrimaryQueue(lookup.queue, lookup.statusText, null)
-                    }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (_: Exception) {
-                }
-            }
-
+            // The queue of every address is re-read from POE inside the refresh (per-house status, E4),
+            // so a house that gets a queue later, or changes it, is updated without a separate check.
             // Each source is isolated inside OutageRepository: a failing site never stops the other one,
             // and a failure is never treated as "no outage".
             try {

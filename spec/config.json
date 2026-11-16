@@ -49,6 +49,20 @@
     "accidentCacheTtlSeconds": 60,
     "timestampOffsetPolicy": "drop-offset-never-convert"
   },
+  "poe": {
+    "baseUrl": "https://www.poe.pl.ua/customs/",
+    "scheduleEndpoint": "newgpv-info.php",
+    "measuresEndpoint": "unloading-info.php",
+    "directoryEndpoint": "search-disconnection-cabinet.php",
+    "addressStatusEndpoint": "disconnectinforesult-cabinet.php",
+    "registryEndpoint": "disconnection-gavapi.php",
+    "dateFormat": "DD-MM-YYYY",
+    "connectTimeoutMs": 8000,
+    "readTimeoutMs": 8000,
+    "registryReadTimeoutMs": 15000,
+    "addressStatusCacheTtlSeconds": 60,
+    "branchesFile": "branches.json"
+  },
   "alerts": {
     "iosMaxPendingLocalNotifications": 64,
     "iosRollingWindowMaxPending": 40,
@@ -67,6 +81,7 @@
     "poweron.connectTimeoutMs, poweron.readTimeoutMs": "approved plan, section 5.1; the pre-1.4.0 accident fetch still uses 5000 ms and is being replaced",
     "poweron.defaultPageSize, poweron.accept": "live probe 2026-11-13, see spec/POWERON_API.md",
     "alerts.*": "approved plan, section 5.4 decision 5; AndroidManifest.xml",
+    "poe.*": "spec/POE_API.md (live probe 2026-11-16) and docs/POLTAVA_PORT_PLAN.md section 4.5",
     "donations.refreshHours": "android/.../data/repository/DonationsRepository.kt (REFRESH_INTERVAL_MS = 24 h)"
   }
 }

@@ -9,6 +9,7 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import ua.blackout.prewarning.data.KYIV_ZONE
+import ua.blackout.prewarning.core.ScheduleCell
 
 data class ScheduleStatusInfo(
     val isBlackoutNow: Boolean,
@@ -504,6 +505,73 @@ class ScheduleRepository(context: Context) {
             }
         }
         editor.apply()
+    }
+
+    /**
+     * POE tables (spec/POE_API.md section 3): all 12 queues of today and, when published, tomorrow in
+     * one transaction. Cells are stored as '0' on, '1' off, '2' switching, so every reader of the
+     * boolean form ('1' = off) keeps working and the switching half-hour is never "off".
+     */
+    fun saveAllCellsBatch(today: Map<String, List<ScheduleCell>>, tomorrow: Map<String, List<ScheduleCell>>?) {
+        if (today.isEmpty()) return
+        val editor = prefs.edit()
+        val day = LocalDate.now(KYIV_ZONE)
+        val todayStr = day.format(DateTimeFormatter.ISO_LOCAL_DATE)
+        val tomorrowStr = day.plusDays(1).format(DateTimeFormatter.ISO_LOCAL_DATE)
+        val yesterdayStr = day.minusDays(1).format(DateTimeFormatter.ISO_LOCAL_DATE)
+        editor.putString("cache_today_date", todayStr)
+        editor.putLong("cache_last_sync_ms", System.currentTimeMillis())
+        for ((queue, cells) in today) {
+            archiveYesterday(editor, queue, yesterdayStr)
+            editor.putString("cache_today_date_$queue", todayStr)
+            editor.putString("cache_today_slots_$queue", encodeCells(cells))
+            val next = tomorrow?.get(queue)
+            if (next != null) {
+                editor.putString("cache_tomorrow_date_$queue", tomorrowStr)
+                editor.putString("cache_tomorrow_slots_$queue", encodeCells(next))
+                editor.putBoolean("cache_has_tomorrow_$queue", true)
+            } else {
+                editor.remove("cache_tomorrow_date_$queue")
+                editor.remove("cache_tomorrow_slots_$queue")
+                editor.putBoolean("cache_has_tomorrow_$queue", false)
+            }
+        }
+        editor.apply()
+    }
+
+    private fun encodeCells(cells: List<ScheduleCell>): String = cells.joinToString("") {
+        when (it) {
+            ScheduleCell.ON -> "0"
+            ScheduleCell.OFF -> "1"
+            ScheduleCell.SWITCHING -> "2"
+        }
+    }
+
+    private fun decodeCells(encoded: String?): List<ScheduleCell>? {
+        if (encoded.isNullOrEmpty() || encoded.length != 48) return null
+        return encoded.map {
+            when (it) {
+                '1' -> ScheduleCell.OFF
+                '2' -> ScheduleCell.SWITCHING
+                else -> ScheduleCell.ON
+            }
+        }
+    }
+
+    /** Three-state cells of today's table, or null when there is no valid cache for today. */
+    fun todayCells(queue: String): List<ScheduleCell>? =
+        if (queue.isBlank()) null else decodeCells(getEncodedTodaySlots(queue))
+
+    fun tomorrowCells(queue: String): List<ScheduleCell>? {
+        if (queue.isBlank() || getTomorrowSlots(queue) == null) return null
+        return decodeCells(prefs.getString("cache_tomorrow_slots_$queue", null))
+    }
+
+    fun yesterdayCells(queue: String): List<ScheduleCell>? {
+        if (queue.isBlank()) return null
+        val yesterdayStr = LocalDate.now(KYIV_ZONE).minusDays(1).format(DateTimeFormatter.ISO_LOCAL_DATE)
+        if (prefs.getString("cache_yesterday_date_$queue", null) != yesterdayStr) return null
+        return decodeCells(prefs.getString("cache_yesterday_slots_$queue", null))
     }
 
     fun isCacheFresh(refreshIntervalMinutes: Long): Boolean {

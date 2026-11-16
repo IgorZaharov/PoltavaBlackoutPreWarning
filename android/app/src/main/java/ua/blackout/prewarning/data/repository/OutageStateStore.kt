@@ -8,7 +8,6 @@ import ua.blackout.prewarning.core.LedgerEntry
 import ua.blackout.prewarning.core.Outage
 import ua.blackout.prewarning.core.OutageKind
 import ua.blackout.prewarning.core.SiteState
-import ua.blackout.prewarning.data.poweron.PowerOnIds
 import java.time.LocalDateTime
 
 /** When the ztoe site was last checked and what was found. */
@@ -21,6 +20,7 @@ data class SiteSnapshot(
 )
 
 /** Whether the last PowerOn refresh worked. */
+/** Status of the emergency source of one address (POE per-house status since «Світло в Полтаві»; the name is kept from 1.4.0). */
 data class PowerOnSnapshot(val ok: Boolean, val checkedAtMs: Long, val lastOkMs: Long?)
 
 /**
@@ -98,29 +98,6 @@ class OutageStateStore(context: Context) {
             )
         }
         prefs.edit().putString(key, arr.toString()).apply()
-    }
-
-    // --- resolved PowerOn ids (per address) -------------------------------------------------------
-
-    fun ids(addressKey: String): Pair<PowerOnIds, Long>? {
-        val raw = prefs.getString("ids_$addressKey", null) ?: return null
-        return try {
-            val o = JSONObject(raw)
-            val cities = o.optJSONArray("cityIds") ?: JSONArray()
-            val streets = o.optJSONArray("streetIds") ?: JSONArray()
-            PowerOnIds((0 until cities.length()).map { cities.getInt(it) }, (0 until streets.length()).map { streets.getInt(it) }) to
-                o.optLong("resolvedAtMs", 0L)
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    fun saveIds(addressKey: String, ids: PowerOnIds, nowMs: Long) {
-        val o = JSONObject()
-            .put("cityIds", JSONArray(ids.cityIds))
-            .put("streetIds", JSONArray(ids.streetIds))
-            .put("resolvedAtMs", nowMs)
-        prefs.edit().putString("ids_$addressKey", o.toString()).apply()
     }
 
     // --- site and source status -------------------------------------------------------------------

@@ -1,20 +1,30 @@
 /**
- * Schedule cache of the ztoe tables, ported from android/.../data/repository/ScheduleRepository.kt
+ * Schedule cache of the queue tables, ported from android/.../data/repository/ScheduleRepository.kt
  * (`zt_schedule_cache_v2`, spec/PERSISTENCE.md section 2).
  *
- * Today and tomorrow off-cells per queue are stored with the date stamp they were fetched for, as the
- * same '0'/'1' strings Android writes. A failed fetch never clears the cache; a cache is valid for
+ * Today and tomorrow cells per queue are stored with the date stamp they were fetched for, as the same
+ * strings Android writes: '0' on, '1' off, '2' switching (POE, spec/OUTAGE_ENGINE.md 3.5). Readers of the
+ * boolean form take '1' as off, so the switching half-hour is never "off". A failed fetch never clears the cache; a cache is valid for
  * today only if its date stamp equals today (Kyiv). The previous day is archived so the tail of an
  * outage that began before midnight keeps its real start ("yesterday tail").
  *
  * Every method takes the Kyiv [today] explicitly, so tests drive it with a fake clock.
  */
 import { formatLocalDate, plusDays, type LocalDate } from '../core/localTime';
+import type { ScheduleCell } from '../core/outageModels';
 import { JsonPrefs, defaultStorage, type KeyValueStorage } from './storage';
 
 export const SCHEDULE_CACHE_STORAGE_KEY = 'zt_schedule_cache_v2';
 
 const encode = (cells: readonly boolean[]): string => cells.map((off) => (off ? '1' : '0')).join('');
+
+const encodeCells = (cells: readonly ScheduleCell[]): string => cells.map((c) => (c === 'OFF' ? '1' : c === 'SWITCHING' ? '2' : '0')).join('');
+
+/** Three-state cells of a 48-cell string, like `ScheduleRepository.decodeCells`. */
+function decodeCells(encoded: string | null | undefined): ScheduleCell[] | null {
+  if (!encoded || encoded.length !== 48) return null;
+  return Array.from(encoded, (ch): ScheduleCell => (ch === '1' ? 'OFF' : ch === '2' ? 'SWITCHING' : 'ON'));
+}
 
 /** null for anything shorter than 24 cells, like `ScheduleRepository.encodedToCells`. */
 function decode(encoded: string | null | undefined): boolean[] | null {
@@ -91,6 +101,42 @@ export class ScheduleCache {
     this.prefs.edit(changes);
   }
 
+  /**
+   * POE tables: all 12 queues of today and, when published, tomorrow in one write, like
+   * `ScheduleRepository.saveAllCellsBatch`.
+   */
+  saveAllCellsBatch(
+    today: Readonly<Record<string, readonly ScheduleCell[]>>,
+    tomorrow: Readonly<Record<string, readonly ScheduleCell[]>> | null,
+    day: LocalDate,
+    nowMs: number
+  ): void {
+    const queues = Object.keys(today);
+    if (queues.length === 0) return;
+    const changes: Record<string, string | number | boolean | undefined> = {
+      cache_today_date: formatLocalDate(day),
+      cache_last_sync_ms: nowMs,
+    };
+    const todayStr = formatLocalDate(day);
+    const tomorrowStr = formatLocalDate(plusDays(day, 1));
+    for (const queue of queues) {
+      this.archiveYesterday(changes, queue, formatLocalDate(plusDays(day, -1)));
+      changes[`cache_today_date_${queue}`] = todayStr;
+      changes[`cache_today_slots_${queue}`] = encodeCells(today[queue]);
+      const next = tomorrow?.[queue];
+      if (next) {
+        changes[`cache_tomorrow_date_${queue}`] = tomorrowStr;
+        changes[`cache_tomorrow_slots_${queue}`] = encodeCells(next);
+        changes[`cache_has_tomorrow_${queue}`] = true;
+      } else {
+        changes[`cache_tomorrow_date_${queue}`] = undefined;
+        changes[`cache_tomorrow_slots_${queue}`] = undefined;
+        changes[`cache_has_tomorrow_${queue}`] = false;
+      }
+    }
+    this.prefs.edit(changes);
+  }
+
   clear(): void {
     this.prefs.clear();
   }
@@ -126,7 +172,7 @@ export class ScheduleCache {
     return cachedDate === formatLocalDate(today) && encoded ? encoded : '';
   }
 
-  /** True where power is off per the ztoe table; null when there is no valid cache for that day. */
+  /** True where power is off per the table; null when there is no valid cache for that day. */
   todayOffCells(queue: string, today: LocalDate): boolean[] | null {
     if (!queue.trim()) return null;
     return decode(this.encodedToday(queue, today));
@@ -148,6 +194,23 @@ export class ScheduleCache {
     if (!queue.trim()) return null;
     if (this.prefs.getString(`cache_yesterday_date_${queue}`) !== formatLocalDate(plusDays(today, -1))) return null;
     return decode(this.prefs.getString(`cache_yesterday_slots_${queue}`));
+  }
+
+  /** Three-state cells of today's table, or null when there is no valid cache for today. */
+  todayCells(queue: string, today: LocalDate): ScheduleCell[] | null {
+    if (!queue.trim()) return null;
+    return decodeCells(this.encodedToday(queue, today));
+  }
+
+  tomorrowCells(queue: string, today: LocalDate): ScheduleCell[] | null {
+    if (this.tomorrowOffCells(queue, today) === null) return null;
+    return decodeCells(this.prefs.getString(`cache_tomorrow_slots_${queue}`));
+  }
+
+  yesterdayCells(queue: string, today: LocalDate): ScheduleCell[] | null {
+    if (!queue.trim()) return null;
+    if (this.prefs.getString(`cache_yesterday_date_${queue}`) !== formatLocalDate(plusDays(today, -1))) return null;
+    return decodeCells(this.prefs.getString(`cache_yesterday_slots_${queue}`));
   }
 
   hasValidTodayCache(queue: string, today: LocalDate): boolean {

@@ -82,18 +82,33 @@ export interface Span {
   readonly kinds: ReadonlySet<OutageKind>;
 }
 
-/** State of one half-hour cell of a day on the drum chart. */
+/**
+ * State of one half-hour cell of a day on the drum chart. `switching` (POE only, spec/OUTAGE_ENGINE.md
+ * section 3.5) marks the half-hour in which power comes back; it is never set together with `planned`
+ * and never counts as off.
+ */
 export interface SlotState {
   readonly planned: boolean;
   readonly emergency: boolean;
+  readonly switching: boolean;
   readonly off: boolean;
 }
 
-export const makeSlotState = (planned: boolean, emergency: boolean): SlotState => ({
+export const makeSlotState = (planned: boolean, emergency: boolean, switching = false): SlotState => ({
   planned,
   emergency,
+  switching,
   off: planned || emergency,
 });
+
+/** One cell of a POE day table (spec/POE_API.md section 3): gpv-s1, gpv-s2, gpv-s3. */
+export type ScheduleCell = 'ON' | 'OFF' | 'SWITCHING';
+
+/** A run of SWITCHING cells: power may still be off until `end`. */
+export interface SwitchWindow {
+  readonly start: LocalDateTime;
+  readonly end: LocalDateTime;
+}
 
 /** One outage as it appears in a day's list, clipped to that day. */
 export interface DayRow {
@@ -126,6 +141,8 @@ export interface StatusInfo {
   readonly nextSlotTime: string;
   readonly currentSpan: Span | null;
   readonly nextSpan: Span | null;
+  /** End of the switching half-hour right after the shown span (POE): power is back by then at the latest. */
+  readonly restoreUntil: LocalDateTime | null;
 }
 
 export interface AlertSpec {
