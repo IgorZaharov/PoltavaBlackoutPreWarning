@@ -1,0 +1,454 @@
+{
+ "_doc": "Golden cases for POE day tables with the switching half-hour (spec/OUTAGE_ENGINE.md section 3.5). 'cells' gives each known day as cell ranges per state ('off' = gpv-s2, 'switching' = gpv-s3, everything else on); a missing or null day is unknown. Queue 1.1 and 6.2 are the live POE table of 2026-11-16 (docs/research/fixtures/poe_newgpv_2026-11-16.html). 'repair' and 'emergencies' as in outage_engine.json. Expected 'spans' are spans of all non-stale outages in the window; 'days' compare plannedCells, switchingCells, emergencyCells and totalOffMinutes.",
+ "cases": [
+  {
+   "name": "live 1.1 at 15:29, tomorrow not published: next block 16:00-19:00, power back 19:00-19:30",
+   "today": "2026-11-16",
+   "now": "2026-11-16T15:29",
+   "advanceMinutes": 15,
+   "cells": {
+    "today": {
+     "off": [
+      "04:00-07:00",
+      "10:00-13:00",
+      "16:00-19:00",
+      "22:00-24:00"
+     ],
+     "switching": [
+      "00:00-00:30",
+      "07:00-07:30",
+      "13:00-13:30",
+      "19:00-19:30"
+     ]
+    }
+   },
+   "expect": {
+    "status": {
+     "isOffNow": false,
+     "countdownText": "00:31:00",
+     "nextSlotTime": "16:00 – 19:00",
+     "restoreUntil": "2026-11-16T19:30"
+    },
+    "spans": [
+     {
+      "start": "2026-11-16T04:00",
+      "end": "2026-11-16T07:00",
+      "mayContinue": false
+     },
+     {
+      "start": "2026-11-16T10:00",
+      "end": "2026-11-16T13:00",
+      "mayContinue": false
+     },
+     {
+      "start": "2026-11-16T16:00",
+      "end": "2026-11-16T19:00",
+      "mayContinue": false
+     },
+     {
+      "start": "2026-11-16T22:00",
+      "end": "2026-11-17T00:00",
+      "mayContinue": true
+     }
+    ],
+    "alerts": [
+     {
+      "key": "planned_2026-11-16T16:00",
+      "fireAt": "2026-11-16T15:45",
+      "spanEnd": "2026-11-16T19:00",
+      "mayContinue": false,
+      "durationMinutes": 180
+     },
+     {
+      "key": "planned_2026-11-16T22:00",
+      "fireAt": "2026-11-16T21:45",
+      "spanEnd": "2026-11-17T00:00",
+      "mayContinue": true,
+      "durationMinutes": 120
+     }
+    ],
+    "days": {
+     "2026-11-16": {
+      "plannedCells": [
+       "04:00-07:00",
+       "10:00-13:00",
+       "16:00-19:00",
+       "22:00-24:00"
+      ],
+      "switchingCells": [
+       "00:00-00:30",
+       "07:00-07:30",
+       "13:00-13:30",
+       "19:00-19:30"
+      ],
+      "emergencyCells": [],
+      "totalOffMinutes": 660
+     }
+    }
+   }
+  },
+  {
+   "name": "live 1.1 at 17:00, during the block: countdown to the OFF end, restore window after it",
+   "today": "2026-11-16",
+   "now": "2026-11-16T17:00",
+   "advanceMinutes": 15,
+   "cells": {
+    "today": {
+     "off": [
+      "04:00-07:00",
+      "10:00-13:00",
+      "16:00-19:00",
+      "22:00-24:00"
+     ],
+     "switching": [
+      "00:00-00:30",
+      "07:00-07:30",
+      "13:00-13:30",
+      "19:00-19:30"
+     ]
+    }
+   },
+   "expect": {
+    "status": {
+     "isOffNow": true,
+     "countdownText": "02:00:00",
+     "nextSlotTime": "16:00 – 19:00",
+     "restoreUntil": "2026-11-16T19:30"
+    },
+    "alerts": [
+     {
+      "key": "planned_2026-11-16T22:00",
+      "fireAt": "2026-11-16T21:45",
+      "spanEnd": "2026-11-17T00:00",
+      "mayContinue": true,
+      "durationMinutes": 120
+     }
+    ],
+    "days": {
+     "2026-11-16": {
+      "plannedCells": [
+       "04:00-07:00",
+       "10:00-13:00",
+       "16:00-19:00",
+       "22:00-24:00"
+      ],
+      "switchingCells": [
+       "00:00-00:30",
+       "07:00-07:30",
+       "13:00-13:30",
+       "19:00-19:30"
+      ],
+      "emergencyCells": [],
+      "totalOffMinutes": 660
+     }
+    }
+   }
+  },
+  {
+   "name": "live 1.1 at 19:10, inside the switching half-hour: not off; the next block runs to midnight with tomorrow unknown, so no restore window",
+   "today": "2026-11-16",
+   "now": "2026-11-16T19:10",
+   "advanceMinutes": 15,
+   "cells": {
+    "today": {
+     "off": [
+      "04:00-07:00",
+      "10:00-13:00",
+      "16:00-19:00",
+      "22:00-24:00"
+     ],
+     "switching": [
+      "00:00-00:30",
+      "07:00-07:30",
+      "13:00-13:30",
+      "19:00-19:30"
+     ]
+    }
+   },
+   "expect": {
+    "status": {
+     "isOffNow": false,
+     "countdownText": "02:50:00",
+     "nextSlotTime": "22:00 – 24:00",
+     "restoreUntil": null
+    },
+    "alerts": [
+     {
+      "key": "planned_2026-11-16T22:00",
+      "fireAt": "2026-11-16T21:45",
+      "spanEnd": "2026-11-17T00:00",
+      "mayContinue": true,
+      "durationMinutes": 120
+     }
+    ]
+   }
+  },
+  {
+   "name": "1.1 at 23:00 with tomorrow published (constructed tomorrow): the block closes at midnight because tomorrow starts with switching",
+   "today": "2026-11-16",
+   "now": "2026-11-16T23:00",
+   "advanceMinutes": 15,
+   "cells": {
+    "today": {
+     "off": [
+      "04:00-07:00",
+      "10:00-13:00",
+      "16:00-19:00",
+      "22:00-24:00"
+     ],
+     "switching": [
+      "00:00-00:30",
+      "07:00-07:30",
+      "13:00-13:30",
+      "19:00-19:30"
+     ]
+    },
+    "tomorrow": {
+     "off": [
+      "04:00-07:00"
+     ],
+     "switching": [
+      "00:00-00:30",
+      "07:00-07:30"
+     ]
+    }
+   },
+   "expect": {
+    "status": {
+     "isOffNow": true,
+     "countdownText": "01:00:00",
+     "nextSlotTime": "22:00 – 24:00",
+     "restoreUntil": "2026-11-17T00:30"
+    },
+    "spans": [
+     {
+      "start": "2026-11-16T04:00",
+      "end": "2026-11-16T07:00",
+      "mayContinue": false
+     },
+     {
+      "start": "2026-11-16T10:00",
+      "end": "2026-11-16T13:00",
+      "mayContinue": false
+     },
+     {
+      "start": "2026-11-16T16:00",
+      "end": "2026-11-16T19:00",
+      "mayContinue": false
+     },
+     {
+      "start": "2026-11-16T22:00",
+      "end": "2026-11-17T00:00",
+      "mayContinue": false
+     },
+     {
+      "start": "2026-11-17T04:00",
+      "end": "2026-11-17T07:00",
+      "mayContinue": false
+     }
+    ],
+    "alerts": [
+     {
+      "key": "planned_2026-11-17T04:00",
+      "fireAt": "2026-11-17T03:45",
+      "spanEnd": "2026-11-17T07:00",
+      "mayContinue": false,
+      "durationMinutes": 180
+     }
+    ],
+    "days": {
+     "2026-11-17": {
+      "plannedCells": [
+       "04:00-07:00"
+      ],
+      "switchingCells": [
+       "00:00-00:30",
+       "07:00-07:30"
+      ],
+      "emergencyCells": [],
+      "totalOffMinutes": 180
+     }
+    }
+   }
+  },
+  {
+   "name": "live 6.2 at 22:00: the switching half-hour at 23:30 ends with the last known day",
+   "today": "2026-11-16",
+   "now": "2026-11-16T22:00",
+   "advanceMinutes": 15,
+   "cells": {
+    "today": {
+     "off": [
+      "02:30-06:30",
+      "09:30-12:30",
+      "15:30-18:30",
+      "21:30-23:30"
+     ],
+     "switching": [
+      "06:30-07:00",
+      "12:30-13:00",
+      "18:30-19:00",
+      "23:30-24:00"
+     ]
+    }
+   },
+   "expect": {
+    "status": {
+     "isOffNow": true,
+     "countdownText": "01:30:00",
+     "nextSlotTime": "21:30 – 23:30",
+     "restoreUntil": "2026-11-17T00:00"
+    },
+    "alerts": [],
+    "days": {
+     "2026-11-16": {
+      "plannedCells": [
+       "02:30-06:30",
+       "09:30-12:30",
+       "15:30-18:30",
+       "21:30-23:30"
+      ],
+      "switchingCells": [
+       "06:30-07:00",
+       "12:30-13:00",
+       "18:30-19:00",
+       "23:30-24:00"
+      ],
+      "emergencyCells": [],
+      "totalOffMinutes": 720
+     }
+    }
+   }
+  },
+  {
+   "name": "repair over a switching cell wins; an emergency on a switching cell shows both and moves the span end, so no restore window",
+   "today": "2026-11-16",
+   "now": "2026-11-16T12:00",
+   "advanceMinutes": 15,
+   "cells": {
+    "today": {
+     "off": [
+      "04:00-07:00",
+      "10:00-13:00",
+      "16:00-19:00",
+      "22:00-24:00"
+     ],
+     "switching": [
+      "00:00-00:30",
+      "07:00-07:30",
+      "13:00-13:30",
+      "19:00-19:30"
+     ]
+    }
+   },
+   "repair": [
+    {
+     "id": "repair_2026-11-16T07:00",
+     "start": "2026-11-16T07:00",
+     "end": "2026-11-16T08:00"
+    }
+   ],
+   "emergencies": [
+    {
+     "id": "poe_3462256",
+     "start": "2026-11-16T13:00",
+     "estimatedEnd": "2026-11-16T13:20",
+     "label": "Аварійна перерва"
+    }
+   ],
+   "expect": {
+    "status": {
+     "isOffNow": true,
+     "countdownText": "01:20:00",
+     "nextSlotTime": "10:00 – 13:20",
+     "restoreUntil": null
+    },
+    "spans": [
+     {
+      "start": "2026-11-16T04:00",
+      "end": "2026-11-16T08:00",
+      "mayContinue": false
+     },
+     {
+      "start": "2026-11-16T10:00",
+      "end": "2026-11-16T13:20",
+      "mayContinue": false
+     },
+     {
+      "start": "2026-11-16T16:00",
+      "end": "2026-11-16T19:00",
+      "mayContinue": false
+     },
+     {
+      "start": "2026-11-16T22:00",
+      "end": "2026-11-17T00:00",
+      "mayContinue": true
+     }
+    ],
+    "alerts": [
+     {
+      "key": "planned_2026-11-16T16:00",
+      "fireAt": "2026-11-16T15:45",
+      "spanEnd": "2026-11-16T19:00",
+      "mayContinue": false,
+      "durationMinutes": 180
+     },
+     {
+      "key": "planned_2026-11-16T22:00",
+      "fireAt": "2026-11-16T21:45",
+      "spanEnd": "2026-11-17T00:00",
+      "mayContinue": true,
+      "durationMinutes": 120
+     }
+    ],
+    "days": {
+     "2026-11-16": {
+      "plannedCells": [
+       "04:00-08:00",
+       "10:00-13:00",
+       "16:00-19:00",
+       "22:00-24:00"
+      ],
+      "switchingCells": [
+       "00:00-00:30",
+       "13:00-13:30",
+       "19:00-19:30"
+      ],
+      "emergencyCells": [
+       "13:00-13:30"
+      ],
+      "totalOffMinutes": 740
+     }
+    }
+   }
+  },
+  {
+   "name": "no table known: no outages, no switching",
+   "today": "2026-11-16",
+   "now": "2026-11-16T12:00",
+   "advanceMinutes": 15,
+   "cells": {
+    "today": null,
+    "tomorrow": null
+   },
+   "expect": {
+    "status": {
+     "isOffNow": false,
+     "countdownText": "--:--:--",
+     "nextSlotTime": "Відключень немає",
+     "restoreUntil": null
+    },
+    "spans": [],
+    "alerts": [],
+    "days": {
+     "2026-11-16": {
+      "plannedCells": [],
+      "switchingCells": [],
+      "emergencyCells": [],
+      "totalOffMinutes": 0
+     }
+    }
+   }
+  }
+ ]
+}

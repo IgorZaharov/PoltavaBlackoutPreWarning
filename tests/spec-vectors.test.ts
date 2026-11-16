@@ -15,11 +15,23 @@ import {
   parseLocalDateTime,
   type LocalDateTime,
 } from '../src/core/localTime';
-import { makeOutage, type AlertSpec, type EmergencyRecord, type Outage, type Span } from '../src/core/outageModels';
-import { buildPlanned, dayView, emergencyDelivery, inWindow, planAlerts, resolveEmergency, spans, status } from '../src/core/outageEngine';
+import { makeOutage, type AlertSpec, type EmergencyRecord, type Outage, type ScheduleCell, type Span } from '../src/core/outageModels';
+import {
+  buildPlanned,
+  buildPlannedCells,
+  dayView,
+  emergencyDelivery,
+  inWindow,
+  planAlerts,
+  resolveEmergency,
+  spans,
+  status,
+  switchWindows,
+} from '../src/core/outageEngine';
 import { HouseKey, StreetKey, TextNorm } from '../src/core/addressKeys';
 import { EmergencyFetch, eventKey, reconcile, type LedgerEntry } from '../src/core/emergencyLedger';
 import { PowerOnMapper, type PowerOnRow } from '../src/core/poweronMapper';
+import { PoeMapper, type Place } from '../src/core/poeMapper';
 import { FETCH_FAILURES, SITE_STATES, SiteStateResolver, type FetchFailure, type SiteState } from '../src/core/siteState';
 import { extractSiteNotice } from '../src/core/siteNotice';
 import * as Sub from '../src/core/subscriptions';
@@ -332,6 +344,187 @@ function powerOnVectors(): number {
 }
 
 // -------------------------------------------------------------------------------------------------
+// poe_api.json (spec/POE_API.md section 8)
+// -------------------------------------------------------------------------------------------------
+
+function placesJson(places: readonly Place[]): Json[] {
+  return places.map((p) => ({
+    settlement: p.settlement,
+    streets: p.streets.map((s) => ({ street: s.street, houses: [...s.houses] })),
+    freeText: [...p.freeText],
+  }));
+}
+
+function poeApiVectors(): number {
+  const v: Json = load('poe_api.json');
+  const counts: [string, number][] = [
+    ['times', 10], ['eta', 7], ['plannedList', 5], ['queue', 8],
+    ['addressStatus', 9], ['registryReason', 6], ['registryRows', 6], ['registryMatch', 9],
+  ];
+  for (const [key, min] of counts) assert.ok((v[key] as Json[]).length >= min, `poe_api.json: ${key} must hold at least ${min} cases`);
+  let checks = 0;
+  for (const t of v.times as Json[]) {
+    assert.equal(dtStr(PoeMapper.parseTime(t.in)), t.out, `time '${t.in}'`);
+    checks++;
+  }
+  for (const t of v.eta as Json[]) {
+    assert.equal(dtStr(PoeMapper.parseEta(t.in)), t.out, `eta: ${t.name}`);
+    checks++;
+  }
+  for (const t of v.plannedList as Json[]) {
+    const got = PoeMapper.parsePlannedList(t.in).map((r) => ({ start: formatLocalDateTime(r.start), end: formatLocalDateTime(r.end) }));
+    assert.deepEqual(got, t.out, `plannedList: ${t.name}`);
+    checks++;
+  }
+  for (const t of v.queue as Json[]) {
+    assert.equal(PoeMapper.parseQueue(t.in[0], t.in[1]), t.out, `queue ${JSON.stringify(t.in)}`);
+    checks++;
+  }
+  for (const c of v.addressStatus as Json[]) {
+    const name: string = c.name;
+    const st = PoeMapper.addressStatus(c.in, parseLocalDate(c.today));
+    const e: Json = c.expect;
+    assert.equal(st.messageType, e.messageType, `${name}: messageType`);
+    assert.equal(st.queue, e.queue, `${name}: queue`);
+    assert.equal(st.unparsed, e.unparsed, `${name}: unparsed`);
+    if (e.emergency === null) assert.equal(st.emergency, null, `${name}: emergency`);
+    else {
+      assert.ok(st.emergency !== null, `${name}: emergency expected`);
+      assert.equal(st.emergency!.id, e.emergency.id, `${name}: emergency.id`);
+      assert.equal(formatLocalDateTime(st.emergency!.start), e.emergency.start, `${name}: emergency.start`);
+      assert.equal(dtStr(st.emergency!.estimatedEnd), e.emergency.estimatedEnd, `${name}: emergency.estimatedEnd`);
+      assert.equal(st.emergency!.label, e.emergency.label, `${name}: emergency.label`);
+    }
+    const repairs = st.repairs.map((r) => ({
+      id: r.id,
+      start: formatLocalDateTime(r.start),
+      end: formatLocalDateTime(r.end),
+      label: r.label,
+    }));
+    assert.deepEqual(repairs, e.repairs, `${name}: repairs`);
+    assert.ok(st.repairs.every((r) => r.kind === 'REPAIR'), `${name}: repair kind`);
+    checks++;
+  }
+  for (const t of v.registryReason as Json[]) {
+    assert.equal(PoeMapper.classifyRegistryReason(t.in), t.out, `registryReason '${t.in}'`);
+    checks++;
+  }
+  for (const c of v.registryRows as Json[]) {
+    const name: string = c.name;
+    const row = PoeMapper.parseRegistryRow(c.in);
+    if (c.expect === null) assert.equal(row, null, `${name}: null`);
+    else {
+      assert.ok(row !== null, `${name}: row expected`);
+      const got = {
+        id: row!.id,
+        start: formatLocalDateTime(row!.start),
+        end: dtStr(row!.end),
+        reason: row!.reason,
+        kind: row!.kind,
+        places: placesJson(row!.places),
+      };
+      assert.deepEqual(got, c.expect, name);
+    }
+    checks++;
+  }
+  for (const c of v.registryMatch as Json[]) {
+    const row = PoeMapper.parseRegistryRow(c.row);
+    assert.ok(row !== null, `${c.name}: row`);
+    assert.equal(PoeMapper.registryMatch(row!.places, c.settlement, c.street, c.house), c.out, `registryMatch: ${c.name}`);
+    checks++;
+  }
+  return checks;
+}
+
+// -------------------------------------------------------------------------------------------------
+// outage_engine_poe.json (spec/OUTAGE_ENGINE.md section 3.5)
+// -------------------------------------------------------------------------------------------------
+
+function scheduleCells(day: Json): ScheduleCell[] | null {
+  if (day == null) return null;
+  const arr = new Array<ScheduleCell>(48).fill('ON');
+  const mark = (ranges: string[] | undefined, state: ScheduleCell) => {
+    for (const r of ranges ?? []) {
+      const [a, b] = r.split('-');
+      for (let k = toMin(a) / 30; k < toMin(b) / 30; k++) arr[k] = state;
+    }
+  };
+  mark(day.off, 'OFF');
+  mark(day.switching, 'SWITCHING');
+  return arr;
+}
+
+function outageEnginePoeVectors(): number {
+  const cases: Json[] = load('outage_engine_poe.json').cases;
+  assert.ok(cases.length >= 7, 'outage_engine_poe.json must hold at least 7 cases');
+  for (const c of cases) {
+    const name: string = c.name;
+    const today = parseLocalDate(c.today);
+    const now = parseLocalDateTime(c.now);
+    const advance: number = typeof c.advanceMinutes === 'number' ? c.advanceMinutes : 15;
+    const cl: Json = c.cells ?? {};
+    const [t, tm, y] = [scheduleCells(cl.today), scheduleCells(cl.tomorrow), scheduleCells(cl.yesterday)];
+
+    const outages: Outage[] = [...buildPlannedCells(today, t, tm, y)];
+    for (const it of (c.repair ?? []) as Json[]) {
+      outages.push(makeOutage({ id: it.id, kind: 'REPAIR', start: parseLocalDateTime(it.start), end: parseLocalDateTime(it.end) }));
+    }
+    for (const it of (c.emergencies ?? []) as Json[]) {
+      const rec: EmergencyRecord = {
+        id: it.id,
+        start: parseLocalDateTime(it.start),
+        estimatedEnd: dt(optStr(it, 'estimatedEnd')),
+        closedAt: dt(optStr(it, 'closedAt')),
+        label: optStr(it, 'label'),
+      };
+      outages.push(resolveEmergency(rec, now));
+    }
+    const window = inWindow(outages, today);
+    const windows = switchWindows(today, t, tm, y);
+    const expect: Json = c.expect;
+
+    if (expect.status) {
+      const s = expect.status;
+      const st = status(window, now, undefined, windows);
+      assert.equal(st.isOffNow, s.isOffNow, `${name}: isOffNow`);
+      assert.equal(st.countdownText, s.countdownText, `${name}: countdownText`);
+      assert.equal(st.nextSlotTime, s.nextSlotTime, `${name}: nextSlotTime`);
+      assert.equal(dtStr(st.restoreUntil), s.restoreUntil, `${name}: restoreUntil`);
+    }
+    if (Array.isArray(expect.spans)) {
+      const got = spans(window.filter((o) => !o.stale)).map((sp) => ({
+        start: formatLocalDateTime(sp.start),
+        end: formatLocalDateTime(sp.end),
+        mayContinue: sp.mayContinue,
+      }));
+      assert.deepEqual(got, expect.spans, `${name}: spans`);
+    }
+    if (Array.isArray(expect.alerts)) {
+      const got = planAlerts(window, now, advance).map((a) => ({
+        key: a.key,
+        fireAt: formatLocalDateTime(a.fireAt),
+        spanEnd: formatLocalDateTime(a.spanEnd),
+        mayContinue: a.mayContinue,
+        durationMinutes: a.durationMinutes,
+      }));
+      assert.deepEqual(got, expect.alerts, `${name}: alerts`);
+    }
+    if (expect.days) {
+      for (const dateKey of Object.keys(expect.days)) {
+        const d: Json = expect.days[dateKey];
+        const view = dayView(window, parseLocalDate(dateKey), now, undefined, windows);
+        assert.equal(view.totalOffMinutes, d.totalOffMinutes, `${name}/${dateKey}: total`);
+        assert.deepEqual(rangesOf(view.slots.map((s) => s.planned)), d.plannedCells, `${name}/${dateKey}: plannedCells`);
+        assert.deepEqual(rangesOf(view.slots.map((s) => s.switching)), d.switchingCells, `${name}/${dateKey}: switchingCells`);
+        assert.deepEqual(rangesOf(view.slots.map((s) => s.emergency)), d.emergencyCells, `${name}/${dateKey}: emergencyCells`);
+        assert.ok(view.slots.every((s) => !(s.planned && s.switching)), `${name}/${dateKey}: switching never with planned`);
+      }
+    }
+  }
+  return cases.length;
+}
+
+// -------------------------------------------------------------------------------------------------
 // site_state.json
 // -------------------------------------------------------------------------------------------------
 
@@ -621,6 +814,8 @@ const suites: [string, () => number][] = [
   ['emergency_ledger.json', emergencyLedgerVectors],
   ['address_keys.json', addressKeyVectors],
   ['poweron_api.json', powerOnVectors],
+  ['poe_api.json', poeApiVectors],
+  ['outage_engine_poe.json', outageEnginePoeVectors],
   ['site_state.json', siteStateVectors],
   ['site_notice.json', siteNoticeVectors],
   ['subscriptions.json', subscriptionVectors],

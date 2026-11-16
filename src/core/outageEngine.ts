@@ -37,6 +37,8 @@ import {
   type OutageKind,
   type Span,
   type StatusInfo,
+  type ScheduleCell,
+  type SwitchWindow,
   type Transition,
 } from './outageModels';
 
@@ -60,23 +62,53 @@ export function normalizeSlots(raw: Slots): readonly boolean[] | null {
  * last known day, whose next day is unknown, is flagged mayContinue.
  */
 export function buildPlanned(today: LocalDate, todayOff: Slots, tomorrowOff: Slots, yesterdayOff: Slots = null): Outage[] {
+  return runs(today, todayOff, tomorrowOff, yesterdayOff).map(([s, end, mayContinue]) =>
+    makeOutage({ id: `planned_${formatLocalDateTime(s)}`, kind: 'PLANNED', start: s, end, mayContinue })
+  );
+}
+
+type Cells = readonly ScheduleCell[] | null | undefined;
+
+const flags = (cells: Cells, state: ScheduleCell): boolean[] | null => (cells == null ? null : cells.map((c) => c === state));
+
+/**
+ * POE day tables (spec/OUTAGE_ENGINE.md section 3.5): buildPlanned over the OFF cells. The switching
+ * half-hour counts as on, so a block closes where switching starts.
+ */
+export function buildPlannedCells(today: LocalDate, todayCells: Cells, tomorrowCells: Cells, yesterdayCells: Cells = null): Outage[] {
+  return buildPlanned(today, flags(todayCells, 'OFF'), flags(tomorrowCells, 'OFF'), flags(yesterdayCells, 'OFF'));
+}
+
+/** The runs of SWITCHING cells of POE day tables, built like the OFF runs (section 3.5). */
+export function switchWindows(today: LocalDate, todayCells: Cells, tomorrowCells: Cells, yesterdayCells: Cells = null): SwitchWindow[] {
+  return runs(today, flags(todayCells, 'SWITCHING'), flags(tomorrowCells, 'SWITCHING'), flags(yesterdayCells, 'SWITCHING')).map(
+    ([start, end]) => ({ start, end })
+  );
+}
+
+/**
+ * Maximal runs of true cells over the known days (yesterday, today, tomorrow) in chronological order,
+ * as [start, end, mayContinue]. A run continues into the next day only when that day is known; at the
+ * end of the last known day it closes at midnight with mayContinue = true.
+ */
+function runs(today: LocalDate, todayFlags: Slots, tomorrowFlags: Slots, yesterdayFlags: Slots): [LocalDateTime, LocalDateTime, boolean][] {
   const candidates: [LocalDate, readonly boolean[] | null][] = [
-    [plusDays(today, -1), normalizeSlots(yesterdayOff)],
-    [today, normalizeSlots(todayOff)],
-    [plusDays(today, 1), normalizeSlots(tomorrowOff)],
+    [plusDays(today, -1), normalizeSlots(yesterdayFlags)],
+    [today, normalizeSlots(todayFlags)],
+    [plusDays(today, 1), normalizeSlots(tomorrowFlags)],
   ];
   const days: [LocalDate, readonly boolean[]][] = [];
   for (const [d, s] of candidates) if (s !== null) days.push([d, s]);
   if (days.length === 0) return [];
 
   const knownDates = new Set<number>(days.map(([d]) => d));
-  const out: Outage[] = [];
+  const out: [LocalDateTime, LocalDateTime, boolean][] = [];
   let runStart: LocalDateTime | null = null;
 
   const close = (end: LocalDateTime, mayContinue: boolean) => {
     const s = runStart;
     if (s === null) return;
-    out.push(makeOutage({ id: `planned_${formatLocalDateTime(s)}`, kind: 'PLANNED', start: s, end, mayContinue }));
+    out.push([s, end, mayContinue]);
     runStart = null;
   };
 
@@ -204,7 +236,13 @@ const maxOf = (a: LocalDateTime, b: LocalDateTime) => (a > b ? a : b);
 const minOf = (a: LocalDateTime, b: LocalDateTime) => (a < b ? a : b);
 
 /** The drum cells and list rows for one calendar day. Finished outages stay (history); they just never alert. */
-export function dayView(outages: readonly Outage[], date: LocalDate, now: LocalDateTime, zone: string = KYIV_ZONE): DayView {
+export function dayView(
+  outages: readonly Outage[],
+  date: LocalDate,
+  now: LocalDateTime,
+  zone: string = KYIV_ZONE,
+  switching: readonly SwitchWindow[] = []
+): DayView {
   const dayStart = atStartOfDay(date);
   const dayEnd = atStartOfDay(plusDays(date, 1));
   const relevant = outages.filter((o) => o.end > o.start && o.start < dayEnd && o.end > dayStart);
@@ -212,9 +250,11 @@ export function dayView(outages: readonly Outage[], date: LocalDate, now: LocalD
   const slots = Array.from({ length: OutageConfig.SLOTS_PER_DAY }, (_, i) => {
     const s = plusMinutes(dayStart, i * OutageConfig.SLOT_MINUTES);
     const e = plusMinutes(s, OutageConfig.SLOT_MINUTES);
+    const planned = relevant.some((o) => isPlannedLike(o) && o.start < e && o.end > s);
     return makeSlotState(
-      relevant.some((o) => isPlannedLike(o) && o.start < e && o.end > s),
-      relevant.some((o) => o.kind === 'EMERGENCY' && o.start < e && o.end > s)
+      planned,
+      relevant.some((o) => o.kind === 'EMERGENCY' && o.start < e && o.end > s),
+      !planned && switching.some((w) => w.start < e && w.end > s)
     );
   });
 
@@ -257,7 +297,15 @@ export function formatCountdown(totalSeconds: number): string {
 }
 
 /** Power state, countdown and next/current period from [now]. Stale emergencies never count as off. */
-export function status(outages: readonly Outage[], now: LocalDateTime, zone: string = KYIV_ZONE): StatusInfo {
+export function status(
+  outages: readonly Outage[],
+  now: LocalDateTime,
+  zone: string = KYIV_ZONE,
+  switching: readonly SwitchWindow[] = []
+): StatusInfo {
+  // POE: the switching half-hour right after the shown span is when power is back at the latest.
+  const restoreFor = (span: Span): LocalDateTime | null =>
+    span.mayContinue ? null : (switching.find((w) => w.start === span.end)?.end ?? null);
   // An overdue emergency has no known end: treat it as lasting just past now so it is "current".
   const openEnd = plusSeconds(now, 1);
   const effective = outages.filter((o) => !o.stale).map((o) => (o.overdue ? { ...o, end: openEnd } : o));
@@ -273,6 +321,7 @@ export function status(outages: readonly Outage[], now: LocalDateTime, zone: str
         nextSlotTime: `${p2(hourOf(current.start))}:${p2(minuteOf(current.start))} – --:--`,
         currentSpan: { ...current, end: now },
         nextSpan: null,
+        restoreUntil: null,
       };
     }
     const secs = secondsBetween(now, current.end, zone);
@@ -283,6 +332,7 @@ export function status(outages: readonly Outage[], now: LocalDateTime, zone: str
       nextSlotTime: formatSpan(current),
       currentSpan: current,
       nextSpan: null,
+      restoreUntil: restoreFor(current),
     };
   }
   const next = all.find((sp) => sp.start > now) ?? null;
@@ -295,6 +345,7 @@ export function status(outages: readonly Outage[], now: LocalDateTime, zone: str
       nextSlotTime: formatSpan(next),
       currentSpan: null,
       nextSpan: next,
+      restoreUntil: restoreFor(next),
     };
   }
   return {
@@ -304,6 +355,7 @@ export function status(outages: readonly Outage[], now: LocalDateTime, zone: str
     nextSlotTime: 'Відключень немає',
     currentSpan: null,
     nextSpan: null,
+    restoreUntil: null,
   };
 }
 
@@ -391,6 +443,8 @@ export function transitions(outages: readonly Outage[], from: LocalDateTime, to:
 export const OutageEngine = {
   normalizeSlots,
   buildPlanned,
+  buildPlannedCells,
+  switchWindows,
   resolveEmergency,
   inWindow,
   spans,

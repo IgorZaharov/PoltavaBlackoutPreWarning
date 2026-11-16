@@ -15,7 +15,7 @@ Constants: see `spec/config.json` (`grid`, `outage`).
 | Wall-clock arithmetic | `plusMinutes`, `plusDays`, comparisons, `start of day` are plain calendar arithmetic on the wall clock. |
 | Elapsed time | Durations and countdowns map both ends to real instants in `Europe/Kyiv` (legacy id `Europe/Kiev` on old devices) and subtract. Result is truncated toward zero to whole minutes (durations) or whole seconds (countdowns). See section 7. |
 | `now` | A `LocalDateTime` that may carry seconds. `today` is the calendar date of `now` in Kyiv. |
-| Kinds | `PLANNED` (ztoe hourly schedule), `REPAIR` (PowerOn planned works), `EMERGENCY` (PowerOn). `PLANNED` and `REPAIR` are "planned-like". Kind order for sorting: `PLANNED` < `REPAIR` < `EMERGENCY`. |
+| Kinds | `PLANNED` (hourly schedule: ztoe, or POE `OFF` cells), `REPAIR` (planned works: PowerOn, or POE), `EMERGENCY` (PowerOn, or POE «пошкодження»). `PLANNED` and `REPAIR` are "planned-like". Kind order for sorting: `PLANNED` < `REPAIR` < `EMERGENCY`. |
 
 ## 2. Model
 
@@ -25,10 +25,12 @@ Constants: see `spec/config.json` (`grid`, `outage`).
 | `IntervalStatus` | `FINISHED`, `ACTIVE`, `UPCOMING`, `OVERDUE` | Derived by `statusAt(now)`, see below. |
 | `EmergencyRecord` | `id`, `start`, `estimatedEnd?`, `closedAt?`, `label?` | One emergency as seen on PowerOn or restored from the ledger. `closedAt` is set only by the ledger. |
 | `Span` | `start`, `end`, `mayContinue`, `kinds: set<kind>` | Maximal union of touching or overlapping outages. |
-| `SlotState` | `planned`, `emergency`; derived `off = planned or emergency` | One drum cell. `planned` is true for `PLANNED` and `REPAIR` outages. |
+| `SlotState` | `planned`, `emergency`, `switching = false`; derived `off = planned or emergency` | One drum cell. `planned` is true for `PLANNED` and `REPAIR` outages. `switching` (POE only, section 3.5) never counts as off. |
+| `ScheduleCell` | `ON`, `OFF`, `SWITCHING` | One cell of a POE day table (section 3.5). |
+| `SwitchWindow` | `start`, `end` | A run of `SWITCHING` cells (section 3.5). |
 | `DayRow` | `outage`, `from`, `to`, `status`, `continuesFromPrevDay`, `continuesToNextDay`, `durationMinutes`, `inDayMinutes` | One outage clipped to one day. |
 | `DayView` | `date`, `slots: SlotState[48]`, `rows: DayRow[]`, `totalOffMinutes` | |
-| `StatusInfo` | `isOffNow`, `countdownSeconds?`, `countdownText`, `nextSlotTime`, `currentSpan?`, `nextSpan?` | |
+| `StatusInfo` | `isOffNow`, `countdownSeconds?`, `countdownText`, `nextSlotTime`, `currentSpan?`, `nextSpan?`, `restoreUntil? = null` | `restoreUntil`: section 3.5. |
 | `AlertSpec` | `key`, `fireAt`, `spanStart`, `spanEnd`, `mayContinue`, `durationMinutes` | One pre-warning. |
 | `Transition` | `at`, `isOff` | An instant where the power state flips. |
 
@@ -85,6 +87,18 @@ Meaning: a closed emergency ends where the ledger saw it disappear. A listed eme
 Keep an outage when `start < (today + 2 days) 00:00` and `end > (today - 1 day) 00:00`. This is the window yesterday, today, tomorrow. Rows dated further ahead (PowerOn lists some days in advance) are ignored.
 
 All other functions receive the already-windowed list.
+
+### 3.5 POE day tables: the switching half-hour
+
+POE day tables have three cell states (`POE_API.md` section 3): `ON`, `OFF` and `SWITCHING` («Час, необхідний для перемикань. Електроенергії може не бути»). A `SWITCHING` cell follows the end of every `OFF` run: power comes back somewhere inside that half-hour. Owner decision D3 (2026-11-16): the switching half-hour is **not** part of the outage; it is shown as "power may still be off" and never alerts.
+
+- `buildPlannedCells(today, todayCells, tomorrowCells, yesterdayCells = null) -> Outage[]` = `buildPlanned` (section 3.2) with `off = (cell == OFF)` for each known day. `SWITCHING` counts as on for outages, spans, alerts, transitions and totals, so an `OFF` run followed by `SWITCHING` closes at the start of the `SWITCHING` cell, `mayContinue = false`.
+- `switchWindows(today, todayCells, tomorrowCells, yesterdayCells = null) -> SwitchWindow[]`: the maximal runs of `SWITCHING` cells over the known days in chronological order, built exactly like the `OFF` runs of section 3.2 (a run continues into the next day only if that day is known; at the end of the last known day it closes at `(day + 1) 00:00`). Unknown days (`null` or wrong length) contribute nothing.
+- `dayView(..., switching = [])`: `slots[i].switching` = some window overlaps the cell (`start < e and end > s`) **and** `planned` is false (a repair or planned outage on the same cell wins). `emergency` is independent: an emergency on a switching cell shows both. Rows and `totalOffMinutes` are unchanged.
+- `status(..., switching = [])`: after section 6.1 has chosen the displayed span (`currentSpan` or `nextSpan`), `restoreUntil` = the `end` of the window whose `start` equals that span's `end`; null when there is none, when the span `mayContinue`, or in the "restore unknown" branch. The hero then reads "світло повернеться HH:MM–HH:MM" (span end – `restoreUntil`); the countdown still runs to the span end.
+- `planAlerts` and `transitions` ignore switching windows: the warning is for the `OFF` start, and the widget flips to «СВІТЛО Є» at the `OFF` end (it may be up to 30 minutes early, which the hero text explains).
+
+Vectors: `spec/vectors/outage_engine_poe.json` (cases built from the live POE table of 2026-11-16, queue 1.1). The ztoe tables have no switching cells; all `outage_engine.json` cases are unchanged (`switching` empty, `restoreUntil` null).
 
 ## 4. Spans
 
@@ -204,4 +218,4 @@ One alert per merged span, keyed by the span's absolute start. A `00:00` continu
 
 ## Vectors
 
-`spec/vectors/outage_engine.json` (22 cases incl. midnight with and without yesterday's tail, year boundary, both DST nights, overdue grace boundary 60/61, ledger-closed emergency, repair works, far-future emergency, empty input). Runner semantics: `spec/README.md`.
+`spec/vectors/outage_engine_poe.json` (switching half-hour, section 3.5). `spec/vectors/outage_engine.json` (26 cases incl. midnight with and without yesterday's tail, year boundary, both DST nights, overdue grace boundary 60/61, ledger-closed emergency, repair works, far-future emergency, empty input). Runner semantics: `spec/README.md`.

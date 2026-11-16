@@ -1,0 +1,712 @@
+{
+ "_doc": "Golden vectors for the POE mapping (spec/POE_API.md section 8, PoeMapper). Inputs are live answers of www.poe.pl.ua captured on 2026-11-16 (docs/research/fixtures/) or reduced copies of them; constructed edge cases say so in their name. Times are Kyiv wall clock, text form yyyy-MM-ddTHH:mm.",
+ "times": [
+  {
+   "in": "16.11.2026 08:59",
+   "out": "2026-11-16T08:59"
+  },
+  {
+   "in": "16.11.2026 09:25:00",
+   "out": "2026-11-16T09:25"
+  },
+  {
+   "in": " 6.1.2027 7:05",
+   "out": "2027-01-06T07:05"
+  },
+  {
+   "in": "31.11.2026 10:00",
+   "out": null
+  },
+  {
+   "in": "29.02.2027 10:00",
+   "out": null
+  },
+  {
+   "in": "16.11.2026 24:00",
+   "out": null
+  },
+  {
+   "in": "16.11.2026 10:60",
+   "out": null
+  },
+  {
+   "in": "2026-11-16T08:59",
+   "out": null
+  },
+  {
+   "in": "16.11.2026",
+   "out": null
+  },
+  {
+   "in": "",
+   "out": null
+  }
+ ],
+ "eta": [
+  {
+   "name": "live emergency (Зуївці)",
+   "in": "зареєстрована аварійна перерва в електропостачанні 16.11.2026 р. з 08 годин(и)  59  хвилин(и). Очікуваний час закінчення перерви в електропостачанні: 16.11.2026 р. о 15  годин(и)  59 хвилин(и).",
+   "out": "2026-11-16T15:59"
+  },
+  {
+   "name": "live repair works (Сухорабівка)",
+   "in": "проводяться планові ремонтні роботи 16.11.2026 р. з 09 годин(и)  34  хвилин(и). Очікуваний час закінчення перерви в електропостачанні: 16.11.2026 р. о 17  годин(и)  00 хвилин(и).",
+   "out": "2026-11-16T17:00"
+  },
+  {
+   "name": "live: nothing registered",
+   "in": "не зареєстровано перерв в електропостачанні",
+   "out": null
+  },
+  {
+   "name": "constructed: 24:00 is midnight of the next day",
+   "in": "зареєстрована аварійна перерва в електропостачанні 16.11.2026 р. з 20 годин(и) 10 хвилин(и). Очікуваний час закінчення перерви в електропостачанні: 16.11.2026 р. о 24 годин(и) 00 хвилин(и).",
+   "out": "2026-11-17T00:00"
+  },
+  {
+   "name": "constructed: no word 'закінчення', other spelling of годин",
+   "in": "відновлення орієнтовно 17.11.2026 р. о 6 години 5 хвилин",
+   "out": "2026-11-17T06:05"
+  },
+  {
+   "name": "constructed: impossible date",
+   "in": "Очікуваний час закінчення перерви в електропостачанні: 31.11.2026 р. о 10 годин(и) 00 хвилин(и).",
+   "out": null
+  },
+  {
+   "name": "constructed: empty",
+   "in": "",
+   "out": null
+  }
+ ],
+ "plannedList": [
+  {
+   "name": "live: four days of works (Сухорабівка)",
+   "in": "- запланована перерва в електропостачанні для проведення ремонтних робіт 17.11.2026 р. з 08-ї до 17-ї години.<br><br>- запланована перерва в електропостачанні для проведення ремонтних робіт 18.11.2026 р. з 08-ї до 17-ї години.<br><br>- запланована перерва в електропостачанні для проведення ремонтних робіт 19.11.2026 р. з 08-ї до 17-ї години.<br><br>- запланована перерва в електропостачанні для проведення ремонтних робіт 20.11.2026 р. з 08-ї до 17-ї години.",
+   "out": [
+    {
+     "start": "2026-11-17T08:00",
+     "end": "2026-11-17T17:00"
+    },
+    {
+     "start": "2026-11-18T08:00",
+     "end": "2026-11-18T17:00"
+    },
+    {
+     "start": "2026-11-19T08:00",
+     "end": "2026-11-19T17:00"
+    },
+    {
+     "start": "2026-11-20T08:00",
+     "end": "2026-11-20T17:00"
+    }
+   ]
+  },
+  {
+   "name": "live: POE repeats an entry, duplicates are removed (Зуївці)",
+   "in": "- запланована перерва в електропостачанні для проведення ремонтних робіт 20.11.2026 р. з 08-ї до 20-ї години.<br><br>- запланована перерва в електропостачанні для проведення ремонтних робіт 20.11.2026 р. з 08-ї до 20-ї години.",
+   "out": [
+    {
+     "start": "2026-11-20T08:00",
+     "end": "2026-11-20T20:00"
+    }
+   ]
+  },
+  {
+   "name": "constructed: minutes, 24-ї, an inverted pair dropped, <br/> separators",
+   "in": "- роботи 21.11.2026 р. з 08:30 до 17:00 години.<br/>- роботи 22.11.2026 р. з 20-ї до 24-ї години.<BR />- роботи 23.11.2026 р. з 17-ї до 08-ї години.",
+   "out": [
+    {
+     "start": "2026-11-21T08:30",
+     "end": "2026-11-21T17:00"
+    },
+    {
+     "start": "2026-11-22T20:00",
+     "end": "2026-11-23T00:00"
+    }
+   ]
+  },
+  {
+   "name": "constructed: no entries",
+   "in": "",
+   "out": []
+  },
+  {
+   "name": "constructed: null",
+   "in": null,
+   "out": []
+  }
+ ],
+ "queue": [
+  {
+   "in": [
+    "4",
+    "2"
+   ],
+   "out": "4.2"
+  },
+  {
+   "in": [
+    "1",
+    " 1 "
+   ],
+   "out": "1.1"
+  },
+  {
+   "in": [
+    "",
+    ""
+   ],
+   "out": null
+  },
+  {
+   "in": [
+    null,
+    null
+   ],
+   "out": null
+  },
+  {
+   "in": [
+    "7",
+    "1"
+   ],
+   "out": null
+  },
+  {
+   "in": [
+    "1",
+    "3"
+   ],
+   "out": null
+  },
+  {
+   "in": [
+    "a",
+    "1"
+   ],
+   "out": null
+  },
+  {
+   "in": [
+    "6",
+    "2"
+   ],
+   "out": "6.2"
+  }
+ ],
+ "addressStatus": [
+  {
+   "name": "live: nothing registered, queue 1.1 (Полтава, вул. Соборності 1)",
+   "today": "2026-11-16",
+   "in": {
+    "fn_accident_message": "не зареєстровано перерв в електропостачанні",
+    "message_type": 0,
+    "accident_str": null,
+    "accident_id": null,
+    "accident_date": "16.11.2026 15:32",
+    "accid_msg_logid": null,
+    "gav_message": "Заживлено від КЛ-0,4 КВ ТП-310: Ж/Д 1 ул.ОКТЯБРЬСКАЯ та залучено до АЧР, ГПВ (черга 1-1).",
+    "gp_qnum_1": "1",
+    "gp_qnum_2": "1",
+    "planned_message": null
+   },
+   "expect": {
+    "messageType": 0,
+    "queue": "1.1",
+    "emergency": null,
+    "repairs": [],
+    "unparsed": false
+   }
+  },
+  {
+   "name": "live: repair works now and planned works; days after tomorrow dropped (Сухорабівка, вул. Миру 77)",
+   "today": "2026-11-16",
+   "in": {
+    "fn_accident_message": "проводяться планові ремонтні роботи 16.11.2026 р. з 09 годин(и)  34  хвилин(и). Очікуваний час закінчення перерви в електропостачанні: 16.11.2026 р. о 17  годин(и)  00 хвилин(и).",
+    "message_type": 2,
+    "accident_str": "16.11.2026 09:34",
+    "accident_id": 3400873,
+    "accident_date": "16.11.2026 15:32",
+    "accid_msg_logid": null,
+    "gav_message": "Заживлено від ПЛ-0,4 КВ КТП-316 л-1 с.Сухорабівка та залучено до ГАВ (черга 0), АЧР, СГАВ, ГПВ (черга 4-2).",
+    "gp_qnum_1": "4",
+    "gp_qnum_2": "2",
+    "planned_message": "- запланована перерва в електропостачанні для проведення ремонтних робіт 17.11.2026 р. з 08-ї до 17-ї години.<br><br>- запланована перерва в електропостачанні для проведення ремонтних робіт 18.11.2026 р. з 08-ї до 17-ї години.<br><br>- запланована перерва в електропостачанні для проведення ремонтних робіт 19.11.2026 р. з 08-ї до 17-ї години.<br><br>- запланована перерва в електропостачанні для проведення ремонтних робіт 20.11.2026 р. з 08-ї до 17-ї години."
+   },
+   "expect": {
+    "messageType": 2,
+    "queue": "4.2",
+    "emergency": null,
+    "repairs": [
+     {
+      "id": "repair_2026-11-16T09:34",
+      "start": "2026-11-16T09:34",
+      "end": "2026-11-16T17:00",
+      "label": "Планові роботи"
+     },
+     {
+      "id": "repair_2026-11-17T08:00",
+      "start": "2026-11-17T08:00",
+      "end": "2026-11-17T17:00",
+      "label": "Планові роботи"
+     }
+    ],
+    "unparsed": false
+   }
+  },
+  {
+   "name": "live: пошкодження = emergency, house in no queue (Зуївці, вул. Дружби 9)",
+   "today": "2026-11-16",
+   "in": {
+    "fn_accident_message": "зареєстрована аварійна перерва в електропостачанні 16.11.2026 р. з 08 годин(и)  59  хвилин(и). Очікуваний час закінчення перерви в електропостачанні: 16.11.2026 р. о 15  годин(и)  59 хвилин(и).",
+    "message_type": 3,
+    "accident_str": "16.11.2026 08:59",
+    "accident_id": 3462256,
+    "accident_date": "16.11.2026 15:32",
+    "accid_msg_logid": null,
+    "gav_message": "Заживлено від ПЛ-0,4 кВ КТП-476 Л-3 с.Зуївці та залучено до АЧР, СГАВ, САВН.",
+    "gp_qnum_1": "",
+    "gp_qnum_2": "",
+    "planned_message": "- запланована перерва в електропостачанні для проведення ремонтних робіт 20.11.2026 р. з 08-ї до 20-ї години.<br><br>- запланована перерва в електропостачанні для проведення ремонтних робіт 20.11.2026 р. з 08-ї до 20-ї години."
+   },
+   "expect": {
+    "messageType": 3,
+    "queue": null,
+    "emergency": {
+     "id": "poe_3462256",
+     "start": "2026-11-16T08:59",
+     "estimatedEnd": "2026-11-16T15:59",
+     "label": "Аварійна перерва"
+    },
+    "repairs": [],
+    "unparsed": false
+   }
+  },
+  {
+   "name": "constructed: planned works of tomorrow are kept on the day before (Зуївці sample read on 19.11)",
+   "today": "2026-11-19",
+   "in": {
+    "fn_accident_message": "зареєстрована аварійна перерва в електропостачанні 16.11.2026 р. з 08 годин(и)  59  хвилин(и). Очікуваний час закінчення перерви в електропостачанні: 16.11.2026 р. о 15  годин(и)  59 хвилин(и).",
+    "message_type": 3,
+    "accident_str": "16.11.2026 08:59",
+    "accident_id": 3462256,
+    "accident_date": "16.11.2026 15:32",
+    "accid_msg_logid": null,
+    "gav_message": "Заживлено від ПЛ-0,4 кВ КТП-476 Л-3 с.Зуївці та залучено до АЧР, СГАВ, САВН.",
+    "gp_qnum_1": "",
+    "gp_qnum_2": "",
+    "planned_message": "- запланована перерва в електропостачанні для проведення ремонтних робіт 20.11.2026 р. з 08-ї до 20-ї години.<br><br>- запланована перерва в електропостачанні для проведення ремонтних робіт 20.11.2026 р. з 08-ї до 20-ї години."
+   },
+   "expect": {
+    "messageType": 3,
+    "queue": null,
+    "emergency": {
+     "id": "poe_3462256",
+     "start": "2026-11-16T08:59",
+     "estimatedEnd": "2026-11-16T15:59",
+     "label": "Аварійна перерва"
+    },
+    "repairs": [
+     {
+      "id": "repair_2026-11-20T08:00",
+      "start": "2026-11-20T08:00",
+      "end": "2026-11-20T20:00",
+      "label": "Планові роботи"
+     }
+    ],
+    "unparsed": false
+   }
+  },
+  {
+   "name": "constructed: emergency whose start can not be read is unparsed, never 'no outage'",
+   "today": "2026-11-16",
+   "in": {
+    "fn_accident_message": "зареєстрована аварійна перерва",
+    "message_type": 3,
+    "accident_str": "сьогодні",
+    "accident_id": 5,
+    "gp_qnum_1": "2",
+    "gp_qnum_2": "1",
+    "planned_message": null
+   },
+   "expect": {
+    "messageType": 3,
+    "queue": "2.1",
+    "emergency": null,
+    "repairs": [],
+    "unparsed": true
+   }
+  },
+  {
+   "name": "constructed: unknown message type is an emergency; no accident_id, no estimate",
+   "today": "2026-11-16",
+   "in": {
+    "fn_accident_message": "перерва в електропостачанні",
+    "message_type": 5,
+    "accident_str": "16.11.2026 10:00",
+    "accident_id": null,
+    "gp_qnum_1": "3",
+    "gp_qnum_2": "2",
+    "planned_message": ""
+   },
+   "expect": {
+    "messageType": 5,
+    "queue": "3.2",
+    "emergency": {
+     "id": "poe_2026-11-16T10:00",
+     "start": "2026-11-16T10:00",
+     "estimatedEnd": null,
+     "label": "Перерва в електропостачанні"
+    },
+    "repairs": [],
+    "unparsed": false
+   }
+  },
+  {
+   "name": "constructed: repair works now without an end are unparsed",
+   "today": "2026-11-16",
+   "in": {
+    "fn_accident_message": "проводяться планові ремонтні роботи",
+    "message_type": 2,
+    "accident_str": "16.11.2026 09:00",
+    "accident_id": 7,
+    "gp_qnum_1": "5",
+    "gp_qnum_2": "1",
+    "planned_message": null
+   },
+   "expect": {
+    "messageType": 2,
+    "queue": "5.1",
+    "emergency": null,
+    "repairs": [],
+    "unparsed": true
+   }
+  },
+  {
+   "name": "constructed: an estimate not after the start is dropped",
+   "today": "2026-11-16",
+   "in": {
+    "fn_accident_message": "Очікуваний час закінчення перерви в електропостачанні: 16.11.2026 р. о 08 годин(и) 00 хвилин(и).",
+    "message_type": 3,
+    "accident_str": "16.11.2026 09:00",
+    "accident_id": 8,
+    "gp_qnum_1": "",
+    "gp_qnum_2": "",
+    "planned_message": null
+   },
+   "expect": {
+    "messageType": 3,
+    "queue": null,
+    "emergency": {
+     "id": "poe_8",
+     "start": "2026-11-16T09:00",
+     "estimatedEnd": null,
+     "label": "Аварійна перерва"
+    },
+    "repairs": [],
+    "unparsed": false
+   }
+  },
+  {
+   "name": "constructed: missing message_type reads as -1 and is treated as an emergency",
+   "today": "2026-11-16",
+   "in": {
+    "accident_str": "16.11.2026 11:00",
+    "accident_id": 9
+   },
+   "expect": {
+    "messageType": -1,
+    "queue": null,
+    "emergency": {
+     "id": "poe_9",
+     "start": "2026-11-16T11:00",
+     "estimatedEnd": null,
+     "label": "Перерва в електропостачанні"
+    },
+    "repairs": [],
+    "unparsed": false
+   }
+  }
+ ],
+ "registryReason": [
+  {
+   "in": "Аварійна перерва",
+   "out": "EMERGENCY"
+  },
+  {
+   "in": "Планова перерва",
+   "out": "REPAIR"
+  },
+  {
+   "in": "Застосування графіків обмеження споживачів (ГПВ 3-1)",
+   "out": "MIRROR"
+  },
+  {
+   "in": "",
+   "out": "REPAIR"
+  },
+  {
+   "in": "  АВАРІЙНА ПЕРЕРВА ",
+   "out": "EMERGENCY"
+  },
+  {
+   "in": "Інша причина",
+   "out": "REPAIR"
+  }
+ ],
+ "registryRows": [
+  {
+   "name": "live emergency row (Зуївці, filial 19)",
+   "in": "<tr><td>16.11.2026 08:59:00</td><td>16.11.2026 15:59</td><td><b>с.Зуївці</b><br><b>вул.Дружби</b> (б. 1, 9, 15, 17, 26, 28),<br><b>вул.Зелена</b> (б. 2, 13, 23, 27),<br><b>вул.Молодіжна</b> (б. 28)<br></td><td>Аварійна перерва</td><tr>",
+   "expect": {
+    "id": "poe_reg_2026-11-16T08:59",
+    "start": "2026-11-16T08:59",
+    "end": "2026-11-16T15:59",
+    "reason": "Аварійна перерва",
+    "kind": "EMERGENCY",
+    "places": [
+     {
+      "settlement": "с.Зуївці",
+      "streets": [
+       {
+        "street": "вул.Дружби",
+        "houses": [
+         "1",
+         "9",
+         "15",
+         "17",
+         "26",
+         "28"
+        ]
+       },
+       {
+        "street": "вул.Зелена",
+        "houses": [
+         "2",
+         "13",
+         "23",
+         "27"
+        ]
+       },
+       {
+        "street": "вул.Молодіжна",
+        "houses": [
+         "28"
+        ]
+       }
+      ],
+      "freeText": []
+     }
+    ]
+   }
+  },
+  {
+   "name": "live planned row with a free-text line (Полтава, filial 23)",
+   "in": "<tr><td>16.11.2026 09:25:00</td><td>16.11.2026 16:00</td><td><b>м.Полтава</b><br><b>вул.Олександра Бідного</b> (б. 1а)<br><br><b>м.Полтава</b><br>Полтава, вул. Української Повстанської  Армії, 35,<br><b>вул.Олександра Бідного</b> (б. 1, 1-1а, 1а, 5)<br></td><td>Планова перерва</td><tr>",
+   "expect": {
+    "id": "poe_reg_2026-11-16T09:25",
+    "start": "2026-11-16T09:25",
+    "end": "2026-11-16T16:00",
+    "reason": "Планова перерва",
+    "kind": "REPAIR",
+    "places": [
+     {
+      "settlement": "м.Полтава",
+      "streets": [
+       {
+        "street": "вул.Олександра Бідного",
+        "houses": [
+         "1а"
+        ]
+       }
+      ],
+      "freeText": []
+     },
+     {
+      "settlement": "м.Полтава",
+      "streets": [
+       {
+        "street": "вул. Української Повстанської  Армії",
+        "houses": [
+         "35"
+        ]
+       },
+       {
+        "street": "вул.Олександра Бідного",
+        "houses": [
+         "1",
+         "1-1а",
+         "1а",
+         "5"
+        ]
+       }
+      ],
+      "freeText": [
+       "Полтава, вул. Української Повстанської  Армії, 35"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "live schedule mirror row (filial 23)",
+   "in": "<tr><td>16.11.2026 12:00:00</td><td>16.11.2026 15:00</td><td><b>м.Полтава</b><br><b>вул.Героїв ОУН</b> (б. 37а)<br></td><td>Застосування графіків обмеження споживачів (ГПВ 3-1)</td><tr>",
+   "expect": {
+    "id": "poe_reg_2026-11-16T12:00",
+    "start": "2026-11-16T12:00",
+    "end": "2026-11-16T15:00",
+    "reason": "Застосування графіків обмеження споживачів (ГПВ 3-1)",
+    "kind": "MIRROR",
+    "places": [
+     {
+      "settlement": "м.Полтава",
+      "streets": [
+       {
+        "street": "вул.Героїв ОУН",
+        "houses": [
+         "37а"
+        ]
+       }
+      ],
+      "freeText": []
+     }
+    ]
+   }
+  },
+  {
+   "name": "reduced copy: empty reason reads as repair (Диканька, filial 6)",
+   "in": "<tr><td>15.11.2026 22:00:00</td><td>16.11.2026 00:30</td><td><b>смт.Диканька</b><br><b>вул.Садова</b> (б. 2, 6б)<br></td><td></td><tr>",
+   "expect": {
+    "id": "poe_reg_2026-11-15T22:00",
+    "start": "2026-11-15T22:00",
+    "end": "2026-11-16T00:30",
+    "reason": "",
+    "kind": "REPAIR",
+    "places": [
+     {
+      "settlement": "смт.Диканька",
+      "streets": [
+       {
+        "street": "вул.Садова",
+        "houses": [
+         "2",
+         "6б"
+        ]
+       }
+      ],
+      "freeText": []
+     }
+    ]
+   }
+  },
+  {
+   "name": "constructed: entities decoded, no end, a whole street without a house list",
+   "in": "<tr><td>16.11.2026 10:00:00</td><td></td><td><b>с.Нижні Млини</b><br><b>вул.Дем&#39;яна Бідного</b> (б. 4)<br><b>вул.Шевченка</b><br></td><td>Аварійна перерва</td><tr>",
+   "expect": {
+    "id": "poe_reg_2026-11-16T10:00",
+    "start": "2026-11-16T10:00",
+    "end": null,
+    "reason": "Аварійна перерва",
+    "kind": "EMERGENCY",
+    "places": [
+     {
+      "settlement": "с.Нижні Млини",
+      "streets": [
+       {
+        "street": "вул.Дем'яна Бідного",
+        "houses": [
+         "4"
+        ]
+       },
+       {
+        "street": "вул.Шевченка",
+        "houses": []
+       }
+      ],
+      "freeText": []
+     }
+    ]
+   }
+  },
+  {
+   "name": "constructed: not a row",
+   "in": "<tr><td>bad</td></tr>",
+   "expect": null
+  }
+ ],
+ "registryMatch": [
+  {
+   "name": "live: listed house is confirmed",
+   "row": "<tr><td>16.11.2026 08:59:00</td><td>16.11.2026 15:59</td><td><b>с.Зуївці</b><br><b>вул.Дружби</b> (б. 1, 9, 15, 17, 26, 28),<br><b>вул.Зелена</b> (б. 2, 13, 23, 27),<br><b>вул.Молодіжна</b> (б. 28)<br></td><td>Аварійна перерва</td><tr>",
+   "settlement": "село Зуївці",
+   "street": "вул. Дружби",
+   "house": "9",
+   "out": "CONFIRMED"
+  },
+  {
+   "name": "live: house 3 is off per E4 but missing in the registry list, so only the street matches",
+   "row": "<tr><td>16.11.2026 08:59:00</td><td>16.11.2026 15:59</td><td><b>с.Зуївці</b><br><b>вул.Дружби</b> (б. 1, 9, 15, 17, 26, 28),<br><b>вул.Зелена</b> (б. 2, 13, 23, 27),<br><b>вул.Молодіжна</b> (б. 28)<br></td><td>Аварійна перерва</td><tr>",
+   "settlement": "село Зуївці",
+   "street": "вул. Дружби",
+   "house": "3",
+   "out": "STREET"
+  },
+  {
+   "name": "live: other street of the settlement",
+   "row": "<tr><td>16.11.2026 08:59:00</td><td>16.11.2026 15:59</td><td><b>с.Зуївці</b><br><b>вул.Дружби</b> (б. 1, 9, 15, 17, 26, 28),<br><b>вул.Зелена</b> (б. 2, 13, 23, 27),<br><b>вул.Молодіжна</b> (б. 28)<br></td><td>Аварійна перерва</td><tr>",
+   "settlement": "село Зуївці",
+   "street": "вул. Садова",
+   "house": "2",
+   "out": "NONE"
+  },
+  {
+   "name": "live: same street name in another settlement",
+   "row": "<tr><td>16.11.2026 08:59:00</td><td>16.11.2026 15:59</td><td><b>с.Зуївці</b><br><b>вул.Дружби</b> (б. 1, 9, 15, 17, 26, 28),<br><b>вул.Зелена</b> (б. 2, 13, 23, 27),<br><b>вул.Молодіжна</b> (б. 28)<br></td><td>Аварійна перерва</td><tr>",
+   "settlement": "село Хомутець",
+   "street": "вул. Дружби",
+   "house": "9",
+   "out": "NONE"
+  },
+  {
+   "name": "live: free-text line, double space and an old name in brackets",
+   "row": "<tr><td>16.11.2026 09:25:00</td><td>16.11.2026 16:00</td><td><b>м.Полтава</b><br><b>вул.Олександра Бідного</b> (б. 1а)<br><br><b>м.Полтава</b><br>Полтава, вул. Української Повстанської  Армії, 35,<br><b>вул.Олександра Бідного</b> (б. 1, 1-1а, 1а, 5)<br></td><td>Планова перерва</td><tr>",
+   "settlement": "місто Полтава",
+   "street": "вул. Української Повстанської Армії (Ватутіна)",
+   "house": "35",
+   "out": "CONFIRMED"
+  },
+  {
+   "name": "live: house list of the second group of the same settlement",
+   "row": "<tr><td>16.11.2026 09:25:00</td><td>16.11.2026 16:00</td><td><b>м.Полтава</b><br><b>вул.Олександра Бідного</b> (б. 1а)<br><br><b>м.Полтава</b><br>Полтава, вул. Української Повстанської  Армії, 35,<br><b>вул.Олександра Бідного</b> (б. 1, 1-1а, 1а, 5)<br></td><td>Планова перерва</td><tr>",
+   "settlement": "місто Полтава",
+   "street": "вул. Олександра Бідного ",
+   "house": "5",
+   "out": "CONFIRMED"
+  },
+  {
+   "name": "live: street listed, house not",
+   "row": "<tr><td>16.11.2026 09:25:00</td><td>16.11.2026 16:00</td><td><b>м.Полтава</b><br><b>вул.Олександра Бідного</b> (б. 1а)<br><br><b>м.Полтава</b><br>Полтава, вул. Української Повстанської  Армії, 35,<br><b>вул.Олександра Бідного</b> (б. 1, 1-1а, 1а, 5)<br></td><td>Планова перерва</td><tr>",
+   "settlement": "місто Полтава",
+   "street": "вул. Олександра Бідного",
+   "house": "3",
+   "out": "STREET"
+  },
+  {
+   "name": "constructed: apostrophe variant and a whole street",
+   "row": "<tr><td>16.11.2026 10:00:00</td><td></td><td><b>с.Нижні Млини</b><br><b>вул.Дем&#39;яна Бідного</b> (б. 4)<br><b>вул.Шевченка</b><br></td><td>Аварійна перерва</td><tr>",
+   "settlement": "село Нижні Млини",
+   "street": "вул. Дем’яна Бідного",
+   "house": "4",
+   "out": "CONFIRMED"
+  },
+  {
+   "name": "constructed: a street without a house list matches only the street",
+   "row": "<tr><td>16.11.2026 10:00:00</td><td></td><td><b>с.Нижні Млини</b><br><b>вул.Дем&#39;яна Бідного</b> (б. 4)<br><b>вул.Шевченка</b><br></td><td>Аварійна перерва</td><tr>",
+   "settlement": "село Нижні Млини",
+   "street": "вул. Шевченка",
+   "house": "10",
+   "out": "STREET"
+  }
+ ]
+}

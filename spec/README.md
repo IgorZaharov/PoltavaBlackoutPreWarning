@@ -6,7 +6,9 @@ machine: every platform runs the same golden cases in `vectors/` and fails when 
 | File | What it fixes |
 |---|---|
 | [OUTAGE_ENGINE.md](OUTAGE_ENGINE.md) | Two-day window, outage kinds, statuses, spans across midnight, alerts, widget transitions |
-| [POWERON_API.md](POWERON_API.md) | The emergency source: endpoints, filters that work, the `+00:00` timestamp quirk, pagination |
+| [POE_API.md](POE_API.md) | **Poltava data source** (Полтаваобленерго): schedule with the switching half-hour, address directory, per-house status («пошкодження» = emergency), branch registry, mapping rules |
+| [branches.json](branches.json) | The 28 POE branches with their two id spaces (`cabinetId` for addresses, `registryId` for the outage registry) |
+| [POWERON_API.md](POWERON_API.md) | Inherited Zhytomyr emergency source (used until P2 replaces it): endpoints, filters that work, the `+00:00` timestamp quirk, pagination |
 | [ADDRESS_KEY.md](ADDRESS_KEY.md) | `StreetKey` / `HouseKey`: how duplicate streets are merged and houses compared |
 | [SITE_STATE.md](SITE_STATE.md) | The four ztoe site states and how a fetch result maps to one |
 | [NOTIFICATIONS.md](NOTIFICATIONS.md) | Planned and emergency alert events, keys, channels, gating |
@@ -24,7 +26,9 @@ machine: every platform runs the same golden cases in `vectors/` and fails when 
 |---|---|---|
 | Android | `android/app/src/test/.../core/SpecVectorsTest.kt` | `cd android && gradle testDebugUnitTest` |
 | Web | `tests/spec-vectors.test.ts` (also gates that `src/core/` imports nothing from the DOM, React or services) | `npm test` |
-| iOS | XCTest reading the same JSON files (to be written, see `docs/ios/`) | in the iOS build |
+| iOS | `ios/Tests/SpecVectorsTests.swift` reading the same JSON files by name | in the iOS build (`build-ios.yml`) |
+
+The POE files `poe_api.json` and `outage_engine_poe.json` run on Android and the web from P1; the iOS target picks them up in milestone I1 of `docs/POLTAVA_PORT_PLAN.md` (it loads vector files by name, so new files do not break it before that).
 
 CI already runs both of the first two (`npm test`, then Gradle tests), so a vector can not be skipped
 on one side.
