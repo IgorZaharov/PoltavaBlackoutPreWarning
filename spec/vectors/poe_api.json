@@ -1,5 +1,5 @@
 {
- "_doc": "Golden vectors for the POE mapping (spec/POE_API.md section 8, PoeMapper). Inputs are live answers of www.poe.pl.ua captured on 2026-11-16 (docs/research/fixtures/) or reduced copies of them; constructed edge cases say so in their name. Times are Kyiv wall clock, text form yyyy-MM-ddTHH:mm.",
+ "_doc": "Golden vectors for the POE mapping (spec/POE_API.md section 8, PoeMapper). Inputs are live answers of www.poe.pl.ua captured on 2026-11-16 (spec/fixtures/poe/) or reduced copies of them; constructed edge cases say so in their name. Times are Kyiv wall clock, text form yyyy-MM-ddTHH:mm.",
  "times": [
   {
    "in": "16.11.2026 08:59",
@@ -216,6 +216,7 @@
     "queue": "1.1",
     "emergency": null,
     "repairs": [],
+    "scheduleMirror": false,
     "unparsed": false
    }
   },
@@ -252,6 +253,7 @@
       "label": "Планові роботи"
      }
     ],
+    "scheduleMirror": false,
     "unparsed": false
    }
   },
@@ -280,6 +282,7 @@
      "label": "Аварійна перерва"
     },
     "repairs": [],
+    "scheduleMirror": false,
     "unparsed": false
    }
   },
@@ -315,6 +318,7 @@
       "label": "Планові роботи"
      }
     ],
+    "scheduleMirror": false,
     "unparsed": false
    }
   },
@@ -335,6 +339,7 @@
     "queue": "2.1",
     "emergency": null,
     "repairs": [],
+    "scheduleMirror": false,
     "unparsed": true
    }
   },
@@ -360,6 +365,7 @@
      "label": "Перерва в електропостачанні"
     },
     "repairs": [],
+    "scheduleMirror": false,
     "unparsed": false
    }
   },
@@ -380,6 +386,7 @@
     "queue": "5.1",
     "emergency": null,
     "repairs": [],
+    "scheduleMirror": false,
     "unparsed": true
    }
   },
@@ -405,6 +412,57 @@
      "label": "Аварійна перерва"
     },
     "repairs": [],
+    "scheduleMirror": false,
+    "unparsed": false
+   }
+  },
+  {
+   "name": "live (16.11 18:06): type 4 = off by the hourly schedule (ГПВ), a mirror of the table, not an emergency (Полтава, вул. Соборності 1)",
+   "today": "2026-11-16",
+   "in": {
+    "fn_accident_message": "зареєстрована перерва в електропостачанні внаслідок застосування графіку погодинних відключень (ГПВ)  16.11.2026 р. з 16 годин(и)  00  хвилин(и). Очікуваний час закінчення перерви в електропостачанні: 16.11.2026 р. о 19  годин(и)  30 хвилин(и).",
+    "message_type": 4,
+    "accident_str": "16.11.2026 16:00",
+    "accident_id": 3464554,
+    "accident_date": "16.11.2026 18:06",
+    "accid_msg_logid": null,
+    "gav_message": "Заживлено від КЛ-0,4 КВ ТП-310: Ж/Д 1 ул.ОКТЯБРЬСКАЯ та залучено до АЧР, ГПВ (черга 1-1).",
+    "gp_qnum_1": "1",
+    "gp_qnum_2": "1",
+    "planned_message": null
+   },
+   "expect": {
+    "messageType": 4,
+    "queue": "1.1",
+    "emergency": null,
+    "repairs": [],
+    "scheduleMirror": true,
+    "unparsed": false
+   }
+  },
+  {
+   "name": "constructed: type 4 for a ГАВ cut is not a schedule mirror and stays an emergency",
+   "today": "2026-11-16",
+   "in": {
+    "fn_accident_message": "зареєстрована перерва в електропостачанні внаслідок застосування графіку аварійних відключень (ГАВ) 16.11.2026 р. з 18 годин(и) 10 хвилин(и).",
+    "message_type": 4,
+    "accident_str": "16.11.2026 18:10",
+    "accident_id": 77,
+    "gp_qnum_1": "1",
+    "gp_qnum_2": "1",
+    "planned_message": null
+   },
+   "expect": {
+    "messageType": 4,
+    "queue": "1.1",
+    "emergency": {
+     "id": "poe_77",
+     "start": "2026-11-16T18:10",
+     "estimatedEnd": null,
+     "label": "Перерва в електропостачанні"
+    },
+    "repairs": [],
+    "scheduleMirror": false,
     "unparsed": false
    }
   },
@@ -425,6 +483,7 @@
      "label": "Перерва в електропостачанні"
     },
     "repairs": [],
+    "scheduleMirror": false,
     "unparsed": false
    }
   }

@@ -1,6 +1,6 @@
 """Writes spec/vectors/poe_api.json and spec/vectors/outage_engine_poe.json.
 
-Inputs are the live POE samples of 2026-11-16 in docs/research/fixtures/ plus constructed edge cases;
+Inputs are the live POE samples of 2026-11-16 in spec/fixtures/poe/ plus constructed edge cases;
 expected values follow spec/POE_API.md section 8 and spec/OUTAGE_ENGINE.md section 3.5.
 Run from anywhere: python -X utf8 scripts/gen_poe_vectors.py <repository root>
 """
@@ -11,7 +11,7 @@ ROOT = sys.argv[1]
 
 
 def fx(k):
-    return json.load(open(f'{ROOT}/docs/research/fixtures/poe_result_{k}.json', encoding='utf-8'))[0]
+    return json.load(open(f'{ROOT}/spec/fixtures/poe/poe_result_{k}.json', encoding='utf-8'))[0]
 
 
 ZUIVTSI_ROW = "<tr><td>16.11.2026 08:59:00</td><td>16.11.2026 15:59</td><td><b>с.Зуївці</b><br><b>вул.Дружби</b> (б. 1, 9, 15, 17, 26, 28),<br><b>вул.Зелена</b> (б. 2, 13, 23, 27),<br><b>вул.Молодіжна</b> (б. 28)<br></td><td>Аварійна перерва</td><tr>"
@@ -37,7 +37,7 @@ EX = "Перерва в електропостачанні"
 zu_em = {"id": "poe_3462256", "start": "2026-11-16T08:59", "estimatedEnd": "2026-11-16T15:59", "label": E3}
 
 poe = {
-    "_doc": "Golden vectors for the POE mapping (spec/POE_API.md section 8, PoeMapper). Inputs are live answers of www.poe.pl.ua captured on 2026-11-16 (docs/research/fixtures/) or reduced copies of them; constructed edge cases say so in their name. Times are Kyiv wall clock, text form yyyy-MM-ddTHH:mm.",
+    "_doc": "Golden vectors for the POE mapping (spec/POE_API.md section 8, PoeMapper). Inputs are live answers of www.poe.pl.ua captured on 2026-11-16 (spec/fixtures/poe/) or reduced copies of them; constructed edge cases say so in their name. Times are Kyiv wall clock, text form yyyy-MM-ddTHH:mm.",
     "times": [
         {"in": "16.11.2026 08:59", "out": "2026-11-16T08:59"},
         {"in": "16.11.2026 09:25:00", "out": "2026-11-16T09:25"},
@@ -85,31 +85,36 @@ poe = {
     ],
     "addressStatus": [
         {"name": "live: nothing registered, queue 1.1 (Полтава, вул. Соборності 1)", "today": "2026-11-16", "in": fx('type0_none'),
-         "expect": {"messageType": 0, "queue": "1.1", "emergency": None, "repairs": [], "unparsed": False}},
+         "expect": {"messageType": 0, "queue": "1.1", "emergency": None, "repairs": [], "scheduleMirror": False, "unparsed": False}},
         {"name": "live: repair works now and planned works; days after tomorrow dropped (Сухорабівка, вул. Миру 77)", "today": "2026-11-16", "in": fx('type2_planned'),
          "expect": {"messageType": 2, "queue": "4.2", "emergency": None, "repairs": [
              {"id": "repair_2026-11-16T09:34", "start": "2026-11-16T09:34", "end": "2026-11-16T17:00", "label": R},
-             {"id": "repair_2026-11-17T08:00", "start": "2026-11-17T08:00", "end": "2026-11-17T17:00", "label": R}], "unparsed": False}},
+             {"id": "repair_2026-11-17T08:00", "start": "2026-11-17T08:00", "end": "2026-11-17T17:00", "label": R}], "scheduleMirror": False, "unparsed": False}},
         {"name": "live: пошкодження = emergency, house in no queue (Зуївці, вул. Дружби 9)", "today": "2026-11-16", "in": fx('type3_emergency_noqueue'),
-         "expect": {"messageType": 3, "queue": None, "emergency": zu_em, "repairs": [], "unparsed": False}},
+         "expect": {"messageType": 3, "queue": None, "emergency": zu_em, "repairs": [], "scheduleMirror": False, "unparsed": False}},
         {"name": "constructed: planned works of tomorrow are kept on the day before (Зуївці sample read on 19.11)", "today": "2026-11-19", "in": fx('type3_emergency_noqueue'),
          "expect": {"messageType": 3, "queue": None, "emergency": zu_em, "repairs": [
-             {"id": "repair_2026-11-20T08:00", "start": "2026-11-20T08:00", "end": "2026-11-20T20:00", "label": R}], "unparsed": False}},
+             {"id": "repair_2026-11-20T08:00", "start": "2026-11-20T08:00", "end": "2026-11-20T20:00", "label": R}], "scheduleMirror": False, "unparsed": False}},
         {"name": "constructed: emergency whose start can not be read is unparsed, never 'no outage'", "today": "2026-11-16",
          "in": {"fn_accident_message": "зареєстрована аварійна перерва", "message_type": 3, "accident_str": "сьогодні", "accident_id": 5, "gp_qnum_1": "2", "gp_qnum_2": "1", "planned_message": None},
-         "expect": {"messageType": 3, "queue": "2.1", "emergency": None, "repairs": [], "unparsed": True}},
+         "expect": {"messageType": 3, "queue": "2.1", "emergency": None, "repairs": [], "scheduleMirror": False, "unparsed": True}},
         {"name": "constructed: unknown message type is an emergency; no accident_id, no estimate", "today": "2026-11-16",
          "in": {"fn_accident_message": "перерва в електропостачанні", "message_type": 5, "accident_str": "16.11.2026 10:00", "accident_id": None, "gp_qnum_1": "3", "gp_qnum_2": "2", "planned_message": ""},
-         "expect": {"messageType": 5, "queue": "3.2", "emergency": {"id": "poe_2026-11-16T10:00", "start": "2026-11-16T10:00", "estimatedEnd": None, "label": EX}, "repairs": [], "unparsed": False}},
+         "expect": {"messageType": 5, "queue": "3.2", "emergency": {"id": "poe_2026-11-16T10:00", "start": "2026-11-16T10:00", "estimatedEnd": None, "label": EX}, "repairs": [], "scheduleMirror": False, "unparsed": False}},
         {"name": "constructed: repair works now without an end are unparsed", "today": "2026-11-16",
          "in": {"fn_accident_message": "проводяться планові ремонтні роботи", "message_type": 2, "accident_str": "16.11.2026 09:00", "accident_id": 7, "gp_qnum_1": "5", "gp_qnum_2": "1", "planned_message": None},
-         "expect": {"messageType": 2, "queue": "5.1", "emergency": None, "repairs": [], "unparsed": True}},
+         "expect": {"messageType": 2, "queue": "5.1", "emergency": None, "repairs": [], "scheduleMirror": False, "unparsed": True}},
         {"name": "constructed: an estimate not after the start is dropped", "today": "2026-11-16",
          "in": {"fn_accident_message": "Очікуваний час закінчення перерви в електропостачанні: 16.11.2026 р. о 08 годин(и) 00 хвилин(и).", "message_type": 3, "accident_str": "16.11.2026 09:00", "accident_id": 8, "gp_qnum_1": "", "gp_qnum_2": "", "planned_message": None},
-         "expect": {"messageType": 3, "queue": None, "emergency": {"id": "poe_8", "start": "2026-11-16T09:00", "estimatedEnd": None, "label": E3}, "repairs": [], "unparsed": False}},
+         "expect": {"messageType": 3, "queue": None, "emergency": {"id": "poe_8", "start": "2026-11-16T09:00", "estimatedEnd": None, "label": E3}, "repairs": [], "scheduleMirror": False, "unparsed": False}},
+        {"name": "live (16.11 18:06): type 4 = off by the hourly schedule (ГПВ), a mirror of the table, not an emergency (Полтава, вул. Соборності 1)", "today": "2026-11-16", "in": fx('type4_schedule_mirror'),
+         "expect": {"messageType": 4, "queue": "1.1", "emergency": None, "repairs": [], "scheduleMirror": True, "unparsed": False}},
+        {"name": "constructed: type 4 for a ГАВ cut is not a schedule mirror and stays an emergency", "today": "2026-11-16",
+         "in": {"fn_accident_message": "зареєстрована перерва в електропостачанні внаслідок застосування графіку аварійних відключень (ГАВ) 16.11.2026 р. з 18 годин(и) 10 хвилин(и).", "message_type": 4, "accident_str": "16.11.2026 18:10", "accident_id": 77, "gp_qnum_1": "1", "gp_qnum_2": "1", "planned_message": None},
+         "expect": {"messageType": 4, "queue": "1.1", "emergency": {"id": "poe_77", "start": "2026-11-16T18:10", "estimatedEnd": None, "label": EX}, "repairs": [], "scheduleMirror": False, "unparsed": False}},
         {"name": "constructed: missing message_type reads as -1 and is treated as an emergency", "today": "2026-11-16",
          "in": {"accident_str": "16.11.2026 11:00", "accident_id": 9},
-         "expect": {"messageType": -1, "queue": None, "emergency": {"id": "poe_9", "start": "2026-11-16T11:00", "estimatedEnd": None, "label": EX}, "repairs": [], "unparsed": False}},
+         "expect": {"messageType": -1, "queue": None, "emergency": {"id": "poe_9", "start": "2026-11-16T11:00", "estimatedEnd": None, "label": EX}, "repairs": [], "scheduleMirror": False, "unparsed": False}},
     ],
     "registryReason": [
         {"in": "Аварійна перерва", "out": "EMERGENCY"},
@@ -155,7 +160,7 @@ a22 = {"key": f"planned_{D}T22:00", "fireAt": f"{D}T21:45", "spanEnd": "2026-11-
 day16 = {"plannedCells": Q11["off"], "switchingCells": Q11["switching"], "emergencyCells": [], "totalOffMinutes": 660}
 
 engine = {
-    "_doc": "Golden cases for POE day tables with the switching half-hour (spec/OUTAGE_ENGINE.md section 3.5). 'cells' gives each known day as cell ranges per state ('off' = gpv-s2, 'switching' = gpv-s3, everything else on); a missing or null day is unknown. Queue 1.1 and 6.2 are the live POE table of 2026-11-16 (docs/research/fixtures/poe_newgpv_2026-11-16.html). 'repair' and 'emergencies' as in outage_engine.json. Expected 'spans' are spans of all non-stale outages in the window; 'days' compare plannedCells, switchingCells, emergencyCells and totalOffMinutes.",
+    "_doc": "Golden cases for POE day tables with the switching half-hour (spec/OUTAGE_ENGINE.md section 3.5). 'cells' gives each known day as cell ranges per state ('off' = gpv-s2, 'switching' = gpv-s3, everything else on); a missing or null day is unknown. Queue 1.1 and 6.2 are the live POE table of 2026-11-16 (spec/fixtures/poe/poe_newgpv_2026-11-16.html). 'repair' and 'emergencies' as in outage_engine.json. Expected 'spans' are spans of all non-stale outages in the window; 'days' compare plannedCells, switchingCells, emergencyCells and totalOffMinutes.",
     "cases": [
         {"name": "live 1.1 at 15:29, tomorrow not published: next block 16:00-19:00, power back 19:00-19:30",
          "today": D, "now": f"{D}T15:29", "advanceMinutes": 15, "cells": {"today": Q11},
@@ -210,3 +215,93 @@ for name, obj in (('poe_api.json', poe), ('outage_engine_poe.json', engine)):
         json.dump(obj, f, ensure_ascii=False, indent=1)
         f.write('\n')
 print({k: len(v) for k, v in poe.items() if isinstance(v, list)}, 'engine cases', len(engine['cases']))
+
+# ---------------------------------------------------------------- poe_schedule.json
+import re as _re
+
+QUEUES = ["1.1", "1.2", "2.1", "2.2", "3.1", "3.2", "4.1", "4.2", "5.1", "5.2", "6.1", "6.2"]
+
+
+def _fmt(i):
+    return '24:00' if i == 48 else f'{i // 2:02d}:{(i % 2) * 30:02d}'
+
+
+def _runs(cells, ch):
+    out, s = [], None
+    for i in range(49):
+        on = i < 48 and cells[i] == ch
+        if on and s is None:
+            s = i
+        if not on and s is not None:
+            out.append(f'{_fmt(s)}-{_fmt(i)}')
+            s = None
+    return out
+
+
+def _expect_queues(table):
+    return {q: {"off": _runs(c, 's2'), "switching": _runs(c, 's3')} for q, c in table.items()}
+
+
+def _live_table():
+    h = open(f'{ROOT}/spec/fixtures/poe/poe_newgpv_2026-11-16.html', encoding='utf-8').read()
+    t = h[h.index('class="gpv-table"'):]
+    t = t[:t.index('</table>')]
+    rows = _re.findall(r'<td class="gpv-q"[^>]*>([\d.]+)</td>(.*?)</tr>', t, _re.S)
+    return {q: ['s' + m for m in _re.findall(r'class="gpv-c gpv-s(\d)', body)] for q, body in rows}
+
+
+def _mini(date_text, table, stamp="1 січня 2027 08:00", head_extra=""):
+    rows = ''.join(
+        f'<tr><td class="gpv-q" title="Черга">{q}</td>' + ''.join(f'<td class="gpv-c gpv-{c}"></td>' for c in cells) + '</tr>'
+        for q, cells in table.items())
+    return (f'<div class="gpvinfodetail"> Графік на <b>{date_text}</b>{head_extra}<p class="gpv-title">Порядок відключення черг</p>'
+            f'<table class="gpv-table"><thead><tr><th class="gpv-q">Черга</th></tr></thead><tbody>{rows}</tbody></table>'
+            f'<ul class="gpv-periods"></ul><p class="gpv-note">Оновлено: {stamp}</p></div>')
+
+
+live = _live_table()
+assert len(live) == 12 and all(len(c) == 48 for c in live.values())
+mini_ok = {q: (['s2'] * 48 if q == '1.1' else ['s1'] * 20 + ['s2'] * 6 + ['s3'] + ['s1'] * 21) for q in QUEUES}
+short_row = dict(mini_ok)
+short_row['3.2'] = ['s1'] * 47
+missing = {q: c for q, c in mini_ok.items() if q != '6.2'}
+unknown_class = dict(mini_ok)
+unknown_class['4.1'] = ['s1'] * 47 + ['s9']
+ERROR_BODY = '{"type":"about:blank","title":"Bad Request","status":400,"detail":"Failed to read request","instance":"/poeREST/abon/site/turnoff/schedule/get/v2"}'
+
+schedule = {
+    "_doc": "Golden cases for the POE schedule fragment parser (spec/POE_API.md section 3, PoeSchedule.parseDay). A case gives either 'fixture' (a file in spec/fixtures/poe/) or 'html' (inline, null allowed), the requested 'date', and the expected kind, stamp, reason and, when PUBLISHED, every queue as cell ranges per state ('off' = gpv-s2, 'switching' = gpv-s3).",
+    "cases": [
+        {"name": "live page of 2026-11-16, all 12 queues", "fixture": "poe_newgpv_2026-11-16.html", "date": "2026-11-16",
+         "expect": {"kind": "PUBLISHED", "stamp": "15 листопада 2026 22:46", "reason": None, "queues": _expect_queues(live)}},
+        {"name": "live page read for another day is invalid (date check)", "fixture": "poe_newgpv_2026-11-16.html", "date": "2026-11-17",
+         "expect": {"kind": "INVALID", "stamp": None, "reason": "date_mismatch"}},
+        {"name": "live: empty body = tomorrow not published yet", "html": "", "date": "2026-11-17",
+         "expect": {"kind": "NOT_PUBLISHED", "stamp": None, "reason": None}},
+        {"name": "null body = not published", "html": None, "date": "2026-11-17",
+         "expect": {"kind": "NOT_PUBLISHED", "stamp": None, "reason": None}},
+        {"name": "whitespace only = not published", "html": "  \n\t ", "date": "2026-11-17",
+         "expect": {"kind": "NOT_PUBLISHED", "stamp": None, "reason": None}},
+        {"name": "live: JSON error answer (HTTP 200) is invalid, never 'no outages'", "html": ERROR_BODY, "date": "2026-11-16",
+         "expect": {"kind": "INVALID", "stamp": None, "reason": "error_body"}},
+        {"name": "constructed: minimal valid table", "html": _mini("1 січня 2027 року", mini_ok), "date": "2027-01-01",
+         "expect": {"kind": "PUBLISHED", "stamp": "1 січня 2027 08:00", "reason": None, "queues": _expect_queues(mini_ok)}},
+        {"name": "constructed: a row with 47 cells", "html": _mini("1 січня 2027 року", short_row), "date": "2027-01-01",
+         "expect": {"kind": "INVALID", "stamp": None, "reason": "bad_row"}},
+        {"name": "constructed: queue 6.2 missing", "html": _mini("1 січня 2027 року", missing), "date": "2027-01-01",
+         "expect": {"kind": "INVALID", "stamp": None, "reason": "missing_queue"}},
+        {"name": "constructed: unknown cell class", "html": _mini("1 січня 2027 року", unknown_class), "date": "2027-01-01",
+         "expect": {"kind": "INVALID", "stamp": None, "reason": "bad_row"}},
+        {"name": "constructed (wording not seen live yet): published without outages", "html": "<div class=\"gpvinfodetail\">17 листопада 2026 року графіки погодинних відключень не застосовуються.<p>Оновлено: 16 листопада 2026 21:00</p></div>", "date": "2026-11-17",
+         "expect": {"kind": "PUBLISHED", "stamp": "16 листопада 2026 21:00", "reason": None,
+                    "queues": {q: {"off": [], "switching": []} for q in QUEUES}}},
+        {"name": "constructed: text without a table or a 'not applied' notice", "html": "<div>17 листопада 2026 року інформація оновлюється</div>", "date": "2026-11-17",
+         "expect": {"kind": "INVALID", "stamp": None, "reason": "no_table"}},
+        {"name": "constructed: no date in the header", "html": "<div>Порядок відключення черг</div>", "date": "2026-11-17",
+         "expect": {"kind": "INVALID", "stamp": None, "reason": "no_date"}},
+    ],
+}
+with open(f'{ROOT}/spec/vectors/poe_schedule.json', 'w', encoding='utf-8', newline='\n') as f:
+    json.dump(schedule, f, ensure_ascii=False, indent=1)
+    f.write('\n')
+print('schedule cases', len(schedule['cases']))

@@ -2,7 +2,7 @@
 
 How «Світло в Полтаві» reads Полтаваобленерго (POE): the queue schedule, the address directory, the per-house status (queue, emergency, repair works) and the per-branch outage registry, and how the answers become outages. This file replaces `ZTOE` + `POWERON_API.md` for the Poltava app; those two files describe the inherited Zhytomyr data layer until it is removed in P2.
 
-Pure reference implementation: Kotlin `android/app/src/main/java/ua/blackout/prewarning/core/PoeMapper.kt`, TypeScript `src/core/poeMapper.ts`. Golden cases: `spec/vectors/poe_api.json`. Branch table: `spec/branches.json`. Live samples: `docs/research/fixtures/` (2026-11-16). Constants: `spec/config.json` (`poe`).
+Pure reference implementation: Kotlin `android/app/src/main/java/ua/blackout/prewarning/core/PoeMapper.kt`, TypeScript `src/core/poeMapper.ts`. Golden cases: `spec/vectors/poe_api.json`. Branch table: `spec/branches.json`. Live samples: `spec/fixtures/poe/` (2026-11-16). Constants: `spec/config.json` (`poe`).
 
 Facts below were probed live on 2026-11-16. The endpoints are public (no login) but internal to the POE website (PHP proxies to `poeREST`); treat everything that changes with time as an observation, not a contract.
 
@@ -60,7 +60,7 @@ Traps:
 - Validation: the date in the header must equal the requested date, otherwise the answer is invalid. An **empty body** means "not published" (tomorrow before POE publishes it). A non-HTML body (JSON error) means "site error", never "no outages".
 - Observed pattern: a `SWITCHING` cell follows the end of every `OFF` run (1.1: `OFF` 04:00–07:00, `SWITCHING` 07:00–07:30). The page note says power is switched on within that last half-hour. How the engine treats it: `OUTAGE_ENGINE.md` section 3.5.
 
-The HTML parser is data layer (P2). The vectors pin the cell semantics through `outage_engine_poe.json`.
+Parser: pure text scanning in the core (`PoeSchedule.parseDay`, Kotlin `core/PoeSchedule.kt`, TypeScript `src/core/poeSchedule.ts`), no HTML library, so the Swift port can follow it rule for rule. Results: `PUBLISHED` (12 queues × 48 cells, stamp), `NOT_PUBLISHED` (empty body), `INVALID` with a reason (`error_body`, `no_date`, `date_mismatch`, `no_table`, `bad_row`, `missing_queue`). A page without a table that says the schedule is not applied (`не застосов...`, wording not yet seen live) is `PUBLISHED` with every cell on. Golden cases: `spec/vectors/poe_schedule.json` (the live page of 2026-11-16 and constructed edge cases).
 
 ## 4. Address directory (E3)
 
@@ -89,7 +89,7 @@ First crawl (`scripts/crawl_poe_directory.py`, 2026-11-16, 0 failed requests): 2
 
 | Field | Meaning |
 |---|---|
-| `message_type` | `0` nothing registered (`не зареєстровано перерв`); `2` repair works now (`проводяться планові ремонтні роботи`); `3` emergency now (`зареєстрована аварійна перерва`) = what online.poltava.ua calls **«пошкодження»** |
+| `message_type` | `0` nothing registered (`не зареєстровано перерв`); `2` repair works now (`проводяться планові ремонтні роботи`); `3` emergency now (`зареєстрована аварійна перерва`) = what online.poltava.ua calls **«пошкодження»**; `4` seen 2026-11-16 18:06 = off **because of the hourly schedule** (`... внаслідок застосування графіку погодинних відключень (ГПВ) ... з 16 годин(и) 00 хвилин(и) ... о 19 годин(и) 30 хвилин(и)`: queue 1.1's block 16:00–19:00 plus its switching half-hour), a mirror of E1, not an emergency |
 | `accident_str` | start, `DD.MM.YYYY HH:mm`, Kyiv wall clock (no offset to drop) |
 | `accident_id` | POE's stable id of the outage |
 | `fn_accident_message` | free text with the estimated end: `... DD.MM.YYYY р. о HH годин(и) MM хвилин(и)` |
@@ -165,14 +165,15 @@ Trim both. `q1` in `1..6` and `q2` in `1..2` (digits only) gives `"q1.q2"`; anyt
 
 ### 8.5 `addressStatus(result, today) -> AddressStatus`
 
-`result` is the first element of the E4 array (a map). Output: `{ messageType, queue, emergency?, repairs[], unparsed }`.
+`result` is the first element of the E4 array (a map). Output: `{ messageType, queue, emergency?, repairs[], scheduleMirror, unparsed }`.
 
 1. `messageType` = `message_type` as an integer (missing or not a number: `-1`). `queue = parseQueue(gp_qnum_1, gp_qnum_2)`.
 2. `start = parseTime(accident_str)`; `eta = parseEta(fn_accident_message)`, kept only if `eta > start`.
 3. By `messageType`:
    - `0`: no current outage.
    - `2` (repair works now): if `start` and `eta` are both known, one repair `{id = "repair_" + start, start, end = eta, label = "Планові роботи"}`; otherwise `unparsed = true`.
-   - `3` and any other value except `0` (an unknown type is treated as an emergency, the safe side): if `start` is known, `emergency = EmergencyRecord(id, start, estimatedEnd = eta, label)` with `id = "poe_" + accident_id` when `accident_id` is a positive integer, else `"poe_" + start`; `label = "Аварійна перерва"` for type 3, `"Перерва в електропостачанні"` for other types. If `start` is null: `unparsed = true`.
+   - any other value except `0` and `3` whose `fn_accident_message` names the hourly schedule (lower-cased text contains `гпв` or `погодинн`, as type `4` does): `scheduleMirror = true`, no emergency. The outage is already on the drum from E1; announcing it as an emergency would send a false «аварійне» alert for every scheduled block.
+   - `3`, and any other value except `0` that is not a schedule mirror (an unknown type is treated as an emergency, the safe side; for example a cut by ГАВ / СГАВ): if `start` is known, `emergency = EmergencyRecord(id, start, estimatedEnd = eta, label)` with `id = "poe_" + accident_id` when `accident_id` is a positive integer, else `"poe_" + start`; `label = "Аварійна перерва"` for type 3, `"Перерва в електропостачанні"` for other types. If `start` is null: `unparsed = true`.
 4. `planned_message`: every pair of `parsePlannedList` with `start < (today + 2 days) 00:00` becomes a repair `{id = "repair_" + start, start, end, label = "Планові роботи"}` (works dated beyond tomorrow are dropped, as in `POWERON_API.md` 5.2). Repairs with the same `id` merge (the later `end` wins). `repairs` is sorted by `start`.
 5. `unparsed = true` makes the adapter report the fetch as `Unavailable("unparsed")`, never as "no outage" (section 9).
 
@@ -223,6 +224,6 @@ Per refresh (default every 30 min): E1 today + E1 tomorrow (gzip about 14 KB eac
 
 ## Vectors
 
-`spec/vectors/poe_api.json`: `times`, `eta`, `plannedList`, `queue`, `addressStatus` (the three live E4 samples of 2026-11-16 plus edge cases), `registryReason`, `registryRows` (live E5 rows), `registryMatch` (incl. the Зуївці house that the registry omits). `spec/vectors/outage_engine_poe.json`: the switching half-hour (`OUTAGE_ENGINE.md` 3.5).
+`spec/vectors/poe_schedule.json`: the schedule parser (section 3). `spec/vectors/poe_api.json`: `times`, `eta`, `plannedList`, `queue`, `addressStatus` (the four live E4 samples of 2026-11-16, types 0, 2, 3 and 4, plus edge cases), `registryReason`, `registryRows` (live E5 rows), `registryMatch` (incl. the Зуївці house that the registry omits). `spec/vectors/outage_engine_poe.json`: the switching half-hour (`OUTAGE_ENGINE.md` 3.5).
 
-Runners: Kotlin `SpecVectorsTest.kt` and TypeScript `tests/spec-vectors.test.ts` run both files; the iOS XCTest target starts running them in milestone I1 (it loads vector files by name, so the new files do not affect it before that).
+Runners: Kotlin `PoeVectorsTest.kt` and TypeScript `tests/spec-vectors.test.ts` run all three files; the clients (`data/poe/PoeClient.kt`, `src/services/poeClient.ts`) are tested against the recorded answers in `spec/fixtures/poe/` (`PoeClientTest.kt`, `tests/poe-client.test.ts`); `scripts/poe-live-probe.ts` reads the live site (daily in `.github/workflows/poe-data.yml`); the iOS XCTest target starts running them in milestone I1 (it loads vector files by name, so the new files do not affect it before that).

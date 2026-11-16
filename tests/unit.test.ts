@@ -1011,6 +1011,18 @@ function runUnitTestG_IosPort() {
     }
   }
 
+  // poe_directory.json (POE address directory snapshot, docs/POLTAVA_PORT_PLAN.md section 4.4): the root
+  // file is canonical; public/ and the Android assets hold byte-identical copies (iOS from milestone I2).
+  {
+    const canonical = read('poe_directory.json');
+    for (const dir of ['public', 'android/app/src/main/assets']) {
+      assert.equal(read(`${dir}/poe_directory.json`), canonical, `${dir}/poe_directory.json must be identical to /poe_directory.json`);
+    }
+    const dir = JSON.parse(canonical);
+    assert.equal(dir.branches.length, 28, 'poe_directory.json must list the 28 POE branches');
+    assert.ok(dir.settlements.length > 1500, 'poe_directory.json must list the settlements of the whole oblast');
+  }
+
   // Invariants shared with Android and web.
   const infoPlist = read('ios/App/Info.plist');
   // The iPhone home screen fits about 11 characters, so the icon shows the short name chosen by the owner

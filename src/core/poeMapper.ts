@@ -25,6 +25,8 @@ export interface AddressStatus {
   readonly queue: string | null;
   readonly emergency: EmergencyRecord | null;
   readonly repairs: readonly Outage[];
+  /** The house is off because of the hourly schedule (type 4, spec/POE_API.md 8.5): a mirror of E1, not an emergency. */
+  readonly scheduleMirror: boolean;
   /** The answer names an outage that could not be read: the fetch counts as unavailable. */
   readonly unparsed: boolean;
 }
@@ -153,6 +155,8 @@ export function addressStatus(result: Readonly<Record<string, unknown>>, today: 
 
   let emergency: EmergencyRecord | null = null;
   let unparsed = false;
+  let scheduleMirror = false;
+  const message = (strOf(result['fn_accident_message']) ?? '').toLowerCase();
   const repairs = new Map<string, Outage>();
 
   const addRepair = (s: LocalDateTime, e: LocalDateTime) => {
@@ -168,6 +172,8 @@ export function addressStatus(result: Readonly<Record<string, unknown>>, today: 
   } else if (messageType === 2) {
     if (start !== null && eta !== null) addRepair(start, eta);
     else unparsed = true;
+  } else if (messageType !== 3 && (message.includes('гпв') || message.includes('погодинн'))) {
+    scheduleMirror = true;
   } else if (start !== null) {
     const id = intOf(result['accident_id']);
     emergency = {
@@ -186,7 +192,7 @@ export function addressStatus(result: Readonly<Record<string, unknown>>, today: 
     if (r.start < horizon) addRepair(r.start, r.end);
   }
   const sorted = [...repairs.values()].sort((a, b) => a.start - b.start);
-  return { messageType, queue, emergency, repairs: sorted, unparsed };
+  return { messageType, queue, emergency, repairs: sorted, scheduleMirror, unparsed };
 }
 
 // -------------------------------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 {
- "_doc": "Golden cases for POE day tables with the switching half-hour (spec/OUTAGE_ENGINE.md section 3.5). 'cells' gives each known day as cell ranges per state ('off' = gpv-s2, 'switching' = gpv-s3, everything else on); a missing or null day is unknown. Queue 1.1 and 6.2 are the live POE table of 2026-11-16 (docs/research/fixtures/poe_newgpv_2026-11-16.html). 'repair' and 'emergencies' as in outage_engine.json. Expected 'spans' are spans of all non-stale outages in the window; 'days' compare plannedCells, switchingCells, emergencyCells and totalOffMinutes.",
+ "_doc": "Golden cases for POE day tables with the switching half-hour (spec/OUTAGE_ENGINE.md section 3.5). 'cells' gives each known day as cell ranges per state ('off' = gpv-s2, 'switching' = gpv-s3, everything else on); a missing or null day is unknown. Queue 1.1 and 6.2 are the live POE table of 2026-11-16 (spec/fixtures/poe/poe_newgpv_2026-11-16.html). 'repair' and 'emergencies' as in outage_engine.json. Expected 'spans' are spans of all non-stale outages in the window; 'days' compare plannedCells, switchingCells, emergencyCells and totalOffMinutes.",
  "cases": [
   {
    "name": "live 1.1 at 15:29, tomorrow not published: next block 16:00-19:00, power back 19:00-19:30",

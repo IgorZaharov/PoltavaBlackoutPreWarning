@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Written | 2026-11-16 |
-| Status | **Approved 2026-11-16** (owner decisions D1–D9 in section 9). Research done (live probes of both sites on 2026-11-16, saved responses in `docs/research/fixtures/`, address directory crawl in `docs/research/directory/`). **P0 done 2026-11-16** on branch `feat/p0-seed-rebrand`: upstream history merged; «Світло в Полтаві», application id `ua.blackout.prewarning.poltava` with its own signing key, version 1.0.0, Facebook link, repository links, roulette removed from Android and web; `npm test` and 97 Android unit tests green locally, debug APK checked with aapt2/apksigner. Not yet checked: the GitHub Actions run (nothing pushed) and installing next to the Zhytomyr app on a phone. **P1 done 2026-11-16** on branch `feat/p1-poe-spec`: `spec/POE_API.md`, `spec/branches.json`, switching half-hour in the engine and drum spec, vectors `poe_api.json` / `outage_engine_poe.json`, and (moved forward from P2 so no vector is ever red or skipped) the pure core `PoeMapper` + switching support in Kotlin and TypeScript. Next is P2 (POE adapters, directory snapshot, removing the Zhytomyr data layer). |
+| Status | **Approved 2026-11-16** (owner decisions D1–D9 in section 9). Research done (live probes of both sites on 2026-11-16, saved responses in `spec/fixtures/poe/`, address directory crawl in `docs/research/directory/`). **P0 done 2026-11-16** on branch `feat/p0-seed-rebrand`: upstream history merged; «Світло в Полтаві», application id `ua.blackout.prewarning.poltava` with its own signing key, version 1.0.0, Facebook link, repository links, roulette removed from Android and web; `npm test` and 97 Android unit tests green locally, debug APK checked with aapt2/apksigner. Not yet checked: the GitHub Actions run (nothing pushed) and installing next to the Zhytomyr app on a phone. **P1 done 2026-11-16** on branch `feat/p1-poe-spec`: `spec/POE_API.md`, `spec/branches.json`, switching half-hour in the engine and drum spec, vectors `poe_api.json` / `outage_engine_poe.json`, and (moved forward from P2 so no vector is ever red or skipped) the pure core `PoeMapper` + switching support in Kotlin and TypeScript. **P2 done 2026-11-16** on branch `feat/p2-poe-data`: schedule parser in the core (`PoeSchedule`), POE clients for Android (`data/poe/`) and the web (`src/services/poeClient.ts`, dev proxy `/proxy-poe`), directory snapshot `poe_directory.json` with synced copies, live probe script and `.github/workflows/poe-data.yml` (daily probe, weekly crawl). Found live: `message_type 4` = off by the hourly schedule, now a schedule mirror and never an emergency. Moved to P3: deleting the Zhytomyr data layer (the repository, settings, worker and web services still call it). Next is P3. |
 | Base | `IgorZaharov/Android-ZTBlackoutPreWarning` at `c5573b9` (Android 1.4.0, iOS M7, `spec/` with golden vectors) |
 | Order | Android first (P0–P6), iOS second (I0–I5) |
 | Goal | The same app (screens, widgets, search, multi-address, alerts, emergencies), fed by Полтаваобленерго (POE) data instead of ZTOE + PowerOn |
@@ -155,7 +155,7 @@ Two ideas worth borrowing: a flat oblast-wide settlement list with the hromada n
 
 ### 3.6 Fixtures
 
-`docs/research/fixtures/` (move into the test resources in P1):
+`spec/fixtures/poe/` (move into the test resources in P1):
 
 | File | What |
 |---|---|

@@ -25,6 +25,8 @@ object PoeMapper {
         val queue: String?,
         val emergency: EmergencyRecord?,
         val repairs: List<Outage>,
+        /** The house is off because of the hourly schedule (type 4, spec/POE_API.md 8.5): a mirror of E1, not an emergency. */
+        val scheduleMirror: Boolean,
         /** The answer names an outage that could not be read: the fetch counts as unavailable. */
         val unparsed: Boolean
     )
@@ -142,6 +144,8 @@ object PoeMapper {
 
         var emergency: EmergencyRecord? = null
         var unparsed = false
+        var scheduleMirror = false
+        val message = strOf(result["fn_accident_message"]).orEmpty().lowercase()
         val repairs = LinkedHashMap<String, Outage>()
 
         fun addRepair(s: LocalDateTime, e: LocalDateTime) {
@@ -155,7 +159,9 @@ object PoeMapper {
         when (messageType) {
             0 -> Unit
             2 -> if (start != null && eta != null) addRepair(start, eta) else unparsed = true
-            else -> if (start != null) {
+            else -> if (messageType != 3 && (message.contains("гпв") || message.contains("погодинн"))) {
+                scheduleMirror = true
+            } else if (start != null) {
                 val accidentId = intOf(result["accident_id"])?.takeIf { it > 0 }
                 emergency = EmergencyRecord(
                     id = if (accidentId != null) "poe_$accidentId" else "poe_$start",
@@ -172,7 +178,7 @@ object PoeMapper {
         for (r in parsePlannedList(strOf(result["planned_message"]))) {
             if (r.start.isBefore(horizon)) addRepair(r.start, r.end)
         }
-        return AddressStatus(messageType, queue, emergency, repairs.values.sortedBy { it.start }, unparsed)
+        return AddressStatus(messageType, queue, emergency, repairs.values.sortedBy { it.start }, scheduleMirror, unparsed)
     }
 
     // ---------------------------------------------------------------------------------------------

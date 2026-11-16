@@ -60,7 +60,7 @@ class PoeVectorsTest {
         val v = load("poe_api.json")
         mapOf(
             "times" to 10, "eta" to 7, "plannedList" to 5, "queue" to 8,
-            "addressStatus" to 9, "registryReason" to 6, "registryRows" to 6, "registryMatch" to 9
+            "addressStatus" to 11, "registryReason" to 6, "registryRows" to 6, "registryMatch" to 9
         ).forEach { (key, min) -> assertTrue("poe_api.json: $key must hold at least $min cases", v.getJSONArray(key).length() >= min) }
 
         for (t in v.getJSONArray("times").objects()) {
@@ -86,6 +86,7 @@ class PoeVectorsTest {
             assertEquals("$name: messageType", e.getInt("messageType"), st.messageType)
             assertEquals("$name: queue", e.optStr("queue"), st.queue)
             assertEquals("$name: unparsed", e.getBoolean("unparsed"), st.unparsed)
+            assertEquals("$name: scheduleMirror", e.getBoolean("scheduleMirror"), st.scheduleMirror)
             if (e.isNull("emergency")) {
                 assertNull("$name: emergency", st.emergency)
             } else {
@@ -228,6 +229,37 @@ class PoeVectorsTest {
                     assertEquals("$name/$dateKey: emergencyCells", d.getJSONArray("emergencyCells").strings(), rangesOf(view.slots.map { it.emergency }))
                     assertTrue("$name/$dateKey: switching never with planned", view.slots.none { it.planned && it.switching })
                 }
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // poe_schedule.json
+    // ---------------------------------------------------------------------------------------------
+
+    @Test
+    fun poeScheduleVectors() {
+        val cases = load("poe_schedule.json").getJSONArray("cases").objects()
+        assertTrue("poe_schedule.json must hold at least 13 cases", cases.size >= 13)
+        val fixtures = File(specDir().parentFile, "fixtures/poe")
+        for (c in cases) {
+            val name = c.getString("name")
+            val html = if (c.has("fixture")) File(fixtures, c.getString("fixture")).readText(Charsets.UTF_8) else c.optStr("html")
+            val got = PoeSchedule.parseDay(html, LocalDate.parse(c.getString("date")))
+            val e = c.getJSONObject("expect")
+            assertEquals("$name: kind", e.getString("kind"), got.kind.name)
+            assertEquals("$name: stamp", e.optStr("stamp"), got.stamp)
+            assertEquals("$name: reason", e.optStr("reason"), got.reason)
+            if (got.kind == PoeSchedule.Kind.PUBLISHED) {
+                val queues = JSONObject()
+                for ((q, cells) in got.queues) {
+                    queues.put(q, JSONObject()
+                        .put("off", JSONArray(rangesOf(cells.map { it == ScheduleCell.OFF })))
+                        .put("switching", JSONArray(rangesOf(cells.map { it == ScheduleCell.SWITCHING }))))
+                }
+                assertEquals("$name: queues", canon(e.getJSONObject("queues")), canon(queues))
+            } else {
+                assertTrue("$name: no queues", got.queues.isEmpty())
             }
         }
     }

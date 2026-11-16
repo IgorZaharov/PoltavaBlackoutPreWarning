@@ -32,6 +32,7 @@ import { HouseKey, StreetKey, TextNorm } from '../src/core/addressKeys';
 import { EmergencyFetch, eventKey, reconcile, type LedgerEntry } from '../src/core/emergencyLedger';
 import { PowerOnMapper, type PowerOnRow } from '../src/core/poweronMapper';
 import { PoeMapper, type Place } from '../src/core/poeMapper';
+import { PoeSchedule } from '../src/core/poeSchedule';
 import { FETCH_FAILURES, SITE_STATES, SiteStateResolver, type FetchFailure, type SiteState } from '../src/core/siteState';
 import { extractSiteNotice } from '../src/core/siteNotice';
 import * as Sub from '../src/core/subscriptions';
@@ -359,7 +360,7 @@ function poeApiVectors(): number {
   const v: Json = load('poe_api.json');
   const counts: [string, number][] = [
     ['times', 10], ['eta', 7], ['plannedList', 5], ['queue', 8],
-    ['addressStatus', 9], ['registryReason', 6], ['registryRows', 6], ['registryMatch', 9],
+    ['addressStatus', 11], ['registryReason', 6], ['registryRows', 6], ['registryMatch', 9],
   ];
   for (const [key, min] of counts) assert.ok((v[key] as Json[]).length >= min, `poe_api.json: ${key} must hold at least ${min} cases`);
   let checks = 0;
@@ -387,6 +388,7 @@ function poeApiVectors(): number {
     assert.equal(st.messageType, e.messageType, `${name}: messageType`);
     assert.equal(st.queue, e.queue, `${name}: queue`);
     assert.equal(st.unparsed, e.unparsed, `${name}: unparsed`);
+    assert.equal(st.scheduleMirror, e.scheduleMirror, `${name}: scheduleMirror`);
     if (e.emergency === null) assert.equal(st.emergency, null, `${name}: emergency`);
     else {
       assert.ok(st.emergency !== null, `${name}: emergency expected`);
@@ -519,6 +521,39 @@ function outageEnginePoeVectors(): number {
         assert.deepEqual(rangesOf(view.slots.map((s) => s.emergency)), d.emergencyCells, `${name}/${dateKey}: emergencyCells`);
         assert.ok(view.slots.every((s) => !(s.planned && s.switching)), `${name}/${dateKey}: switching never with planned`);
       }
+    }
+  }
+  return cases.length;
+}
+
+// -------------------------------------------------------------------------------------------------
+// poe_schedule.json (spec/POE_API.md section 3)
+// -------------------------------------------------------------------------------------------------
+
+function cellRuns(cells: readonly ScheduleCell[], state: ScheduleCell): string[] {
+  return rangesOf(cells.map((c) => c === state));
+}
+
+function poeScheduleVectors(): number {
+  const cases: Json[] = load('poe_schedule.json').cases;
+  assert.ok(cases.length >= 13, 'poe_schedule.json must hold at least 13 cases');
+  const fixtures = path.join(path.dirname(SPEC_DIR), 'fixtures', 'poe');
+  for (const c of cases) {
+    const name: string = c.name;
+    const html: string | null = has(c, 'fixture') ? fs.readFileSync(path.join(fixtures, c.fixture), 'utf8') : c.html;
+    const got = PoeSchedule.parseDay(html, parseLocalDate(c.date));
+    const e: Json = c.expect;
+    assert.equal(got.kind, e.kind, `${name}: kind`);
+    assert.equal(got.stamp, e.stamp, `${name}: stamp`);
+    assert.equal(got.reason, e.reason, `${name}: reason`);
+    if (e.kind === 'PUBLISHED') {
+      const queues: Json = {};
+      for (const q of Object.keys(got.queues)) {
+        queues[q] = { off: cellRuns(got.queues[q], 'OFF'), switching: cellRuns(got.queues[q], 'SWITCHING') };
+      }
+      assert.deepEqual(queues, e.queues, `${name}: queues`);
+    } else {
+      assert.deepEqual(Object.keys(got.queues), [], `${name}: no queues`);
     }
   }
   return cases.length;
@@ -816,6 +851,7 @@ const suites: [string, () => number][] = [
   ['poweron_api.json', powerOnVectors],
   ['poe_api.json', poeApiVectors],
   ['outage_engine_poe.json', outageEnginePoeVectors],
+  ['poe_schedule.json', poeScheduleVectors],
   ['site_state.json', siteStateVectors],
   ['site_notice.json', siteNoticeVectors],
   ['subscriptions.json', subscriptionVectors],

@@ -4,5 +4,5 @@
 *.cmd text eol=crlf
 
 # Live API samples: keep byte-exact for parser tests
-docs/research/fixtures/** -text
+spec/fixtures/poe/** -text
 docs/research/directory/** -text
