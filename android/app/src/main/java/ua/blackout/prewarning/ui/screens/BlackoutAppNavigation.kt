@@ -139,7 +139,6 @@ fun BlackoutAppNavigation(
     var soundEnabled by remember { mutableStateOf(initialSettings.soundEnabled) }
     var vibrationEnabled by remember { mutableStateOf(initialSettings.vibrationEnabled) }
     var currentLanguage by remember { mutableStateOf(initialSettings.language) }
-    var isRouletteOpen by remember { mutableStateOf(false) }
     var autoOpenQueueHelp by remember { mutableStateOf(false) }
     var currentTime by remember { mutableStateOf(LocalTime.now(KYIV_ZONE)) }
 
@@ -227,7 +226,7 @@ fun BlackoutAppNavigation(
         anyPlannedActive && !ExactAlarmGate.canScheduleExact(appContext)
     }
 
-    val isMainScreenVisible = pagerState.currentPage == 0 && !isRouletteOpen
+    val isMainScreenVisible = pagerState.currentPage == 0
     val isCountdownScreenActive = isMainScreenVisible && !isQueueUnselected
     var hasCompletedInitialScheduleFetch by remember { mutableStateOf(false) }
 
@@ -433,7 +432,6 @@ fun BlackoutAppNavigation(
     LaunchedEffect(openSubscriptionId) {
         val id = openSubscriptionId ?: return@LaunchedEffect
         shownSubscriptionId = id
-        isRouletteOpen = false
         pagerState.scrollToPage(0)
         onOpenSubscriptionHandled()
     }
@@ -586,7 +584,7 @@ fun BlackoutAppNavigation(
         HorizontalPager(
             state = pagerState,
             beyondViewportPageCount = 2,
-            userScrollEnabled = !isRouletteOpen && !isQueueUnselected,
+            userScrollEnabled = !isQueueUnselected,
             flingBehavior = PagerDefaults.flingBehavior(state = pagerState, snapAnimationSpec = PageGlide),
             modifier = Modifier.fillMaxSize()
         ) { page ->
@@ -805,22 +803,11 @@ fun BlackoutAppNavigation(
                 2 -> {
                     AboutScreen(
                         scrollState = pageScrolls[2],
-                        lang = resolvedLang,
-                        onOpenRoulette = { isRouletteOpen = true }
+                        lang = resolvedLang
                     )
                 }
             }
           }
-        }
-
-        if (isRouletteOpen) {
-            ZhytomyrRouletteDialog(
-                lang = resolvedLang,
-                providerUrl = siteUrl,
-                queue = queue.ifBlank { "1.1" },
-                onShowAppBanner = showAppBanner,
-                onDismiss = { isRouletteOpen = false }
-            )
         }
 
         // Top In-App Notification Banner with Application Icon (white lightning on #FF5E3A rounded square)
@@ -867,8 +854,8 @@ fun BlackoutAppNavigation(
             }
         }
 
-        // Floating Capsule Bottom Navigation Dock matching emulator (hidden when Житомирська Рулетка is open; dimmed & disabled when queue unselected)
-        if (!isRouletteOpen) {
+        // Floating Capsule Bottom Navigation Dock matching emulator (dimmed & disabled when queue unselected)
+        run {
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)

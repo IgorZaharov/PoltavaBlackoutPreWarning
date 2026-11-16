@@ -15,3 +15,7 @@ public/assets/aistudio/*.png
 __pycache__/
 *.pyc
 package-lock.json
+
+# Gradle (local builds)
+.gradle/
+local.properties

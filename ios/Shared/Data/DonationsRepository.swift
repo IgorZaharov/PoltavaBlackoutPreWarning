@@ -2,7 +2,7 @@ import Foundation
 
 public final class DonationsRepository {
     public static let shared = DonationsRepository()
-    public static let REMOTE_DONATIONS_URL = "https://raw.githubusercontent.com/IgorZaharov/Android-ZTBlackoutPreWarning/main/donations.json"
+    public static let REMOTE_DONATIONS_URL = "https://raw.githubusercontent.com/IgorZaharov/PoltavaBlackoutPreWarning/main/donations.json"
     public static let REFRESH_INTERVAL_MS: Int64 = 86_400_000
 
     public static let DEFAULT_DONATIONS: [DonationItem] = [

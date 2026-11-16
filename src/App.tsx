@@ -45,7 +45,6 @@ import { CodeExplorer } from './components/CodeExplorer';
 import { PlayStoreGuide } from './components/PlayStoreGuide';
 import { WidgetSimulator } from './components/WidgetSimulator';
 import { BuildAndDownloadView } from './components/BuildAndDownloadView';
-import { addPowerPoints, resetAllRouletteProgress, resetSavedPowerPoints } from './services/rouletteGame';
 
 type RefreshStatus = 'SUCCESS' | 'NO_INTERNET' | 'NO_QUEUES_FOUND';
 
@@ -354,7 +353,6 @@ export default function App() {
   const handleResetAllAppDataFirstLaunch = () => {
     getSubscriptionSync().clear();
     const freshSettings = resetAllAppDataToFirstLaunch();
-    resetAllRouletteProgress();
     setSettings(freshSettings);
     setActiveNotification(null);
     setTimeOfDayOverride('auto');
@@ -362,12 +360,6 @@ export default function App() {
     setPhoneTab('schedule');
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('zt-app-first-launch-reset'));
-      window.dispatchEvent(new CustomEvent('zt-roulette-progress-reset'));
-      window.dispatchEvent(
-        new CustomEvent('zt-roulette-power-points-updated', {
-          detail: { powerPoints: 0 },
-        })
-      );
     }
   };
 
@@ -401,13 +393,13 @@ export default function App() {
     );
   }, [now, effectiveNow, timeOfDayOverride]);
 
-  // One snapshot (local state only) feeds the main screen, the widgets and the roulette; dataVersion bumps after every refresh
+  // One snapshot (local state only) feeds the main screen and the widgets; dataVersion bumps after every refresh
   const snapshot = React.useMemo(
     () => getOutageRepository().snapshot(settings, nowLdt),
     [settings, nowLdt, dataVersion]
   );
 
-  // The main view can show another address (step 4); widgets and the roulette keep the primary
+  // The main view can show another address (step 4); widgets keep the primary
   const subscriptionStore = React.useMemo(() => getSubscriptionSync().store(settings), [settings]);
   const shownOther = React.useMemo(() => {
     const item = viewItem(subscriptionStore, shownSubscriptionId);
@@ -529,7 +521,7 @@ export default function App() {
               </div>
               <div>
                 <div className="text-sm font-bold tracking-tight text-white flex items-center gap-2">
-                  <span>Світло в Житомирі</span>
+                  <span>Світло в Полтаві</span>
                   <span className="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-[#FF5E3A]/15 text-[#FF5E3A] font-semibold border border-[#FF5E3A]/20">
                     Android
                   </span>
@@ -612,8 +604,8 @@ export default function App() {
             {/* Quick Action Controls */}
             <div className="flex items-center gap-2">
               <a
-                href="/Android-ZTBlackoutPreWarning.zip"
-                download="Android-ZTBlackoutPreWarning.zip"
+                href="/PoltavaBlackoutPreWarning.zip"
+                download="PoltavaBlackoutPreWarning.zip"
                 className="hidden lg:flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 text-xs font-bold hover:bg-emerald-500/25 transition-all"
                 title="Завантажити готовий архів Android проєкту"
               >
@@ -636,7 +628,7 @@ export default function App() {
 
               {/* GitHub Link */}
               <a
-                href="https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning"
+                href="https://github.com/IgorZaharov/PoltavaBlackoutPreWarning"
                 target="_blank"
                 rel="noreferrer"
                 className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-xl bg-white text-black text-xs font-bold hover:bg-zinc-200 transition-all shadow-md"
@@ -771,76 +763,6 @@ export default function App() {
                     >
                       <RotateCcw className={`w-4 h-4 ${isRefreshing ? 'animate-spin text-[#FF5E3A]' : ''}`} />
                       <span>{resolvedLang === 'uk' ? 'Оновити дані' : 'Refresh Data'}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      data-testid="emulator-add-power-points-100"
-                      onClick={() => {
-                        const updated = addPowerPoints(100);
-                        if (typeof window !== 'undefined') {
-                          window.dispatchEvent(
-                            new CustomEvent('zt-roulette-power-points-updated', {
-                              detail: { powerPoints: updated },
-                            })
-                          );
-                        }
-                      }}
-                      className="col-span-2 flex items-center justify-center gap-2 p-3 rounded-2xl bg-[#141A29] hover:bg-white/15 text-[#F5D061] font-bold text-xs transition-all border border-[#D8B467]/60 active:scale-95 shadow-md cursor-pointer"
-                    >
-                      <Zap className="w-4 h-4 fill-current" />
-                      <span>
-                        {resolvedLang === 'uk'
-                          ? '+100 Балів Потужності'
-                          : '+100 Power Points'}
-                      </span>
-                    </button>
-
-                    <button
-                      type="button"
-                      data-testid="emulator-set-power-points-9999"
-                      onClick={() => {
-                        const updated = resetSavedPowerPoints(9999);
-                        if (typeof window !== 'undefined') {
-                          window.dispatchEvent(
-                            new CustomEvent('zt-roulette-power-points-updated', {
-                              detail: { powerPoints: updated },
-                            })
-                          );
-                        }
-                      }}
-                      className="col-span-2 flex items-center justify-center gap-2 p-3 rounded-2xl bg-[#141A29] hover:bg-white/15 text-[#F5D061] font-bold text-xs transition-all border border-[#D8B467]/60 active:scale-95 shadow-md cursor-pointer"
-                    >
-                      <Zap className="w-4 h-4 fill-current" />
-                      <span>
-                        {resolvedLang === 'uk'
-                          ? 'Встановити Бали Потужності: 9999'
-                          : 'Set Power Points to 9999'}
-                      </span>
-                    </button>
-
-                    <button
-                      type="button"
-                      data-testid="emulator-reset-game-progress"
-                      onClick={() => {
-                        resetAllRouletteProgress();
-                        if (typeof window !== 'undefined') {
-                          window.dispatchEvent(new CustomEvent('zt-roulette-progress-reset'));
-                          window.dispatchEvent(
-                            new CustomEvent('zt-roulette-power-points-updated', {
-                              detail: { powerPoints: 0 },
-                            })
-                          );
-                        }
-                      }}
-                      className="col-span-2 flex items-center justify-center gap-2 p-3 rounded-2xl bg-rose-950/70 hover:bg-rose-900/70 text-rose-200 font-bold text-xs transition-all border border-rose-500/40 active:scale-95 shadow-md cursor-pointer"
-                    >
-                      <RotateCcw className="w-4 h-4" />
-                      <span>
-                        {resolvedLang === 'uk'
-                          ? 'Скинути весь прогрес гри (монети, покращення, Бали Потужності)'
-                          : 'Reset All Game Progress (Coins, Upgrades, Power Points)'}
-                      </span>
                     </button>
 
                     <button
@@ -984,8 +906,8 @@ export default function App() {
                     </button>
 
                     <a
-                      href="/Android-ZTBlackoutPreWarning.zip"
-                      download="Android-ZTBlackoutPreWarning.zip"
+                      href="/PoltavaBlackoutPreWarning.zip"
+                      download="PoltavaBlackoutPreWarning.zip"
                       className="flex items-center justify-center gap-1.5 py-2.5 px-3.5 rounded-xl bg-white/10 hover:bg-white/15 text-white font-bold text-xs transition-all border border-white/10"
                       title="Завантажити ZIP"
                     >
@@ -1048,13 +970,13 @@ export default function App() {
         <footer className="border-t border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60 py-4 text-center text-xs text-slate-500 dark:text-slate-400">
           <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
             <div>
-              <span>Світло в Житомирі · Розробник: </span>
+              <span>Світло в Полтаві · Розробник: </span>
               <a href="https://github.com/IgorZaharov" target="_blank" rel="noreferrer" className="font-semibold text-slate-800 dark:text-slate-200 underline">
                 Ігор Захаров (Igor Zaharov)
               </a>
             </div>
             <div className="flex items-center gap-4 text-[11px]">
-              <a href="https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning/issues" target="_blank" rel="noreferrer" className="hover:underline text-rose-600 dark:text-rose-400">
+              <a href="https://github.com/IgorZaharov/PoltavaBlackoutPreWarning/issues" target="_blank" rel="noreferrer" className="hover:underline text-rose-600 dark:text-rose-400">
                 Повідомити про проблему (GitHub Issues)
               </a>
               <span>·</span>

@@ -1,13 +1,13 @@
 # Privacy Policy for iPhone / Політика конфіденційності для iPhone
 
-**Application:** Світло в Житомирі (iPhone and its home-screen widgets)  
+**Application:** Світло в Полтаві (iPhone and its home-screen widgets)  
 **Bundle Identifier:** `ua.blackout.prewarning` (widget extension `ua.blackout.prewarning.widget`)  
 **Platform:** iOS 17.0 or newer, distributed through the Apple App Store  
 **Developer:** Igor Zaharov  
 **Effective Date:** November 15, 2026  
 **Last Updated:** November 15, 2026  
-**Contact:** [GitHub Issues](https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning/issues)  
-**Source code:** [github.com/IgorZaharov/Android-ZTBlackoutPreWarning](https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning)
+**Contact:** [GitHub Issues](https://github.com/IgorZaharov/PoltavaBlackoutPreWarning/issues)  
+**Source code:** [github.com/IgorZaharov/PoltavaBlackoutPreWarning](https://github.com/IgorZaharov/PoltavaBlackoutPreWarning)
 
 This policy covers only the iPhone app. The Android app has its own policy in
 [PRIVACY_POLICY.md](PRIVACY_POLICY.md).
@@ -97,19 +97,19 @@ Changes to this policy are published in this file with a new "Last Updated" date
 
 ## 11. Contact
 
-Questions about this policy: [github.com/IgorZaharov/Android-ZTBlackoutPreWarning/issues](https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning/issues)
+Questions about this policy: [github.com/IgorZaharov/PoltavaBlackoutPreWarning/issues](https://github.com/IgorZaharov/PoltavaBlackoutPreWarning/issues)
 
 ---
 
 # Політика конфіденційності для iPhone
 
-**Застосунок:** Світло в Житомирі (iPhone і віджети головного екрана)  
+**Застосунок:** Світло в Полтаві (iPhone і віджети головного екрана)  
 **Ідентифікатор (Bundle ID):** `ua.blackout.prewarning` (віджет `ua.blackout.prewarning.widget`)  
 **Платформа:** iOS 17.0 або новіша, App Store  
 **Розробник:** Ігор Захаров (Igor Zaharov)  
 **Набирає чинності:** 15 листопада 2026 року  
 **Останнє оновлення:** 15 листопада 2026 року  
-**Контакт:** [GitHub Issues](https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning/issues)
+**Контакт:** [GitHub Issues](https://github.com/IgorZaharov/PoltavaBlackoutPreWarning/issues)
 
 Ця політика стосується лише застосунку для iPhone. Для Android діє [PRIVACY_POLICY.md](PRIVACY_POLICY.md).
 
@@ -180,4 +180,4 @@ Questions about this policy: [github.com/IgorZaharov/Android-ZTBlackoutPreWarnin
 
 ### 11. Контакт
 
-[github.com/IgorZaharov/Android-ZTBlackoutPreWarning/issues](https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning/issues)
+[github.com/IgorZaharov/PoltavaBlackoutPreWarning/issues](https://github.com/IgorZaharov/PoltavaBlackoutPreWarning/issues)

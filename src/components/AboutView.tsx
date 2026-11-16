@@ -17,10 +17,9 @@ import {
   getDonationsWithDailyRefresh,
   getFaviconCandidateUrls,
 } from '../services/donationsService';
-import { ZhytomyrRouletteModal } from './ZhytomyrRouletteModal';
 
 declare const __APP_VERSION__: string | undefined;
-const CURRENT_BUILD_VERSION = `v${typeof __APP_VERSION__ !== 'undefined' && /^[0-9]+\.[0-9]+/.test(__APP_VERSION__) ? __APP_VERSION__ : '1.4.0'}`;
+const CURRENT_BUILD_VERSION = `v${typeof __APP_VERSION__ !== 'undefined' && /^[0-9]+\.[0-9]+/.test(__APP_VERSION__) ? __APP_VERSION__ : '1.0.0'}`;
 
 const DonationFavicon: React.FC<{ url: string; title: string }> = ({ url, title }) => {
   const candidates = getFaviconCandidateUrls(url);
@@ -42,13 +41,11 @@ const DonationFavicon: React.FC<{ url: string; title: string }> = ({ url, title 
 
 interface AboutViewProps {
   lang: 'uk' | 'en';
-  onOpenRoulette?: () => void;
 }
 
-export const AboutView: React.FC<AboutViewProps> = ({ lang, onOpenRoulette }) => {
+export const AboutView: React.FC<AboutViewProps> = ({ lang }) => {
   const t = translations[lang];
   const [donations, setDonations] = useState<DonationLink[]>(() => getCachedDonations());
-  const [isRouletteOpen, setIsRouletteOpen] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -130,12 +127,12 @@ export const AboutView: React.FC<AboutViewProps> = ({ lang, onOpenRoulette }) =>
           <ExternalLink className="w-4 h-4 text-sky-200/70 group-hover:text-white transition-colors shrink-0" />
         </a>
 
-        {/* 2. Світло в Житомирі на Github */}
+        {/* 2. Світло в Полтаві на Github */}
         <a
-          href="https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning/blob/main/README.md"
+          href="https://github.com/IgorZaharov/PoltavaBlackoutPreWarning/blob/main/README.md"
           target="_blank"
           rel="noopener noreferrer"
-          title="https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning/blob/main/README.md"
+          title="https://github.com/IgorZaharov/PoltavaBlackoutPreWarning/blob/main/README.md"
           className="flex items-center justify-between p-3.5 rounded-2xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 transition-all group overflow-hidden"
         >
           <div className="flex items-center gap-3.5 min-w-0 flex-1 mr-2">
@@ -147,7 +144,7 @@ export const AboutView: React.FC<AboutViewProps> = ({ lang, onOpenRoulette }) =>
                 {t.aboutDesktopRepo}
               </div>
               <div className="text-[11px] text-sky-200/70 font-mono truncate">
-                github.com/IgorZaharov/Android-ZTBlackoutPreWarning/blob/main/README.md
+                github.com/IgorZaharov/PoltavaBlackoutPreWarning/blob/main/README.md
               </div>
             </div>
           </div>
@@ -156,10 +153,10 @@ export const AboutView: React.FC<AboutViewProps> = ({ lang, onOpenRoulette }) =>
 
         {/* 3. Project Issues & Requests */}
         <a
-          href="https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning/issues"
+          href="https://github.com/IgorZaharov/PoltavaBlackoutPreWarning/issues"
           target="_blank"
           rel="noopener noreferrer"
-          title="https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning/issues"
+          title="https://github.com/IgorZaharov/PoltavaBlackoutPreWarning/issues"
           className="flex items-center justify-between p-3.5 rounded-2xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 transition-all group overflow-hidden"
         >
           <div className="flex items-center gap-3.5 min-w-0 flex-1 mr-2">
@@ -171,7 +168,7 @@ export const AboutView: React.FC<AboutViewProps> = ({ lang, onOpenRoulette }) =>
                 {t.aboutRepoIssues}
               </div>
               <div className="text-[11px] text-sky-200/70 font-mono truncate">
-                github.com/IgorZaharov/Android-ZTBlackoutPreWarning/issues
+                github.com/IgorZaharov/PoltavaBlackoutPreWarning/issues
               </div>
             </div>
           </div>
@@ -211,30 +208,6 @@ export const AboutView: React.FC<AboutViewProps> = ({ lang, onOpenRoulette }) =>
           </a>
         ))}
       </div>
-
-      {/* Житомирська Рулетка / Zhytomyr Roulette Button (after Donations block) */}
-      <button
-        type="button"
-        data-testid="open-zhytomyr-roulette-btn"
-        onClick={() => {
-          if (onOpenRoulette) {
-            onOpenRoulette();
-          } else {
-            setIsRouletteOpen(true);
-          }
-        }}
-        className="w-full zt-glass hover:bg-[#1B2338]/85 rounded-3xl p-4 border border-amber-300/35 flex items-center justify-center text-sm font-bold text-amber-200 transition-all cursor-pointer active:scale-[0.99]"
-      >
-        {lang === 'en' ? 'Zhytomyr Roulette' : 'Житомирська Рулетка'}
-      </button>
-
-      {!onOpenRoulette && (
-        <ZhytomyrRouletteModal
-          isOpen={isRouletteOpen}
-          onClose={() => setIsRouletteOpen(false)}
-          lang={lang}
-        />
-      )}
 
       {/* Google Play Console Status Card */}
       <div className="zt-glass rounded-3xl p-5 flex items-center gap-3.5">

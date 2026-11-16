@@ -1,5 +1,5 @@
 /**
- * Type definitions for Світло в Житомирі
+ * Type definitions for Світло в Полтаві
  */
 
 export type SlotStatus = 'POWER_ON' | 'POWER_OFF';

@@ -2,17 +2,17 @@
 
 **Effective Date:** November 9, 2026  
 **Last Updated:** November 9, 2026  
-**Application Name:** Світло в Житомирі (ZTBlackoutPreWarning)  
-**Package Name / Application ID:** `com.ZTBlackoutPreWarning`  
+**Application Name:** Світло в Полтаві (PoltavaBlackoutPreWarning)  
+**Package Name / Application ID:** `ua.blackout.prewarning.poltava`  
 **Developer / Publisher:** Igor Zaharov  
-**Open-Source Repository:** [https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning](https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning)  
-**Contact / Issue Tracker:** [https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning/issues](https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning/issues)  
+**Open-Source Repository:** [https://github.com/IgorZaharov/PoltavaBlackoutPreWarning](https://github.com/IgorZaharov/PoltavaBlackoutPreWarning)  
+**Contact / Issue Tracker:** [https://github.com/IgorZaharov/PoltavaBlackoutPreWarning/issues](https://github.com/IgorZaharov/PoltavaBlackoutPreWarning/issues)  
 
 ---
 
 ## 1. Introduction and Scope
 
-This Privacy Policy governs the mobile application **"Світло в Житомирі"** (package name `com.ZTBlackoutPreWarning`, hereinafter referred to as the "Application", "App", "we", "us", or "our"), created and maintained by Igor Zaharov as a free, open-source community utility.
+This Privacy Policy governs the mobile application **"Світло в Полтаві"** (package name `ua.blackout.prewarning.poltava`, hereinafter referred to as the "Application", "App", "we", "us", or "our"), created and maintained by Igor Zaharov as a free, open-source community utility.
 
 The Application is designed to provide residents and organizations in the Zhytomyr region of Ukraine with timely, accurate information regarding scheduled electrical power outages (Графіки погодинних відключень електроенергії) published by **JSC "Zhytomyroblenergo" (АТ «Житомиробленерго»)**.
 
@@ -42,7 +42,6 @@ Locally stored parameters include:
 2. **Notification & Pre-Warning Settings:** The user's chosen pre-warning lead time (e.g., 15 or 30 minutes in advance), sound toggles, and vibration toggles.
 3. **Audio Preferences:** Sound effects and music volume sliders.
 4. **Offline Cache:** Cached electricity outage schedule tables to enable offline viewing when network access is unavailable.
-5. **Mini-Game State ("Житомирська Рулетка"):** Local game scores, achievements, daily streak counters, and mini-game power points.
 
 ---
 
@@ -55,7 +54,7 @@ The Application requires internet access exclusively to fetch publicly accessibl
    - **Purpose:** Retrieving publicly published hourly power outage schedule HTML tables for the 12 consumer sub-queues.
    - **Data Transmitted:** Standard HTTP/HTTPS GET requests. No user credentials, cookies, device identifiers, or personal parameters are sent with these requests.
 2. **Static Configuration File (GitHub Raw):**
-   - **Target Endpoint:** `https://raw.githubusercontent.com/IgorZaharov/Android-ZTBlackoutPreWarning/main/donations.json`
+   - **Target Endpoint:** `https://raw.githubusercontent.com/IgorZaharov/PoltavaBlackoutPreWarning/main/donations.json`
    - **Purpose:** Periodically retrieving optional community donation URLs and official information links using standard conditional HTTP headers (`ETag` / `If-Modified-Since`).
    - **Data Transmitted:** Anonymous static file GET request. No telemetry or user information is transmitted.
 
@@ -86,7 +85,7 @@ The Application contains hyperlinks to external third-party platforms for the co
 - **JSC "Zhytomyroblenergo" (АТ «Житомиробленерго»):** [https://www.ztoe.com.ua](https://www.ztoe.com.ua)
 - **Official Zhytomyroblenergo Facebook Page:** For official emergency announcements.
 - **Voluntary Community Donations (Monobank / Charity Jar):** Direct links that open in the user's external web browser or banking application. The Application does not process payments, store banking credentials, or receive transaction records.
-- **Project GitHub Repository:** [https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning](https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning)
+- **Project GitHub Repository:** [https://github.com/IgorZaharov/PoltavaBlackoutPreWarning](https://github.com/IgorZaharov/PoltavaBlackoutPreWarning)
 
 We do not control, oversee, or assume responsibility for the privacy practices, content, or policies of external websites. When navigating to third-party services, users are advised to review the respective third-party privacy notices.
 
@@ -105,7 +104,7 @@ Because the Application does not collect, retain, or transmit personal data of a
 - **Storage Location:** All user-specific settings are confined exclusively to the local file system sandbox of the Android operating system on the user's device.
 - **Security:** Data is protected by Android's application sandboxing architecture and file system encryption. We do not operate remote databases, cloud synchronization servers, or user data repositories.
 - **Data Deletion:** The user retains complete sovereignty over their data. All stored preferences and local caches can be irrevocably deleted at any time by:
-  1. Navigating on the device to **Settings > Apps > Світло в Житомирі > Storage > Clear Data**; or
+  1. Navigating on the device to **Settings > Apps > Світло в Полтаві > Storage > Clear Data**; or
   2. Uninstalling the Application from the device.
 
 ---
@@ -130,8 +129,8 @@ We reserve the right to update this Privacy Policy to reflect changes in legal r
 If you have questions, feedback, or legal inquiries concerning this Privacy Policy, please contact the developer through our public issue tracker:
 
 - **Lead Developer:** Igor Zaharov
-- **GitHub Issues:** [https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning/issues](https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning/issues)
-- **Project Repository:** [https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning](https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning)
+- **GitHub Issues:** [https://github.com/IgorZaharov/PoltavaBlackoutPreWarning/issues](https://github.com/IgorZaharov/PoltavaBlackoutPreWarning/issues)
+- **Project Repository:** [https://github.com/IgorZaharov/PoltavaBlackoutPreWarning](https://github.com/IgorZaharov/PoltavaBlackoutPreWarning)
 
 ---
 
@@ -139,13 +138,13 @@ If you have questions, feedback, or legal inquiries concerning this Privacy Poli
 
 **Дата набрання чинності:** 9 листопада 2026 року  
 **Останнє оновлення:** 9 листопада 2026 року  
-**Назва додатку:** Світло в Житомирі (ZTBlackoutPreWarning)  
-**Ідентифікатор пакета (Package Name):** `com.ZTBlackoutPreWarning`  
+**Назва додатку:** Світло в Полтаві (PoltavaBlackoutPreWarning)  
+**Ідентифікатор пакета (Package Name):** `ua.blackout.prewarning.poltava`  
 **Розробник:** Ігор Захаров (Igor Zaharov)  
-**Репозиторій проєкту:** [https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning](https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning)  
+**Репозиторій проєкту:** [https://github.com/IgorZaharov/PoltavaBlackoutPreWarning](https://github.com/IgorZaharov/PoltavaBlackoutPreWarning)  
 
 ### 1. Загальні положення
-Ця Політика конфіденційності регулює використання мобільного додатку **«Світло в Житомирі»** (`com.ZTBlackoutPreWarning`), розробленого як безкоштовний некомерційний інструмент для жителів міста Житомира та Житомирської області для оперативного відстеження графіків погодинних відключень електроенергії (ГПВ) АТ «Житомиробленерго».
+Ця Політика конфіденційності регулює використання мобільного додатку **«Світло в Полтаві»** (`ua.blackout.prewarning.poltava`), розробленого як безкоштовний некомерційний інструмент для жителів міста Житомира та Житомирської області для оперативного відстеження графіків погодинних відключень електроенергії (ГПВ) АТ «Житомиробленерго».
 
 ### 2. Повна відсутність збору персональних даних
 - Додаток **не збирає**, не реєструє, не передає та не продає персональні дані користувачів.
@@ -174,4 +173,4 @@ If you have questions, feedback, or legal inquiries concerning this Privacy Poli
 
 ### 7. Контакти
 З будь-яких питань щодо функціонування додатку або цієї політики можна звернутися через офіційний репозиторій:  
-[https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning/issues](https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning/issues)
+[https://github.com/IgorZaharov/PoltavaBlackoutPreWarning/issues](https://github.com/IgorZaharov/PoltavaBlackoutPreWarning/issues)

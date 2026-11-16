@@ -728,10 +728,10 @@ export const MainView: React.FC<MainViewProps> = ({
         {/* Emergency outages info link (Facebook): the URL wraps to two lines instead of a dead ellipsis */}
         <GlassCard padding={14}>
           <a
-            href="https://www.facebook.com/ztoe.com.ua"
+            href="https://www.facebook.com/atpoltavaoblenergo"
             target="_blank"
             rel="noopener noreferrer"
-            title="https://www.facebook.com/ztoe.com.ua"
+            title="https://www.facebook.com/atpoltavaoblenergo"
             className="group flex min-h-12 items-center justify-between gap-2.5 overflow-hidden rounded-[14px] bg-white/[0.08] p-3 transition-colors hover:bg-white/[0.14]"
           >
             <div className="flex min-w-0 flex-1 items-center gap-2.5">
@@ -745,7 +745,7 @@ export const MainView: React.FC<MainViewProps> = ({
                   {t.emergencyOutagesLabel}
                 </div>
                 <div className={`line-clamp-2 break-all font-mono text-[13px] font-normal leading-[19px] ${TEXT_TERTIARY}`}>
-                  https://www.facebook.com/ztoe.com.ua
+                  https://www.facebook.com/atpoltavaoblenergo
                 </div>
               </div>
             </div>

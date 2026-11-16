@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.0.0] - 2026-11-16
+
+First version line of «Світло в Полтаві», built from «Світло в Житомирі» 1.4.0 (`IgorZaharov/Android-ZTBlackoutPreWarning` at `c5573b9`, history kept). Plan: `docs/POLTAVA_PORT_PLAN.md`. This is milestone **P0** (seed and rebrand): the app still loads **Zhytomyr data** (ztoe.com.ua, PowerOn) until the POE data layer lands in P2.
+
+### Changed
+- **App name «Світло в Полтаві»** (owner decision D1) in `strings.xml` (app and the three widget names), `AppStrings.kt`, `metadata.json`, `index.html`, `i18n.ts`, `App.tsx`, `PhoneSimulator.tsx`, `types.ts`, iOS `Info.plist` (app and widget) and `ios/project.yml`; `AboutScreen.kt` and `AboutView.tsx` link «Світло в Полтаві на Github» to this repository.
+- **New application id `ua.blackout.prewarning.poltava` and a new signing key** (`android/app/build.gradle.kts`, `android/app/keystore/debug.keystore`): the Poltava APK installs next to the Zhytomyr app and can never update over it. Kotlin `namespace` stays `ua.blackout.prewarning` so upstream fixes merge cleanly.
+- **Version 1.0.0** (D7) in `build.gradle.kts`, `ios/project.yml`, `package.json`, `vite.config.ts`, `AboutScreen.kt`, `AboutView.tsx`.
+- **Emergency link on the main screen: `https://www.facebook.com/atpoltavaoblenergo`** (D2) in `AppStrings.kt` and `MainView.tsx`.
+- Repository links (README, issues, privacy policy, `donations.json`) point to `IgorZaharov/PoltavaBlackoutPreWarning`, also the iOS links (`ios/App/UI/AboutScreen.swift`): there is no separate iOS repository for Poltava. The downloadable project archive is `public/PoltavaBlackoutPreWarning.zip`.
+- Privacy policies (`PRIVACY_POLICY.md`, `public/`, `android/`, `PRIVACY_POLICY_IOS.md`) name the new app, package and repository. Their data-source sections still describe ztoe.com.ua and PowerOn and are rewritten for poe.pl.ua in P6.
+- `.gitattributes` checks text files out with LF on every OS, so `npm test` passes on Windows as on CI.
+
+### Removed
+- **«Житомирська Рулетка»** (D5) on Android and in the web simulator: `ZhytomyrRouletteScreen.kt`, its sounds (`res/raw/*.mp3`) and ticket images (`res/drawable-nodpi/ticket_foil_*.jpg`), the About entry point in `AboutScreen.kt` and `BlackoutAppNavigation.kt`, the sound hooks in `MainActivity.kt`, the roulette strings in `AppStrings.kt`; on the web `ZhytomyrRouletteModal.tsx`, `rouletteGame.ts`, `rouletteAudio.ts`, the entry points in `AboutView.tsx` and `PhoneSimulator.tsx` and the power-point emulator buttons in `App.tsx`. The roulette tests are gone (`ZtoeParserTest.kt`, `tests/unit.test.ts`); the app checks they also held (unclear schedule state, About links, signing and build configuration) are kept in a new Unit Test C and `testUnitD_AboutLinksAndUnclearState`.
+
+# History inherited from «Світло в Житомирі»
+
 ## [Unreleased] - iOS port
 
 ### Added

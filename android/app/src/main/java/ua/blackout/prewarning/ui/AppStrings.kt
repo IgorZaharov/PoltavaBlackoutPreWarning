@@ -41,7 +41,7 @@ object AppStrings {
     fun errorNoInternet(lang: String) = if (lang == "uk") "Немає доступу до Інтернету" else "No Internet access"
     fun errorNoQueuesFound(lang: String) = if (lang == "uk") "На сайті не знайдено черг" else "No queues found on site"
     fun emergencyOutagesLabel(lang: String) = if (lang == "uk") "Інформація про аварійні відключення:" else "Emergency outages info:"
-    const val EMERGENCY_OUTAGES_URL = "https://www.facebook.com/ztoe.com.ua"
+    const val EMERGENCY_OUTAGES_URL = "https://www.facebook.com/atpoltavaoblenergo"
     fun siteSchedulesLabel(lang: String) = "Графіки відключень на сайті"
     const val SITE_SCHEDULES_URL = "https://www.ztoe.com.ua/unhooking-search.php"
 
@@ -99,7 +99,7 @@ object AppStrings {
     // =========================================================================================
 
     // About Screen Texts
-    fun aboutTitle(lang: String) = "Світло в Житомирі"
+    fun aboutTitle(lang: String) = "Світло в Полтаві"
     fun aboutSubtitle(lang: String) = if (lang == "uk") "Завчасне інформування про відключення світла в Житомирі та області" else "Advance blackout alerts for Zhytomyr and region"
     fun aboutDescTitle(lang: String) = if (lang == "uk") "ОПИС ЗАСТОСУНКУ" else "APP DESCRIPTION"
     fun aboutDescText(lang: String) = if (lang == "uk") "Автоматичний моніторинг графіків відключень електроенергії з офіційного сайту АТ «Житомиробленерго» (ztoe.com.ua). Застосунок своєчасно попереджає про початок відключення за вибраний інтервал часу та об'єднує послідовні години без світла в одне сповіщення." else "Automatic monitoring of blackout schedules from ztoe.com.ua. Alerts in advance before outages and merges consecutive slots into single notification."
@@ -108,43 +108,9 @@ object AppStrings {
     fun aboutDonationsTitle(lang: String) = "Charity / Благодійність і Пожертви"
     fun devProfile(lang: String) = if (lang == "uk") "Профіль розробника" else "Developer profile"
     fun repoIssues(lang: String) = if (lang == "uk") "Повідомити про проблему (Issues)" else "Report an issue (Issues)"
-    fun desktopApp(lang: String) = "Світло в Житомирі на Github"
-    const val ABOUT_GITHUB_README_URL = "https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning/blob/main/README.md"
+    fun desktopApp(lang: String) = "Світло в Полтаві на Github"
+    const val ABOUT_GITHUB_README_URL = "https://github.com/IgorZaharov/PoltavaBlackoutPreWarning/blob/main/README.md"
     fun disclaimerText(lang: String) = if (lang == "uk") "Дані про графіки завантажуються безпосередньо з сайту ztoe.com.ua. Застосунок не є офіційним сервісом АТ «Житомиробленерго» та не несе відповідальності за раптові зміни або аварійні відключення з боку НЕК «Укренерго»." else "Data loaded directly from ztoe.com.ua. App is not an official service of JSC Zhytomyroblenergo and is not responsible for sudden emergency cuts."
-
-    // Zhytomyr Roulette Mini-Game Texts (Ukrainian / English depending on Main Application settings)
-    fun rouletteLaunchButton(lang: String = "uk") = if (lang == "en") "Zhytomyr Roulette" else "Житомирська Рулетка"
-    fun rouletteTitle(lang: String) = if (lang == "uk") "Житомирська Рулетка" else "Zhytomyr Roulette"
-    fun rouletteSubtitle(lang: String) = if (lang == "uk") {
-        "Стирайте захисний шар із 48 півгодинних білетів графіка відключень. Кожен світлий білет із цілою лампочкою збільшує рахунок (+1, +2, +3...), білет X2 подвоює бали, а червоний білет викликає блекаут!"
-    } else {
-        "Scratch off the 48 half-hour blackout timeslot tickets. Each beige ticket with an intact lightbulb increases your score (+1, +2, +3...), an X2 ticket doubles your score, while a red ticket triggers a blackout!"
-    }
-    fun rouletteStartBtn(lang: String) = if (lang == "uk") "Почати гру" else "Start"
-    fun rouletteCloseBtn(lang: String) = if (lang == "uk") "Закрити гру" else "Close Game"
-    fun roulettePowerPointsLabel(lang: String) = if (lang == "uk") "Бали Потужності" else "Power Points"
-    fun roulettePowerShopBtn(lang: String) = if (lang == "uk") "Магазин Потужності" else "Power Shop"
-    fun rouletteBackBtn(lang: String) = if (lang == "uk") "Назад" else "Back"
-    fun roulettePointsLabel(lang: String) = if (lang == "uk") "Бали" else "Points"
-    fun rouletteStreakLabel(lang: String) = if (lang == "uk") "Серія" else "Streak"
-    fun rouletteRestartBtn(lang: String) = if (lang == "uk") "Спочатку" else "Restart Game"
-    fun rouletteNewTicketsBtn(lang: String) = if (lang == "uk") "Нові білети" else "Get New Tickets"
-    fun formatRouletteNewTicketsBtnWithCost(lang: String, refreshCount: Int): String {
-        val base = rouletteNewTicketsBtn(lang)
-        val cost = refreshCount.coerceAtLeast(0)
-        val costStr = if (cost == 0) "0" else "-$cost"
-        return "$base ($costStr)"
-    }
-    fun rouletteGameOverTitle(lang: String) = if (lang == "uk") "БЛЕКАУТ! ГРУ ЗАКІНЧЕНО" else "GAME OVER"
-    fun rouletteFinalScoreLabel(lang: String) = if (lang == "uk") "Фінальний рахунок" else "Final Score"
-    fun rouletteAllTimeBestScoreLabel(lang: String) = if (lang == "uk") "Найкращий Результат" else "All time best score"
-    fun rouletteMainMenuBtn(lang: String = "uk") = if (lang == "uk") "Головне Меню" else "Main Menu"
-    fun rouletteShareBtn(lang: String = "uk") = if (lang == "uk") "Поділитися" else "Share"
-    fun rouletteDownloadImageBtn(lang: String = "uk") = if (lang == "uk") "Завантажити зображення" else "Download Image"
-    fun rouletteImageSavedToast(lang: String = "uk") = if (lang == "uk") "Зображення збережено" else "Image saved"
-    fun rouletteSoundLabel(lang: String = "uk") = if (lang == "uk") "Звук" else "Sound"
-    fun rouletteMusicLabel(lang: String = "uk") = if (lang == "uk") "Музика" else "Music"
-    fun rouletteLoadingText(lang: String) = if (lang == "uk") "Роздача білетів..." else "Dealing tickets..."
 
     // =========================================================================================
     // v1.4.0: ZTOE site status, outage rows, notifications, exact alarms.
@@ -394,8 +360,8 @@ object AppStrings {
         if (lang == "uk") "Застосунок попередить перед відключенням за графіком і повідомить про аварійні відключення. Без дозволу графік працює, але без сповіщень." else "The app warns you before a scheduled outage and tells you about emergency outages. Without permission the schedule still works, just without notifications."
     fun notificationsAskButtonIos(lang: String) = if (lang == "uk") "Дозволити сповіщення" else "Allow notifications"
     // About links of the iPhone app point to the iOS repository (owner, 2026-11-15); Android keeps its own.
-    const val IOS_REPO_URL = "https://github.com/IgorZaharov/iOS-ZTPreBlackoutNotification"
-    const val IOS_ISSUES_URL = "https://github.com/IgorZaharov/iOS-ZTPreBlackoutNotification/issues"
-    const val PRIVACY_POLICY_URL_IOS = "https://github.com/IgorZaharov/iOS-ZTPreBlackoutNotification/blob/main/PRIVACY_POLICY_IOS.md"
+    const val IOS_REPO_URL = "https://github.com/IgorZaharov/PoltavaBlackoutPreWarning"
+    const val IOS_ISSUES_URL = "https://github.com/IgorZaharov/PoltavaBlackoutPreWarning/issues"
+    const val PRIVACY_POLICY_URL_IOS = "https://github.com/IgorZaharov/PoltavaBlackoutPreWarning/blob/main/PRIVACY_POLICY_IOS.md"
     // --- end iOS only ---
 }

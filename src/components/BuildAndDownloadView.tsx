@@ -43,8 +43,8 @@ export const BuildAndDownloadView: React.FC<BuildAndDownloadViewProps> = ({
     setTimeout(() => setCopiedKey(null), 2500);
   };
 
-  const gitRepoUrl = "https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning";
-  const gitActionsUrl = "https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning/actions";
+  const gitRepoUrl = "https://github.com/IgorZaharov/PoltavaBlackoutPreWarning";
+  const gitActionsUrl = "https://github.com/IgorZaharov/PoltavaBlackoutPreWarning/actions";
   const gradleBuildCmd = "./gradlew assembleDebug";
 
   return (
@@ -79,8 +79,8 @@ export const BuildAndDownloadView: React.FC<BuildAndDownloadViewProps> = ({
         {/* 1-Click Download Button */}
         <div className="flex flex-col sm:flex-row md:flex-col gap-2.5 w-full md:w-auto shrink-0">
           <a
-            href="/Android-ZTBlackoutPreWarning.zip"
-            download="Android-ZTBlackoutPreWarning.zip"
+            href="/PoltavaBlackoutPreWarning.zip"
+            download="PoltavaBlackoutPreWarning.zip"
             className="flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-2xl bg-[#FF5E3A] text-white font-bold text-sm shadow-lg shadow-[#FF5E3A]/30 hover:bg-[#e04e2c] transition-all hover:scale-[1.02] active:scale-[0.98]"
           >
             <Download className="w-4 h-4" />
@@ -233,7 +233,7 @@ export const BuildAndDownloadView: React.FC<BuildAndDownloadViewProps> = ({
               <li>
                 {lang === 'uk' ? 'Відкрийте репозиторій ' : 'Open repository '}
                 <a href={gitRepoUrl} target="_blank" rel="noreferrer" className="text-[#FF5E3A] font-semibold underline">
-                  Android-ZTBlackoutPreWarning
+                  PoltavaBlackoutPreWarning
                 </a>
               </li>
               <li>

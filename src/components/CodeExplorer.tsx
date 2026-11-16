@@ -31,12 +31,12 @@ export const CodeExplorer: React.FC = () => {
             <span>Native Android Code Repository</span>
           </h2>
           <p className="text-xs text-[#8E92A0] mt-0.5">
-            Готові вихідні коди Kotlin Jetpack Compose для <code className="font-mono text-[#FF5E3A]">https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning</code>
+            Готові вихідні коди Kotlin Jetpack Compose для <code className="font-mono text-[#FF5E3A]">https://github.com/IgorZaharov/PoltavaBlackoutPreWarning</code>
           </p>
         </div>
 
         <a
-          href="https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning"
+          href="https://github.com/IgorZaharov/PoltavaBlackoutPreWarning"
           target="_blank"
           rel="noreferrer"
           className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-white text-black text-xs font-bold hover:bg-zinc-200 transition-all self-start md:self-auto shadow-md"

@@ -149,7 +149,7 @@ public enum AppStrings {
     public static func errorNoInternet(_ lang: String) -> String { lang == "uk" ? "Немає доступу до Інтернету" : "No Internet access" }
     public static func errorNoQueuesFound(_ lang: String) -> String { lang == "uk" ? "На сайті не знайдено черг" : "No queues found on site" }
     public static func emergencyOutagesLabel(_ lang: String) -> String { lang == "uk" ? "Інформація про аварійні відключення:" : "Emergency outages info:" }
-    public static let EMERGENCY_OUTAGES_URL = "https://www.facebook.com/ztoe.com.ua"
+    public static let EMERGENCY_OUTAGES_URL = "https://www.facebook.com/atpoltavaoblenergo"
     public static func siteSchedulesLabel(_ lang: String) -> String { "Графіки відключень на сайті" }
     public static let SITE_SCHEDULES_URL = "https://www.ztoe.com.ua/unhooking-search.php"
     public static func settingsTitle(_ lang: String) -> String { lang == "uk" ? "Налаштування" : "Settings" }
@@ -177,7 +177,7 @@ public enum AppStrings {
     public static func queueHelpAddressSubtitle(_ lang: String) -> String { lang == "uk" ? "(Або закрийте це вікно та виберіть тільки чергу)" : "(Or close this window and select directly)" }
     public static func queueHelpManualSearchTitle(_ lang: String) -> String { lang == "uk" ? "Пошук вручну" : "Manual search" }
     public static func queueHelpGotIt(_ lang: String) -> String { lang == "uk" ? "Зрозуміло" : "Got it" }
-    public static func aboutTitle(_ lang: String) -> String { "Світло в Житомирі" }
+    public static func aboutTitle(_ lang: String) -> String { "Світло в Полтаві" }
     public static func aboutSubtitle(_ lang: String) -> String { lang == "uk" ? "Завчасне інформування про відключення світла в Житомирі та області" : "Advance blackout alerts for Zhytomyr and region" }
     public static func aboutDescTitle(_ lang: String) -> String { lang == "uk" ? "ОПИС ЗАСТОСУНКУ" : "APP DESCRIPTION" }
     public static func aboutDescText(_ lang: String) -> String { lang == "uk" ? "Автоматичний моніторинг графіків відключень електроенергії з офіційного сайту АТ «Житомиробленерго» (ztoe.com.ua). Застосунок своєчасно попереджає про початок відключення за вибраний інтервал часу та об'єднує послідовні години без світла в одне сповіщення." : "Automatic monitoring of blackout schedules from ztoe.com.ua. Alerts in advance before outages and merges consecutive slots into single notification." }
@@ -185,8 +185,8 @@ public enum AppStrings {
     public static func aboutDonationsTitle(_ lang: String) -> String { "Charity / Благодійність і Пожертви" }
     public static func devProfile(_ lang: String) -> String { lang == "uk" ? "Профіль розробника" : "Developer profile" }
     public static func repoIssues(_ lang: String) -> String { lang == "uk" ? "Повідомити про проблему (Issues)" : "Report an issue (Issues)" }
-    public static func desktopApp(_ lang: String) -> String { "Світло в Житомирі на Github" }
-    public static let ABOUT_GITHUB_README_URL = "https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning/blob/main/README.md"
+    public static func desktopApp(_ lang: String) -> String { "Світло в Полтаві на Github" }
+    public static let ABOUT_GITHUB_README_URL = "https://github.com/IgorZaharov/PoltavaBlackoutPreWarning/blob/main/README.md"
     public static func disclaimerText(_ lang: String) -> String { lang == "uk" ? "Дані про графіки завантажуються безпосередньо з сайту ztoe.com.ua. Застосунок не є офіційним сервісом АТ «Житомиробленерго» та не несе відповідальності за раптові зміни або аварійні відключення з боку НЕК «Укренерго»." : "Data loaded directly from ztoe.com.ua. App is not an official service of JSC Zhytomyroblenergo and is not responsible for sudden emergency cuts." }
     private static let NBSP = "\u{00A0}"
     public static func siteStateWithTable(_ lang: String) -> String { lang == "uk" ? "Сайт ZTOE доступний, графік опубліковано" : "ZTOE site online, schedule published" }
@@ -317,7 +317,7 @@ public enum AppStrings {
     public static func notificationsAskTitleIos(_ lang: String) -> String { lang == "uk" ? "Увімкніть попередження" : "Turn on warnings" }
     public static func notificationsAskBodyIos(_ lang: String) -> String { lang == "uk" ? "Застосунок попередить перед відключенням за графіком і повідомить про аварійні відключення. Без дозволу графік працює, але без сповіщень." : "The app warns you before a scheduled outage and tells you about emergency outages. Without permission the schedule still works, just without notifications." }
     public static func notificationsAskButtonIos(_ lang: String) -> String { lang == "uk" ? "Дозволити сповіщення" : "Allow notifications" }
-    public static let IOS_REPO_URL = "https://github.com/IgorZaharov/iOS-ZTPreBlackoutNotification"
-    public static let IOS_ISSUES_URL = "https://github.com/IgorZaharov/iOS-ZTPreBlackoutNotification/issues"
-    public static let PRIVACY_POLICY_URL_IOS = "https://github.com/IgorZaharov/iOS-ZTPreBlackoutNotification/blob/main/PRIVACY_POLICY_IOS.md"
+    public static let IOS_REPO_URL = "https://github.com/IgorZaharov/PoltavaBlackoutPreWarning"
+    public static let IOS_ISSUES_URL = "https://github.com/IgorZaharov/PoltavaBlackoutPreWarning/issues"
+    public static let PRIVACY_POLICY_URL_IOS = "https://github.com/IgorZaharov/PoltavaBlackoutPreWarning/blob/main/PRIVACY_POLICY_IOS.md"
 }

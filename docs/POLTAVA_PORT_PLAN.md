@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Written | 2026-11-16 |
-| Status | **Approved 2026-11-16** (owner decisions D1–D9 in section 9). Research done (live probes of both sites on 2026-11-16, saved responses in `docs/research/fixtures/`, address directory crawl in `docs/research/directory/`). Nothing is implemented yet; next is P0. |
+| Status | **Approved 2026-11-16** (owner decisions D1–D9 in section 9). Research done (live probes of both sites on 2026-11-16, saved responses in `docs/research/fixtures/`, address directory crawl in `docs/research/directory/`). **P0 done 2026-11-16** on branch `feat/p0-seed-rebrand`: upstream history merged; «Світло в Полтаві», application id `ua.blackout.prewarning.poltava` with its own signing key, version 1.0.0, Facebook link, repository links, roulette removed from Android and web; `npm test` and 97 Android unit tests green locally, debug APK checked with aapt2/apksigner. Not yet checked: the GitHub Actions run (nothing pushed) and installing next to the Zhytomyr app on a phone. Next is P1. |
 | Base | `IgorZaharov/Android-ZTBlackoutPreWarning` at `c5573b9` (Android 1.4.0, iOS M7, `spec/` with golden vectors) |
 | Order | Android first (P0–P6), iOS second (I0–I5) |
 | Goal | The same app (screens, widgets, search, multi-address, alerts, emergencies), fed by Полтаваобленерго (POE) data instead of ZTOE + PowerOn |

@@ -1,9 +1,9 @@
-# <img src="docs/screenshots/app-icon.png" width="36" height="36" align="absmiddle" alt="Іконка застосунку"> Світло в Житомирі
+# <img src="docs/screenshots/app-icon.png" width="36" height="36" align="absmiddle" alt="Іконка застосунку"> Світло в Полтаві
 
 <!-- LATEST_RELEASE_START -->
 ## Завантажити застосунок на телефон (Android)
 
-**[Завантажити останню версію APK (v1.4.0)](https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning/releases/latest/download/app-release.apk)**
+**[Завантажити останню версію APK (v1.0.0)](https://github.com/IgorZaharov/PoltavaBlackoutPreWarning/releases/latest/download/app-release.apk)**
 
 Як встановити:
 1. Натисніть на посилання вище на своєму Android-телефоні — файл `app-release.apk` завантажиться автоматично.
@@ -19,9 +19,11 @@
 
 ---
 
-Android-застосунок, який стежить за графіком погодинних відключень електроенергії від **АТ «Житомиробленерго»** і за аварійними відключеннями за вашою адресою та попереджає про них заздалегідь. Показує, скільки лишилося до відключення (або до повернення світла), малює 24-годинну шкалу дня й має віджети для робочого столу.
+Android-застосунок (далі iPhone), який стежить за графіком погодинних відключень електроенергії від **АТ «Полтаваобленерго»** і за аварійними відключеннями («пошкодження») за вашою адресою та попереджає про них заздалегідь. Показує, скільки лишилося до відключення (або до повернення світла), малює 24-годинну шкалу дня й має віджети для робочого столу.
 
-Графіки беруться зі сторінки [ztoe.com.ua/unhooking-search.php](https://www.ztoe.com.ua/unhooking-search.php), аварійні та планові ремонтні відключення за адресою — із сервісу PowerOn «Житомиробленерго». Це неофіційний застосунок і він не пов'язаний із «Житомиробленерго».
+> **Стан розробки.** Застосунок створено на основі [«Світло в Житомирі»](https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning) 1.4.0 (історію збережено). Етап P0 (нова назва, ідентифікатор і ключ підпису) завершено, але застосунок ще показує дані «Житомиробленерго». Дані «Полтаваобленерго» (графік, адреси, аварійні відключення з [poe.pl.ua](https://www.poe.pl.ua/disconnection/power-outages/)) з'являться на етапі P2. План: [`docs/POLTAVA_PORT_PLAN.md`](docs/POLTAVA_PORT_PLAN.md).
+
+Це неофіційний застосунок і він не пов'язаний із «Полтаваобленерго».
 
 Продовження десктопного проєкту [UABlackoutPreWarning](https://github.com/IgorZaharov/UABlackoutPreWarning).
 
@@ -76,8 +78,8 @@ Android-застосунок, який стежить за графіком по
 З командного рядка:
 
 ```bash
-git clone https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning.git
-cd Android-ZTBlackoutPreWarning/android
+git clone https://github.com/IgorZaharov/PoltavaBlackoutPreWarning.git
+cd PoltavaBlackoutPreWarning/android
 
 gradle assembleDebug     # app/build/outputs/apk/debug/app-debug-*.apk
 gradle bundleRelease     # app/build/outputs/bundle/release/app-release.aab
@@ -119,4 +121,4 @@ Kotlin 2.0, Jetpack Compose + Material 3, Glance 1.1, WorkManager 2.10, Jsoup 1.
 
 ## Автор
 
-Ігор Захаров ([@IgorZaharov](https://github.com/IgorZaharov)). Помилки й пропозиції надсилайте в [Issues](https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning/issues).
+Ігор Захаров ([@IgorZaharov](https://github.com/IgorZaharov)). Помилки й пропозиції надсилайте в [Issues](https://github.com/IgorZaharov/PoltavaBlackoutPreWarning/issues).

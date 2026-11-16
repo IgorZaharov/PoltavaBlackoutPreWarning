@@ -169,7 +169,7 @@ export const PlayStoreGuide: React.FC = () => {
           </h3>
         </div>
         <p className="text-xs text-zinc-300">
-          При кожному коміті в репозиторій <code className="font-mono text-[#FF5E3A]">https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning</code> запускається робочий процес <code className="font-mono">.github/workflows/build-apk.yml</code>:
+          При кожному коміті в репозиторій <code className="font-mono text-[#FF5E3A]">https://github.com/IgorZaharov/PoltavaBlackoutPreWarning</code> запускається робочий процес <code className="font-mono">.github/workflows/build-apk.yml</code>:
         </p>
         <ul className="text-xs text-zinc-300 space-y-2">
           <li className="flex items-center gap-2">

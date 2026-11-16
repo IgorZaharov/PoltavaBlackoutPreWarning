@@ -1,4 +1,4 @@
-# XcodeGen spec for the iOS app "Світло в Житомирі".
+# XcodeGen spec for the iOS app "Світло в Полтаві".
 # Generate with `xcodegen generate` inside ios/ (CI does this; the .xcodeproj is not committed).
 # Plan: docs/ios/IOS_PORT_PLAN.md. Built with Xcode 26 (iOS 26 SDK), runs on iOS 17.0+.
 name: SvitloZhytomyr
@@ -16,7 +16,7 @@ settings:
     SWIFT_VERSION: "5.0"
     SWIFT_STRICT_CONCURRENCY: minimal
     # Keep in step with android/app/build.gradle.kts versionName (release checklist in CLAUDE.md).
-    MARKETING_VERSION: "1.4.0"
+    MARKETING_VERSION: "1.0.0"
     # CI overrides this with the run number: CURRENT_PROJECT_VERSION=<n>.
     CURRENT_PROJECT_VERSION: "1"
     # CI passes DEVELOPMENT_TEAM from the APPLE_TEAM_ID secret; local builds sign automatically.

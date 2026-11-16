@@ -26,7 +26,7 @@ struct AboutScreen: View {
                     LinkRow(title: AppStrings.devProfile(lang), detail: "github.com/IgorZaharov", url: "https://github.com/IgorZaharov", lang: lang) {
                         tile(Color.white) { Image(systemName: "chevron.left.forwardslash.chevron.right").foregroundStyle(Color.black) }
                     }
-                    LinkRow(title: AppStrings.desktopApp(lang), detail: "github.com/IgorZaharov/iOS-ZTPreBlackoutNotification",
+                    LinkRow(title: AppStrings.desktopApp(lang), detail: "github.com/IgorZaharov/PoltavaBlackoutPreWarning",
                             url: AppStrings.IOS_REPO_URL, lang: lang) {
                         tile(Color(argb: 0x26FFFFFF)) { Image(systemName: "desktopcomputer").foregroundStyle(Color.white) }
                     }

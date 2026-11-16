@@ -1,9 +1,9 @@
 <resources>
-    <string name="app_name">Світло в Житомирі</string>
-    <string name="widget_name">Світло в Житомирі</string>
-    <string name="widget_small_name">Світло в Житомирі (Малий)</string>
-    <string name="widget_big_name">Світло в Житомирі (Великий)</string>
-    <string name="widget_strip_name">Світло в Житомирі (Графік)</string>
+    <string name="app_name">Світло в Полтаві</string>
+    <string name="widget_name">Світло в Полтаві</string>
+    <string name="widget_small_name">Світло в Полтаві (Малий)</string>
+    <string name="widget_big_name">Світло в Полтаві (Великий)</string>
+    <string name="widget_strip_name">Світло в Полтаві (Графік)</string>
     <string name="channel_name">Попередження про відключення</string>
     <string name="channel_description">Термінові сповіщення про планові відключення електроенергії</string>
 </resources>

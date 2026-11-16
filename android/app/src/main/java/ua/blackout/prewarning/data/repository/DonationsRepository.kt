@@ -23,9 +23,9 @@ object DonationsRepository {
     private const val KEY_LAST_FETCH_MS = "last_fetch_ms"
 
     const val GITHUB_DONATIONS_URL =
-        "https://raw.githubusercontent.com/IgorZaharov/Android-ZTBlackoutPreWarning/main/donations.json"
+        "https://raw.githubusercontent.com/IgorZaharov/PoltavaBlackoutPreWarning/main/donations.json"
     const val GITHUB_PUBLIC_DONATIONS_URL =
-        "https://raw.githubusercontent.com/IgorZaharov/Android-ZTBlackoutPreWarning/main/public/donations.json"
+        "https://raw.githubusercontent.com/IgorZaharov/PoltavaBlackoutPreWarning/main/public/donations.json"
 
     // Re-read 1 time per day (24 hours) in addition to refreshing on every application start
     const val REFRESH_INTERVAL_MS = 24L * 60L * 60L * 1000L

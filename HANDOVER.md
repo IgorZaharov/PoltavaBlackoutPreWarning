@@ -1,5 +1,7 @@
 # Світло в Житомирі (Android-ZTBlackoutPreWarning) — Developer Handover & Architecture Guide
 
+> **«Світло в Полтаві» note (2026-11-16).** This repository is the Poltava version, seeded from «Світло в Житомирі» 1.4.0. This guide describes the inherited Zhytomyr architecture, which is still the data layer until milestone P2 of `docs/POLTAVA_PORT_PLAN.md` replaces ZTOE/PowerOn with poe.pl.ua. Changed in P0: app name «Світло в Полтаві», application id `ua.blackout.prewarning.poltava` with its own signing key, version 1.0.0, Facebook link `facebook.com/atpoltavaoblenergo`, no roulette, archive `public/PoltavaBlackoutPreWarning.zip` built by `python scripts/build_android_zip.py`.
+
 **Current Release Version:** `v1.4.0` (`versionCode = (GITHUB_RUN_NUMBER ?: 300) + 300`, `applicationId = appPkgEnv ?: "com.ZTBlackoutPreWarning"`, Kotlin `namespace = "ua.blackout.prewarning"`)  
 **Repository:** `https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning`  
 **Data Source:** JSC "Zhytomyroblenergo" (`https://www.ztoe.com.ua/unhooking-search.php`)  

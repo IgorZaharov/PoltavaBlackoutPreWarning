@@ -4,9 +4,9 @@ export interface DonationLink {
 }
 
 export const GITHUB_DONATIONS_URL =
-  'https://raw.githubusercontent.com/IgorZaharov/Android-ZTBlackoutPreWarning/main/donations.json';
+  'https://raw.githubusercontent.com/IgorZaharov/PoltavaBlackoutPreWarning/main/donations.json';
 export const GITHUB_PUBLIC_DONATIONS_URL =
-  'https://raw.githubusercontent.com/IgorZaharov/Android-ZTBlackoutPreWarning/main/public/donations.json';
+  'https://raw.githubusercontent.com/IgorZaharov/PoltavaBlackoutPreWarning/main/public/donations.json';
 
 export const DONATIONS_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000; // 1 time per day (24 hours)
 

@@ -5,7 +5,7 @@ import { Language } from '../types';
 
 export const translations = {
   uk: {
-    appTitle: 'Світло в Житомирі',
+    appTitle: 'Світло в Полтаві',
     appSubtitle: 'Попередження про відключення світла',
     queue: 'Черга',
     queueShort: 'Ч',
@@ -126,7 +126,7 @@ export const translations = {
     aboutDonations: 'Charity / Благодійність і Пожертви',
     aboutGithubProfile: 'Мій головний GitHub профіль',
     aboutRepoIssues: 'Повідомити про помилку / Пропозиції (GitHub Issues)',
-    aboutDesktopRepo: 'Світло в Житомирі на Github',
+    aboutDesktopRepo: 'Світло в Полтаві на Github',
     aboutDisclaimer: 'Додаток використовує відкриті загальнодоступні дані офіційного веб-сайту ztoe.com.ua. Не є офіційним представником компанії.',
 
     // Widget
@@ -136,9 +136,9 @@ export const translations = {
     widgetSize3x2: 'Розширений 3x2 / 4x2',
     widgetSize4x1: 'Графік 4x1',
     widgetSizeAll: 'Усі три',
-    widgetStripName: 'Світло в Житомирі (Графік)',
-    widgetSmallName: 'Світло в Житомирі (Малий)',
-    widgetBigName: 'Світло в Житомирі (Великий)',
+    widgetStripName: 'Світло в Полтаві (Графік)',
+    widgetSmallName: 'Світло в Полтаві (Малий)',
+    widgetBigName: 'Світло в Полтаві (Великий)',
     widgetMuteAlerts: 'Вимкнути',
     widgetResumeAlerts: 'Увімкнути',
     widgetNextIn: 'Через',
@@ -269,7 +269,7 @@ export const translations = {
     pickerShowMore: 'Показати ще'
   },
   en: {
-    appTitle: 'Світло в Житомирі',
+    appTitle: 'Світло в Полтаві',
     appSubtitle: 'Power Outage Advance Warning Alert',
     queue: 'Queue',
     queueShort: 'Q',
@@ -391,7 +391,7 @@ export const translations = {
     aboutDonations: 'Charity / Благодійність і Пожертви',
     aboutGithubProfile: 'My Main GitHub Profile',
     aboutRepoIssues: 'Report Issues & Requests (GitHub Issues)',
-    aboutDesktopRepo: 'Світло в Житомирі на Github',
+    aboutDesktopRepo: 'Світло в Полтаві на Github',
     aboutDisclaimer: 'This application uses public schedule information from ztoe.com.ua. Not an official affiliate of the utility company.',
 
     // Widget
@@ -401,9 +401,9 @@ export const translations = {
     widgetSize3x2: 'Expanded 3x2 / 4x2',
     widgetSize4x1: 'Chart 4x1',
     widgetSizeAll: 'All three',
-    widgetStripName: 'Світло в Житомирі (Графік)',
-    widgetSmallName: 'Світло в Житомирі (Малий)',
-    widgetBigName: 'Світло в Житомирі (Великий)',
+    widgetStripName: 'Світло в Полтаві (Графік)',
+    widgetSmallName: 'Світло в Полтаві (Малий)',
+    widgetBigName: 'Світло в Полтаві (Великий)',
     widgetMuteAlerts: 'Mute',
     widgetResumeAlerts: 'Resume',
     widgetNextIn: 'In',

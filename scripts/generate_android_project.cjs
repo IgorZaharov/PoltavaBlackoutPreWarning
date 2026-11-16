@@ -57,11 +57,6 @@ const additionalFiles = [
     description: 'Main navigation pager with time-of-day dynamic background and top scrim',
   },
   {
-    path: 'app/src/main/java/ua/blackout/prewarning/ui/screens/ZhytomyrRouletteScreen.kt',
-    language: 'kotlin',
-    description: 'Zhytomyr Roulette mini-game dialog screen',
-  },
-  {
     path: 'app/src/main/java/ua/blackout/prewarning/ui/components/FloatingShadow.kt',
     language: 'kotlin',
     description: 'Custom drop-shadow extension modifier with Gaussian BlurMaskFilter',
@@ -108,7 +103,7 @@ if (entries.length > 0) {
 
   const tsOut = `/**
  * Complete Native Android (Kotlin + Jetpack Compose) Source Files
- * Ready for direct commit to https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning
+ * Ready for direct commit to https://github.com/IgorZaharov/PoltavaBlackoutPreWarning
  */
 
 export interface AndroidFile {
@@ -142,16 +137,16 @@ if (fs.existsSync(workflowSrc)) {
   fs.cpSync(workflowSrc, workflowDest, { recursive: true });
 }
 
-// Generate the zip file using python3 zipfile
-const publicDir = path.join(__dirname, '../public');
-fs.mkdirSync(publicDir, { recursive: true });
-
-try {
-  execSync(`python3 -c "
-import shutil
-shutil.make_archive('${publicDir}/Android-ZTBlackoutPreWarning', 'zip', '${androidDir}')
-"`, { stdio: 'inherit' });
-  console.log('Successfully generated /public/Android-ZTBlackoutPreWarning.zip');
-} catch (e) {
-  console.error('Failed to create zip:', e);
+// Generate the zip from the git-tracked files under android/ (no build outputs); python3 or python
+const zipScript = path.join(__dirname, 'build_android_zip.py');
+let zipped = false;
+for (const py of ['python3', 'python']) {
+  try {
+    execSync(`${py} "${zipScript}"`, { stdio: 'inherit', cwd: path.join(__dirname, '..') });
+    zipped = true;
+    break;
+  } catch (e) {
+    // try the next interpreter name
+  }
 }
+if (!zipped) console.error('Failed to create public/PoltavaBlackoutPreWarning.zip: no python3/python found');

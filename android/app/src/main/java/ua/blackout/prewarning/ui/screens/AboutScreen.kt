@@ -39,7 +39,6 @@ import ua.blackout.prewarning.ui.components.glassSurface
 @Composable
 fun AboutScreen(
     lang: String = "uk",
-    onOpenRoulette: (() -> Unit)? = null,
     /** Hoisted by the navigation: a double tap on this page's dock button scrolls it back to the top. */
     scrollState: ScrollState = rememberScrollState()
 ) {
@@ -50,9 +49,6 @@ fun AboutScreen(
     }
     var faviconBitmaps by remember {
         mutableStateOf<Map<String, Bitmap>>(emptyMap())
-    }
-    var showRouletteDialog by remember {
-        mutableStateOf(false)
     }
 
     val currentBuildVersion = remember {
@@ -67,7 +63,7 @@ fun AboutScreen(
         val resolved = when {
             !rawVersion.isNullOrBlank() && rawVersion.matches(semverRegex) -> rawVersion
             buildCfgVersion.matches(semverRegex) -> buildCfgVersion
-            else -> "1.4.0"
+            else -> "1.0.0"
         }
         "v$resolved"
     }
@@ -252,7 +248,7 @@ fun AboutScreen(
                     Icon(Icons.Default.OpenInNew, contentDescription = null, tint = Color(0x99BAE6FD), modifier = Modifier.size(16.dp))
                 }
 
-                // Link 2: Світло в Житомирі на Github
+                // Link 2: Світло в Полтаві на Github
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -281,7 +277,7 @@ fun AboutScreen(
                         }
                         Column {
                             Text(AppStrings.desktopApp(lang), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                            Text("github.com/IgorZaharov/Android-ZTBlackoutPreWarning/blob/main/README.md", fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = Color(0x99BAE6FD))
+                            Text("github.com/IgorZaharov/PoltavaBlackoutPreWarning/blob/main/README.md", fontSize = 10.sp, fontFamily = FontFamily.Monospace, color = Color(0x99BAE6FD))
                         }
                     }
                     Icon(Icons.Default.OpenInNew, contentDescription = null, tint = Color(0x99BAE6FD), modifier = Modifier.size(16.dp))
@@ -294,7 +290,7 @@ fun AboutScreen(
                         .clip(RoundedCornerShape(14.dp))
                         .background(Color(0x14FFFFFF))
                         .clickable {
-                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/IgorZaharov/Android-ZTBlackoutPreWarning/issues"))
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/IgorZaharov/PoltavaBlackoutPreWarning/issues"))
                             context.startActivity(intent)
                         }
                         .padding(12.dp),
@@ -400,36 +396,6 @@ fun AboutScreen(
                     }
                 }
             }
-        }
-
-        // Житомирська Рулетка Button (after Donations block)
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .glassSurface(RoundedCornerShape(24.dp), 24.dp)
-                .clickable {
-                    if (onOpenRoulette != null) {
-                        onOpenRoulette()
-                    } else {
-                        showRouletteDialog = true
-                    }
-                }
-                .padding(16.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = AppStrings.rouletteLaunchButton(lang),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFFFDE68A)
-            )
-        }
-
-        if (showRouletteDialog && onOpenRoulette == null) {
-            ZhytomyrRouletteDialog(
-                lang = lang,
-                onDismiss = { showRouletteDialog = false }
-            )
         }
 
         // 5. Disclaimer Card about ztoe.com.ua
