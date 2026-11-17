@@ -33,6 +33,13 @@ import ua.blackout.prewarning.ui.theme.ZtType
 import kotlin.math.floor
 import kotlin.math.sqrt
 
+// Current-time needle on every drum (main screen and widgets): bright yellow with a black outline.
+internal val NeedleColor = Color(0xFFFFE600)
+internal val NeedleOutline = Color(0xFF000000)
+private val NeedleOutlineWidth = 2.dp
+// The needle runs down to the bottom of the 5 dp hour tick marks right under the slot wrapper
+private val NeedleBelowSlot = 5.dp
+
 // Needle and track share one inset: 6 dp slot padding + 2 dp slot border.
 private val TrackInset = 8.dp
 private val HourGap = 1.5.dp
@@ -95,7 +102,7 @@ fun TimelineBar(
             .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 10.dp)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            // Wrapper with 4.dp top/bottom padding so the black needle protrudes 4.dp above and below the dark-grey contour
+            // Wrapper with 4.dp top/bottom padding so the needle protrudes 4.dp above and below the dark-grey contour
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -112,20 +119,23 @@ fun TimelineBar(
                             // Exact position inside the hour cell, so the 1.5 dp hour gaps do not skew the needle
                             val centerX = inset + hour * (hourW + gap) + minuteFraction * hourW
                             val needleW = 3.dp.toPx()
-                            val haloW = 4.5.dp.toPx()
+                            val outline = NeedleOutlineWidth.toPx()
+                            val outlineW = needleW + outline * 2f
+                            // 4.dp above the contour, and down past it to the bottom of the hour tick marks
+                            val bottom = size.height + NeedleBelowSlot.toPx()
 
-                            // Subtle light halo so the black needle stands out against both red and dark-grey edges
+                            // Bright yellow needle with a 2 dp black outline (owner, 2026-11-17: the black needle was
+                            // hard to see); drawn past this box, over the gap above the tick row
                             drawRoundRect(
-                                color = Color(0xD9FFFFFF),
-                                topLeft = Offset(centerX - haloW / 2f, 0f),
-                                size = Size(haloW, size.height),
-                                cornerRadius = CornerRadius(haloW / 2f, haloW / 2f)
+                                color = NeedleOutline,
+                                topLeft = Offset(centerX - outlineW / 2f, 0f),
+                                size = Size(outlineW, bottom),
+                                cornerRadius = CornerRadius(outlineW / 2f, outlineW / 2f)
                             )
-                            // Crisp black needle protruding 4.dp above and below the dark-grey contour
                             drawRoundRect(
-                                color = Color(0xFF0B0B0A),
-                                topLeft = Offset(centerX - needleW / 2f, 0f),
-                                size = Size(needleW, size.height),
+                                color = NeedleColor,
+                                topLeft = Offset(centerX - needleW / 2f, outline),
+                                size = Size(needleW, bottom - outline * 2f),
                                 cornerRadius = CornerRadius(needleW / 2f, needleW / 2f)
                             )
                         }

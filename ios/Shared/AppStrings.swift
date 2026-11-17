@@ -138,6 +138,7 @@ public enum AppStrings {
     public static func blackoutHoursForDayHeader(_ lang: String) -> String { lang == "uk" ? "Години відключень на сьогодні:" : "Blackout hours for today:" }
     public static func blackoutHoursForTomorrowHeader(_ lang: String) -> String { lang == "uk" ? "Години відключень на завтра:" : "Blackout hours for tomorrow:" }
     public static func selectQueueAction(_ lang: String) -> String { lang == "uk" ? "Виберіть чергу" : "Select queue" }
+    public static func firstStartTip(_ lang: String) -> String { lang == "uk" ? "Спробуйте вибрати будь-яку адресу або чергу" : "Try selecting any address or queue" }
     public static func emergencyOutageTitle(_ lang: String) -> String { lang == "uk" ? "Аварійне відключення!" : "Emergency outage!" }
     public static func emergencyStartLabel(_ lang: String) -> String { lang == "uk" ? "Початок:" : "Start:" }
     public static func emergencyRestoreLabel(_ lang: String) -> String { lang == "uk" ? "Орієнтовне відновлення:" : "Estimated restoration:" }

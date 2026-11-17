@@ -57,8 +57,8 @@ Needle (**Today only**, never on Tomorrow):
 | Property | Value |
 |---|---|
 | Position | `fraction = (hour*60 + minute) / 1440` (hour clamped 0..23, minute 0..59; seconds ignored); `x = 6 + (width - 12) * fraction` (6 = slot padding on each side) |
-| Body | 3 wide, rounded, `#0B0B0A`, full wrapper height (protrudes 4 above and below the slot) |
-| Halo | 4.5 wide, rounded, `#D9FFFFFF`, drawn first, behind the body |
+| Body | 3 wide, rounded, bright yellow `#FFE600`; from the top of the wrapper (4 above the slot) down to the bottom of the hour tick marks under the slot, less the outline |
+| Outline | 2 all round, black `#000000`: a rounded 7 wide bar, drawn first, behind the body (owner, 2026-11-17: the black needle with a light halo was hard to see; the outline 2 and the needle reaching the hour marks asked the same day). The same on the widget drums, where the needle runs down to the top of the hour labels (the 720 px widget bitmap uses a 5 px outline, about 2 dp); a tinted iOS widget keeps a plain white needle |
 | Refresh | when the minute changes |
 
 ## 4. From `DayView` to the screen

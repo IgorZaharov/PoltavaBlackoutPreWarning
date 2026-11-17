@@ -30,6 +30,8 @@ object AppStrings {
     fun blackoutHoursForDayHeader(lang: String) = if (lang == "uk") "Години відключень на сьогодні:" else "Blackout hours for today:"
     fun blackoutHoursForTomorrowHeader(lang: String) = if (lang == "uk") "Години відключень на завтра:" else "Blackout hours for tomorrow:"
     fun selectQueueAction(lang: String) = if (lang == "uk") "Виберіть чергу" else "Select queue"
+    /** Tip above the first-launch button, with an animated arrow pointing at it (owner, 2026-11-17). */
+    fun firstStartTip(lang: String) = if (lang == "uk") "Спробуйте вибрати будь-яку адресу або чергу" else "Try selecting any address or queue"
     fun emergencyOutageTitle(lang: String) = if (lang == "uk") "Аварійне відключення!" else "Emergency outage!"
     fun emergencyStartLabel(lang: String) = if (lang == "uk") "Початок:" else "Start:"
     fun emergencyRestoreLabel(lang: String) = if (lang == "uk") "Орієнтовне відновлення:" else "Estimated restoration:"

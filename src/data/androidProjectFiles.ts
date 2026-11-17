@@ -1560,22 +1560,22 @@ open class BlackoutGlanceWidget(private val forceBigLayout: Boolean = false) : G
                 paint.shader = null
             }
 
-            // 5. Black current-time needle (#0B0B0A) protruding above and below the dark-grey contour
+            // 5. Bright yellow current-time needle (#FFE600) with a black outline, from above the dark-grey contour
+            // down to the hour labels (owner, 2026-11-17: the black needle was hard to see; the 720 px bitmap is
+            // about 2.5 px per dp on the home screen, so the 5 px outline is 2 dp)
             val fraction = ((currentH.coerceIn(0, 23) * 60 + currentM.coerceIn(0, 59)) / 1440f).coerceIn(0f, 1f)
             val needleX = trackLeft + trackWidth * fraction
             val needleTop = contourTop - 8f
-            val needleBottom = contourBottom + 8f
+            val needleBottom = height - 36f // just above the hour labels (baseline height - 16)
 
-            // Subtle white halo around the black needle
+            val needleOutline = 5f
             paint.style = Paint.Style.FILL
-            paint.color = 0xD9FFFFFF.toInt()
+            paint.color = 0xFF000000.toInt()
             canvas.drawRoundRect(
-                RectF(needleX - 4.5f, needleTop, needleX + 4.5f, needleBottom),
-                4.5f, 4.5f, paint
+                RectF(needleX - 3f - needleOutline, needleTop - needleOutline, needleX + 3f + needleOutline, needleBottom + needleOutline),
+                3f + needleOutline, 3f + needleOutline, paint
             )
-
-            // Solid black needle
-            paint.color = 0xFF0B0B0A.toInt()
+            paint.color = 0xFFFFE600.toInt()
             canvas.drawRoundRect(
                 RectF(needleX - 3f, needleTop, needleX + 3f, needleBottom),
                 3f, 3f, paint
@@ -2403,6 +2403,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Alarm
+import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Notifications
@@ -2509,6 +2510,48 @@ private fun rememberAnimationsEnabled(): Boolean {
         } catch (_: Exception) {
             true
         }
+    }
+}
+
+/**
+ * Tip above the first-launch "Виберіть чергу" button: a line of text and an arrow nudging down at the button
+ * (owner, 2026-11-17). The arrow stands still when system animations are off; read in graphicsLayer, so only it redraws.
+ */
+@Composable
+private fun FirstStartTip(lang: String, modifier: Modifier = Modifier) {
+    val animate = rememberAnimationsEnabled()
+    val nudge: State<Float>? = if (animate) {
+        rememberInfiniteTransition(label = "tip").animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(700, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "tipNudge"
+        )
+    } else {
+        null
+    }
+    Column(
+        modifier = modifier.widthIn(max = 300.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(
+            text = AppStrings.firstStartTip(lang),
+            style = ZtType.body.copy(fontWeight = FontWeight.Bold),
+            color = Color.White,
+            textAlign = TextAlign.Center
+        )
+        Icon(
+            imageVector = Icons.Default.ArrowDownward,
+            contentDescription = null,
+            tint = ZtColors.Accent,
+            modifier = Modifier
+                .size(32.dp)
+                .graphicsLayer { translationY = (nudge?.value ?: 0f) * 8.dp.toPx() }
+        )
     }
 }
 
@@ -3053,6 +3096,7 @@ fun MainScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(24.dp)
                 ) {
+                    FirstStartTip(lang = lang, modifier = Modifier.offset(y = 12.dp))
                     Box(
                         modifier = Modifier
                             .defaultMinSize(minWidth = 260.dp, minHeight = ZtMinTouch)
@@ -5962,10 +6006,13 @@ private fun AddressLookupDialog(
         android:fillColor="#D62E26"
         android:pathData="M182,111 L238,111 L238,135 L182,135 Z" />
 
-    <!-- Black Current-Time Needle (#0B0B0A) -->
+    <!-- Bright yellow current-time needle (#FFE600) with a black outline -->
     <path
-        android:fillColor="#0B0B0A"
-        android:pathData="M146,105 L150,105 L150,141 L146,141 Z" />
+        android:fillColor="#000000"
+        android:pathData="M144,103 L152,103 L152,146 L144,146 Z" />
+    <path
+        android:fillColor="#FFE600"
+        android:pathData="M146,105 L150,105 L150,144 L146,144 Z" />
 
     <!-- Bottom Next Outage Bar -->
     <path
@@ -10307,13 +10354,13 @@ object OutageRowFormat {
         android:fillColor="#1C1B18"
         android:pathData="M24,63 L33,63 L33,68 L24,68 Z M88,63 L97,63 L97,68 L88,68 Z M156,63 L165,63 L165,68 L156,68 Z M224,63 L233,63 L233,68 L224,68 Z M287,63 L296,63 L296,68 L287,68 Z" />
 
-    <!-- Black current-time needle (#0B0B0A) with halo -->
+    <!-- Bright yellow current-time needle (#FFE600) with a black outline -->
     <path
-        android:fillColor="#D9FFFFFF"
-        android:pathData="M145,14 L151,14 L151,60 L145,60 Z" />
+        android:fillColor="#000000"
+        android:pathData="M144.5,12 L151.5,12 L151.5,64 L144.5,64 Z" />
     <path
-        android:fillColor="#0B0B0A"
-        android:pathData="M146.5,14 L149.5,14 L149.5,60 L146.5,60 Z" />
+        android:fillColor="#FFE600"
+        android:pathData="M146.5,14 L149.5,14 L149.5,62 L146.5,62 Z" />
     </group>
 </vector>
 `

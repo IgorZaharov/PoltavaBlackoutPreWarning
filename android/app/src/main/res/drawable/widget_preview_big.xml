@@ -82,10 +82,13 @@
         android:fillColor="#D62E26"
         android:pathData="M182,111 L238,111 L238,135 L182,135 Z" />
 
-    <!-- Black Current-Time Needle (#0B0B0A) -->
+    <!-- Bright yellow current-time needle (#FFE600) with a black outline -->
     <path
-        android:fillColor="#0B0B0A"
-        android:pathData="M146,105 L150,105 L150,141 L146,141 Z" />
+        android:fillColor="#000000"
+        android:pathData="M144,103 L152,103 L152,146 L144,146 Z" />
+    <path
+        android:fillColor="#FFE600"
+        android:pathData="M146,105 L150,105 L150,144 L146,144 Z" />
 
     <!-- Bottom Next Outage Bar -->
     <path
