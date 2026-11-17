@@ -79,7 +79,16 @@ class OutageStateStore(context: Context) {
 
     // --- planned repair works from PowerOn (per address) -----------------------------------------
 
-    fun repairs(addressKey: String): List<Outage> = readArray("repair_$addressKey") { o ->
+    fun repairs(addressKey: String): List<Outage> = readOutages("repair_$addressKey")
+
+    fun saveRepairs(addressKey: String, outages: List<Outage>) = writeOutages("repair_$addressKey", outages)
+
+    /** Registry rows (E5) naming the house, as REPAIR outages (PoeMapper.registryRepairs), per address. */
+    fun registryRepairs(addressKey: String): List<Outage> = readOutages("regrepair_$addressKey")
+
+    fun saveRegistryRepairs(addressKey: String, outages: List<Outage>) = writeOutages("regrepair_$addressKey", outages)
+
+    private fun readOutages(key: String): List<Outage> = readArray(key) { o ->
         Outage(
             id = o.getString("id"),
             kind = OutageKind.REPAIR,
@@ -89,8 +98,7 @@ class OutageStateStore(context: Context) {
         )
     }
 
-    fun saveRepairs(addressKey: String, outages: List<Outage>) {
-        val key = "repair_$addressKey"
+    private fun writeOutages(key: String, outages: List<Outage>) {
         if (outages.isEmpty()) {
             prefs.edit().remove(key).apply()
             return

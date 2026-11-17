@@ -325,6 +325,26 @@ object PoeMapper {
         return out.sortedWith(compareBy<NearbyOutage>({ it.status.ordinal }, { it.start }, { it.id }))
     }
 
+    /**
+     * Registry rows (8.7) that name the house itself ([registryMatch] CONFIRMED), as REPAIR outages of the
+     * address (owner, 2026-11-17: a repair or fault listed for the house must reach the drum, the list and
+     * the timer even when the per-house status says nothing). Rows without an end and ГПВ mirror rows are
+     * left out; a row naming only the street never becomes an outage (registry lists are incomplete).
+     */
+    fun registryRepairs(rows: List<RegistryRow>, settlement: String, street: String, house: String): List<Outage> {
+        if (street.isBlank() || house.isBlank()) return emptyList()
+        val out = LinkedHashMap<String, Outage>()
+        for (row in rows) {
+            if (row.kind == RegistryKind.MIRROR) continue
+            val end = row.end ?: continue
+            if (!end.isAfter(row.start)) continue
+            if (registryMatch(row.places, settlement, street, house) != Match.CONFIRMED) continue
+            val id = "registry_${row.start}_$end"
+            if (id !in out) out[id] = Outage(id = id, kind = OutageKind.REPAIR, start = row.start, end = end, label = LABEL_REPAIR)
+        }
+        return out.values.sortedBy { it.start }
+    }
+
     /** Does a registry row name the address? Registry house lists are incomplete, see section 6. */
     fun registryMatch(places: List<Place>, settlement: String, street: String, house: String): Match {
         val sk = settlementKey(settlement)

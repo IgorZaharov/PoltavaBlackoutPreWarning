@@ -240,11 +240,14 @@ object OutageEngine {
         val slots = (0 until OutageConfig.SLOTS_PER_DAY).map { i ->
             val s = dayStart.plusMinutes(i.toLong() * OutageConfig.SLOT_MINUTES)
             val e = s.plusMinutes(OutageConfig.SLOT_MINUTES.toLong())
-            val planned = relevant.any { it.isPlannedLike && it.start.isBefore(e) && it.end.isAfter(s) }
+            // Repair works (POE «планові роботи», registry rows naming the house) are drawn like emergencies
+            // (owner, 2026-11-17); they still alert like planned outages (planAlerts uses the kinds, not the cells)
+            val planned = relevant.any { it.kind == OutageKind.PLANNED && it.start.isBefore(e) && it.end.isAfter(s) }
             SlotState(
                 planned = planned,
-                emergency = relevant.any { it.kind == OutageKind.EMERGENCY && it.start.isBefore(e) && it.end.isAfter(s) },
-                switching = !planned && switching.any { it.start.isBefore(e) && it.end.isAfter(s) }
+                emergency = relevant.any { it.kind != OutageKind.PLANNED && it.start.isBefore(e) && it.end.isAfter(s) },
+                // planned outages and repair works both hide a switching half-hour (spec section 3.5)
+                switching = relevant.none { it.isPlannedLike && it.start.isBefore(e) && it.end.isAfter(s) } && switching.any { it.start.isBefore(e) && it.end.isAfter(s) }
             )
         }
 

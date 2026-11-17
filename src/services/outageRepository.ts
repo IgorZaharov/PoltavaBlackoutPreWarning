@@ -395,13 +395,33 @@ export class OutageRepository {
   }
 
   /**
+   * The registry rows of today that name each address's house, stored as its repair outages
+   * (PoeMapper.registryRepairs). An address whose registries have no answer of today keeps what it had.
+   */
+  private saveRegistryRepairs(addresses: readonly SelectedAddressQuery[], now: LocalDateTime): void {
+    const today = formatLocalDate(toLocalDate(now));
+    for (const address of addresses) {
+      const key = this.addressKey(address);
+      const settlement = this.address.settlement?.(address.settlementId);
+      if (key === null || !settlement) continue;
+      const caches = this.branchesOf(address)
+        .map((id) => [id, this.store.registry(id)] as const)
+        .filter((p): p is readonly [number, RegistryCache] => p[1] !== null && p[1].date === today);
+      if (caches.length === 0) continue;
+      const rows = caches.flatMap(([id, c]) => parsedRows(id, c));
+      const street = this.address.street(address.streetId)?.nameUk ?? '';
+      this.store.saveRegistryRepairs(key, PoeMapper.registryRepairs(rows, settlement.nameUk, street, address.house));
+    }
+  }
+
+  /**
    * Fetches the registry (E5) of every branch of [address]'s settlement, at most once per NEARBY_TTL_MS
    * unless [force]. A failure keeps the stored rows (spec/POE_API.md section 9).
    */
-  private async refreshNearby(address: SelectedAddressQuery | null, nowMs: number, force: boolean): Promise<void> {
+  private async refreshNearby(addresses: readonly SelectedAddressQuery[], nowMs: number, force: boolean): Promise<void> {
     const today = toLocalDate(fromInstant(nowMs));
     const day = formatLocalDate(today);
-    for (const id of this.branchesOf(address)) {
+    for (const id of [...new Set(addresses.flatMap((a) => this.branchesOf(a)))]) {
       const cached = this.store.registry(id);
       const age = nowMs - (cached?.fetchedMs ?? 0);
       if (!force && cached && cached.date === day && cached.lastOk && age >= 0 && age < NEARBY_TTL_MS) continue;
@@ -449,7 +469,9 @@ export class OutageRepository {
         : [];
     const emergencies = key !== null ? ledgerOutages(this.store.ledger(key), now) : [];
     const repairs = key !== null ? this.store.repairs(key) : [];
-    return inWindow([...planned, ...repairs, ...emergencies], today);
+    // registry rows naming the house, unless the per-house status already lists the same works
+    const listed = key !== null ? this.store.registryRepairs(key).filter((r) => !repairs.some((o) => o.start === r.start && o.end === r.end)) : [];
+    return inWindow([...planned, ...repairs, ...listed, ...emergencies], today);
   }
 
   /**
@@ -541,12 +563,23 @@ export class OutageRepository {
     const shownAddress = shownItem?.address
       ? { remId: shownItem.address.remSlug, settlementId: shownItem.address.settlementId, streetId: shownItem.address.streetId, house: shownItem.address.house }
       : null;
-    if (key !== null || shownAddress !== null) {
+    // The registries of every address's branches: their rows naming a house become its repair outages
+    const addresses: SelectedAddressQuery[] = [];
+    const addAddress = (a: SelectedAddressQuery | null | undefined) => {
+      if (a && !addresses.some((x) => x.settlementId === a.settlementId && x.streetId === a.streetId && x.house === a.house)) addresses.push(a);
+    };
+    addAddress(shownAddress);
+    addAddress(query);
+    for (const item of subs?.store.items ?? []) {
+      if (item.address) addAddress({ remId: item.address.remSlug, settlementId: item.address.settlementId, streetId: item.address.streetId, house: item.address.house });
+    }
+    if (addresses.length > 0) {
       try {
-        await this.refreshNearby(shownAddress ?? query ?? null, nowMs, forceNetwork);
+        await this.refreshNearby(addresses, nowMs, forceNetwork);
       } catch {
         // the card keeps its last rows
       }
+      this.saveRegistryRepairs(addresses, fromInstant(nowMs));
     }
     const primaryItem = subs ? subs.store.items.find((i) => i.id === subs.store.primaryId) ?? null : null;
     return {

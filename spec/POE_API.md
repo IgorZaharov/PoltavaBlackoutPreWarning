@@ -122,7 +122,7 @@ Reasons seen on 2026-11-16 (28 branches, 1 378 rows, 1.6 MB raw):
 **House lists are incomplete.** Зуївці 2026-11-16: the registry lists вул. Дружби 1, 9, 15, 17, 26, 28, but E4 reports the same emergency for вул. Дружби 3 (E4 resolves the house through its feeder). Therefore:
 
 - E4 is the **primary** emergency and repair source for an address;
-- E5 is a **fallback** (only while E4 is unavailable) and the source of the display-only «Ремонти й пошкодження поруч» card;
+- E5 is a **fallback** (only while E4 is unavailable), the source of the «Ремонти й пошкодження поруч» card, and of the repair outages of a house it names (8.10a);
 - an E5 row whose street matches but whose house list does not contain the house is a *possible* outage on the street, never a confirmed one and never "no outage" (`registryMatch`, section 8).
 
 ## 7. Active measures (E2)
@@ -209,7 +209,7 @@ Street names are compared with `streetKey(name)` = insert a space after a leadin
 
 ### 8.10 `nearbyOutages(rows, settlement, street, house, now) -> [NearbyOutage]`
 
-The card «Ремонти й пошкодження поруч» on the main screen (plan section 5.4, owner decision D9). It is display only: alerts, the timer and the ledger never read it. Input: the registry rows (8.7) of every branch of the address's settlement for today (rows of several branches may repeat), the address's settlement name, street name and house (street and house may be empty) and the current time.
+The card «Ремонти й пошкодження поруч» on the main screen (plan section 5.4, owner decision D9). The card itself is display only; rows that name the address's house also become its repair outages (8.10a). The ledger never reads the registry. Input: the registry rows (8.7) of every branch of the address's settlement for today (rows of several branches may repeat), the address's settlement name, street name and house (street and house may be empty) and the current time.
 
 1. Drop `MIRROR` rows. Keep a row only when one of its groups has `settlementKey(group.settlement) == settlementKey(settlement)`.
 2. `streets`: the streets of those groups, merged by `streetKey` in first-seen order. `name` = the first spelling with whitespace collapsed and trimmed. `houses` = the union of the house lists in first-seen order, each trimmed, duplicates by `HouseKey` dropped; it is empty (the whole street) when any merged entry has no house list. `mine` = street is not empty and `streetKey(name) == streetKey(street)`.
@@ -220,6 +220,16 @@ The card «Ремонти й пошкодження поруч» on the main scr
 7. Order: `ACTIVE`, then `UPCOMING`, then `FINISHED`; inside each by `start`, then `id`.
 
 Item fields: `id`, `kind` (`EMERGENCY` | `REPAIR`), `start`, `end` (null = open-ended), `reason`, `status`, `streets` (`[{name, houses[], mine}]`), `match`.
+
+## 8.10a Registry rows naming the house become repair outages
+
+Owner, 2026-11-17 (changes D9's "display only"): a registry row (8.7) of today whose house list names the address's house (`registryMatch` = CONFIRMED) becomes a `REPAIR` outage of that address, whatever its reason (planned or «пошкодження»), so it reaches the drum (amber stripes, `OUTAGE_ENGINE.md` 2), the list of hours, the timer and the planned-style pre-warning. `registryRepairs(rows, settlement, street, house)`:
+- ГПВ mirror rows, rows without an end and rows naming only the street give nothing (registry house lists are incomplete, section 6);
+- id `registry_<start>_<end>`, label `Планові роботи`; the same row from several branches is one outage;
+- the apps store them per address key after each registry refresh of the address's branches (every address subscription, not only the one shown); an address whose registries have no answer of today keeps what it had;
+- an E4 repair with the same start and end wins (no duplicate row). They never feed the emergency ledger, so they send no START or END.
+
+Vectors: `poe_api.json` `registryRepairs`.
 
 ## 8.11 Queue catalogue from the hourly-schedule PDF (`poe_queues.json`)
 

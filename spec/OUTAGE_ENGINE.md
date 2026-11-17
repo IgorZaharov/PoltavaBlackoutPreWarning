@@ -25,7 +25,7 @@ Constants: see `spec/config.json` (`grid`, `outage`).
 | `IntervalStatus` | `FINISHED`, `ACTIVE`, `UPCOMING`, `OVERDUE` | Derived by `statusAt(now)`, see below. |
 | `EmergencyRecord` | `id`, `start`, `estimatedEnd?`, `closedAt?`, `label?` | One emergency as seen on PowerOn or restored from the ledger. `closedAt` is set only by the ledger. |
 | `Span` | `start`, `end`, `mayContinue`, `kinds: set<kind>` | Maximal union of touching or overlapping outages. |
-| `SlotState` | `planned`, `emergency`, `switching = false`; derived `off = planned or emergency` | One drum cell. `planned` is true for `PLANNED` and `REPAIR` outages. `switching` (POE only, section 3.5) never counts as off. |
+| `SlotState` | `planned`, `emergency`, `switching = false`; derived `off = planned or emergency` | One drum cell. `planned` is true for `PLANNED` outages only; `emergency` is true for `EMERGENCY` and `REPAIR` outages (owner, 2026-11-17: repair works and faults are drawn like emergencies, amber stripes). A switching half-hour is hidden by `PLANNED` and `REPAIR` alike. Alerts still treat `REPAIR` as planned-like (section 6), they read the outages, not the cells. `switching` (POE only, section 3.5) never counts as off. |
 | `ScheduleCell` | `ON`, `OFF`, `SWITCHING` | One cell of a POE day table (section 3.5). |
 | `SwitchWindow` | `start`, `end` | A run of `SWITCHING` cells (section 3.5). |
 | `DayRow` | `outage`, `from`, `to`, `status`, `continuesFromPrevDay`, `continuesToNextDay`, `durationMinutes`, `inDayMinutes` | One outage clipped to one day. |

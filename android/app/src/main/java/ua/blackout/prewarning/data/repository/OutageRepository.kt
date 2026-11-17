@@ -264,12 +264,28 @@ class OutageRepository(context: Context) {
     }
 
     /**
+     * The registry rows of today that name each address's house, stored as its repair outages
+     * ([PoeMapper.registryRepairs]). An address whose registries have no answer of today keeps what it had.
+     */
+    private fun saveRegistryRepairs(addresses: List<SelectedAddressQuery>, now: LocalDateTime) {
+        for (address in addresses) {
+            val key = addressKey(address) ?: continue
+            val settlement = PoeAddressLookup.findSettlementById(address.settlementId) ?: continue
+            val caches = branchesOf(address).mapNotNull { id -> store.registry(id)?.takeIf { it.date == now.toLocalDate() }?.let { id to it } }
+            if (caches.isEmpty()) continue
+            val rows = caches.flatMap { (id, c) -> parsedRows(id, c) }
+            val street = PoeAddressLookup.findStreetById(address.streetId)?.nameUk.orEmpty()
+            store.saveRegistryRepairs(key, PoeMapper.registryRepairs(rows, settlement.nameUk, street, address.house))
+        }
+    }
+
+    /**
      * Fetches the registry (E5) of every branch of [address]'s settlement, at most once per
      * [NEARBY_TTL_MS] unless [force]. A failure keeps the stored rows (spec/POE_API.md section 9).
      */
-    private fun refreshNearby(address: SelectedAddressQuery?, nowMs: Long, force: Boolean) {
+    private fun refreshNearby(addresses: List<SelectedAddressQuery>, nowMs: Long, force: Boolean) {
         val today = LocalDate.now(KYIV_ZONE)
-        for (id in branchesOf(address)) {
+        for (id in addresses.flatMap { branchesOf(it) }.distinct()) {
             val cached = store.registry(id)
             if (!force && cached != null && cached.date == today && cached.lastOk && nowMs - cached.fetchedMs in 0 until NEARBY_TTL_MS) continue
             when (val r = runCatching { client.registry(id, today) }.getOrNull()) {
@@ -293,7 +309,13 @@ class OutageRepository(context: Context) {
         }
         val emergencies = if (key != null) EmergencyLedger.outages(store.ledger(key), now) else emptyList()
         val repairs = if (key != null) store.repairs(key) else emptyList()
-        return OutageEngine.inWindow(planned + repairs + emergencies, today)
+        // registry rows naming the house, unless the per-house status already lists the same works
+        val listed = if (key != null) {
+            store.registryRepairs(key).filter { r -> repairs.none { it.start == r.start && it.end == r.end } }
+        } else {
+            emptyList()
+        }
+        return OutageEngine.inWindow(planned + repairs + listed + emergencies, today)
     }
 
     /**
@@ -366,7 +388,14 @@ class OutageRepository(context: Context) {
         // The nearby outages card of the address the main screen shows (the primary unless another is shown)
         val shown = subs?.first?.items?.firstOrNull { it.id == shownId && it.id != subs.first.primaryId }?.address
         val nearbyAddress = shown?.let { SelectedAddressQuery(it.remSlug, it.settlementId, it.streetId, it.house) } ?: query
-        if (key != null || shown != null) runCatching { refreshNearby(nearbyAddress, nowMs, forceNetwork) }
+        // The registries of every address's branches: their rows naming a house become its repair outages
+        val addresses = (listOfNotNull(nearbyAddress, query) + subs?.first?.items.orEmpty().mapNotNull { item ->
+            item.address?.let { SelectedAddressQuery(it.remSlug, it.settlementId, it.streetId, it.house) }
+        }).distinct()
+        if (addresses.isNotEmpty()) {
+            runCatching { refreshNearby(addresses, nowMs, forceNetwork) }
+            runCatching { saveRegistryRepairs(addresses, LocalDateTime.now(KYIV_ZONE)) }
+        }
         val current = if (queueChanged) runCatching { SettingsRepository(appContext).getSettings() }.getOrDefault(settings) else settings
         // The hourly-schedule catalogue from this repository's CI, at most once a week (spec/POE_API.md 8.11), last
         runCatching { PoeQueues.refreshIfDue(appContext) }

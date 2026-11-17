@@ -182,6 +182,23 @@ poe = {
         {"name": "constructed: another settlement, a mirror only and nothing at all give no items",
          "rows": [MIRROR_ROW, ZUIVTSI_ROW], "settlement": "село Хомутець", "street": "вул. Дружби", "house": "9", "now": "2026-11-16T12:00", "expect": []},
     ],
+    # Registry rows naming the house become its REPAIR outages (owner, 2026-11-17; spec/POE_API.md 8.10a)
+    "registryRepairs": [
+        {"name": "live: the listed house gets the planned row as repair works",
+         "rows": [POLTAVA_ROW, MIRROR_ROW], "settlement": "місто Полтава", "street": "вул. Олександра Бідного", "house": "5",
+         "expect": [{"id": "registry_2026-11-16T09:25_2026-11-16T16:00", "start": "2026-11-16T09:25", "end": "2026-11-16T16:00"}]},
+        {"name": "live: an emergency row naming the house is a repair outage too; the same row from two branches is one",
+         "rows": [ZUIVTSI_ROW, ZUIVTSI_ROW], "settlement": "село Зуївці", "street": "вул. Дружби", "house": "9",
+         "expect": [{"id": "registry_2026-11-16T08:59_2026-11-16T15:59", "start": "2026-11-16T08:59", "end": "2026-11-16T15:59"}]},
+        {"name": "live: street listed but not the house gives nothing (registry lists are incomplete)",
+         "rows": [ZUIVTSI_ROW], "settlement": "село Зуївці", "street": "вул. Дружби", "house": "3", "expect": []},
+        {"name": "live: a schedule mirror row naming the house gives nothing",
+         "rows": [MIRROR_ROW], "settlement": "місто Полтава", "street": "вул. Героїв ОУН", "house": "37а", "expect": []},
+        {"name": "constructed: a row without an end gives nothing",
+         "rows": [ENTITY_ROW], "settlement": "село Нижні Млини", "street": "вул. Дем'яна Бідного", "house": "4", "expect": []},
+        {"name": "queue-only subscription (no street, no house): nothing",
+         "rows": [POLTAVA_ROW], "settlement": "місто Полтава", "street": "", "house": "", "expect": []},
+    ],
 }
 
 # ---------------------------------------------------------------- outage_engine_poe.json
@@ -238,9 +255,10 @@ engine = {
                         {"start": f"{D}T16:00", "end": f"{D}T19:00", "mayContinue": False},
                         {"start": f"{D}T22:00", "end": "2026-11-17T00:00", "mayContinue": True}],
                     "alerts": [a16, a22],
-                    "days": {D: {"plannedCells": ["04:00-08:00", "10:00-13:00", "16:00-19:00", "22:00-24:00"],
+                    # repair works are drawn like emergencies (owner, 2026-11-17), so 07:00-08:00 is an emergency cell
+                    "days": {D: {"plannedCells": ["04:00-07:00", "10:00-13:00", "16:00-19:00", "22:00-24:00"],
                                  "switchingCells": ["00:00-00:30", "13:00-13:30", "19:00-19:30"],
-                                 "emergencyCells": ["13:00-13:30"], "totalOffMinutes": 740}}}},
+                                 "emergencyCells": ["07:00-08:00", "13:00-13:30"], "totalOffMinutes": 740}}}},
         {"name": "no table known: no outages, no switching",
          "today": D, "now": f"{D}T12:00", "advanceMinutes": 15, "cells": {"today": None, "tomorrow": None},
          "expect": {"status": {"isOffNow": False, "countdownText": "--:--:--", "nextSlotTime": "Відключень немає", "restoreUntil": None},

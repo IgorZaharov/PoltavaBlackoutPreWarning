@@ -185,14 +185,14 @@
       }
     },
     {
-      "name": "repair works tomorrow count as planned: listed on tomorrow, one alert",
+      "name": "repair works tomorrow alert like planned, drawn like an emergency: listed on tomorrow, one alert",
       "today": "2026-11-13", "now": "2026-11-13T18:00", "advanceMinutes": 15,
       "planned": { "today": [] },
       "repair": [ { "id": "repair_2026-11-14T08:00", "start": "2026-11-14T08:00", "end": "2026-11-14T17:00" } ],
       "expect": {
         "status": { "isOffNow": false, "countdownText": "14:00:00", "nextSlotTime": "08:00 – 17:00" },
         "alerts": [ { "key": "planned_2026-11-14T08:00", "fireAt": "2026-11-14T07:45", "spanEnd": "2026-11-14T17:00", "durationMinutes": 540 } ],
-        "days": { "2026-11-14": { "totalOffMinutes": 540, "plannedCells": ["08:00-17:00"], "emergencyCells": [],
+        "days": { "2026-11-14": { "totalOffMinutes": 540, "plannedCells": [], "emergencyCells": ["08:00-17:00"],
           "rows": [ { "kind": "REPAIR", "from": "2026-11-14T08:00", "to": "2026-11-14T17:00", "status": "UPCOMING", "durationMinutes": 540, "inDayMinutes": 540 } ] } }
       }
     },

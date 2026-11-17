@@ -302,7 +302,7 @@ function poeApiVectors(): number {
   const v: Json = load('poe_api.json');
   const counts: [string, number][] = [
     ['times', 10], ['eta', 7], ['plannedList', 5], ['queue', 8],
-    ['addressStatus', 12], ['registryReason', 6], ['registryRows', 6], ['registryMatch', 9], ['nearby', 6],
+    ['addressStatus', 12], ['registryReason', 6], ['registryRows', 6], ['registryMatch', 9], ['nearby', 6], ['registryRepairs', 6],
   ];
   for (const [key, min] of counts) assert.ok((v[key] as Json[]).length >= min, `poe_api.json: ${key} must hold at least ${min} cases`);
   let checks = 0;
@@ -393,7 +393,14 @@ function poeApiVectors(): number {
     }));
     assert.deepEqual(got, c.expect, `nearby: ${c.name}`);
     checks++;
+  }  for (const c of v.registryRepairs as Json[]) {
+    const rows = (c.rows as string[]).map((r) => PoeMapper.parseRegistryRow(r)!);
+    const got = PoeMapper.registryRepairs(rows, c.settlement, c.street, c.house);
+    assert.ok(got.every((o) => o.kind === 'REPAIR'), `registryRepairs: ${c.name}: kind`);
+    assert.deepEqual(got.map((o) => ({ id: o.id, start: formatLocalDateTime(o.start), end: formatLocalDateTime(o.end) })), c.expect, `registryRepairs: ${c.name}`);
+    checks++;
   }
+
   return checks;
 }
 

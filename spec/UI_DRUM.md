@@ -6,7 +6,7 @@ Status of this document: describes the code as it is. Since P4 of the Poltava po
 
 ## 1. Cell states
 
-Input per cell: `SlotState(planned, emergency, switching)` from `dayView` (`planned` is true for `PLANNED` and `REPAIR`; `switching` only for POE tables, `OUTAGE_ENGINE.md` section 3.5, and never together with `planned`). Mapping:
+Input per cell: `SlotState(planned, emergency, switching)` from `dayView` (`planned` is true for `PLANNED` only, `emergency` for `EMERGENCY` and `REPAIR`: repair works are drawn with the amber stripes, owner 2026-11-17; `switching` only for POE tables, `OUTAGE_ENGINE.md` section 3.5, and never together with `planned`). Mapping:
 
 | `planned` | `emergency` | State | Look |
 |---|---|---|---|
@@ -32,7 +32,7 @@ An emergency takes only the **bottom half** of its cells, so the planned state b
 
 Implementation note (not in the plan): anchor the stripe phase to the drum, not to each cell, so adjacent emergency cells form continuous stripes.
 
-**Unclear day** (Tomorrow before ztoe publishes, or Today with no valid cache): all 48 cells use the grey style; PowerOn outages already known for that day (emergency, repair) are still drawn on top with their normal states (`REPAIR` as planned crimson, emergency as amber stripes). The explanation lives in a glass notice card under the tabs (`SITE_STATE.md` section 7), not inside the bar. Legacy behaviour of `TimelineBar.kt`: when the slot list is empty the whole bar becomes one grey block 32 dp high with the centred label `outagesUnclear` (`Графіки не діють` / `Outages unclear`, 12 sp, ExtraBold, white).
+**Unclear day** (Tomorrow before ztoe publishes, or Today with no valid cache): all 48 cells use the grey style; PowerOn outages already known for that day (emergency, repair) are still drawn on top with their normal states (`REPAIR` and emergency both as amber stripes). The explanation lives in a glass notice card under the tabs (`SITE_STATE.md` section 7), not inside the bar. Legacy behaviour of `TimelineBar.kt`: when the slot list is empty the whole bar becomes one grey block 32 dp high with the centred label `outagesUnclear` (`Графіки не діють` / `Outages unclear`, 12 sp, ExtraBold, white).
 
 ## 2. Geometry and chrome (as in `TimelineBar.kt`)
 

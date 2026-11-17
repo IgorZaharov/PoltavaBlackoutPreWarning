@@ -96,7 +96,7 @@ class PoeVectorsTest {
         val v = load("poe_api.json")
         mapOf(
             "times" to 10, "eta" to 7, "plannedList" to 5, "queue" to 8,
-            "addressStatus" to 12, "registryReason" to 6, "registryRows" to 6, "registryMatch" to 9, "nearby" to 6
+            "addressStatus" to 12, "registryReason" to 6, "registryRows" to 6, "registryMatch" to 9, "nearby" to 6, "registryRepairs" to 6
         ).forEach { (key, min) -> assertTrue("poe_api.json: $key must hold at least $min cases", v.getJSONArray(key).length() >= min) }
 
         for (t in v.getJSONArray("times").objects()) {
@@ -186,6 +186,15 @@ class PoeVectorsTest {
                     .put("match", n.match.name)
             })
             assertEquals("nearby: $name", canon(c.getJSONArray("expect")), canon(got))
+        }
+        for (c in v.getJSONArray("registryRepairs").objects()) {
+            val name = c.getString("name")
+            val rowsJson = c.getJSONArray("rows")
+            val rows = (0 until rowsJson.length()).map { PoeMapper.parseRegistryRow(rowsJson.getString(it))!! }
+            val got = PoeMapper.registryRepairs(rows, c.getString("settlement"), c.getString("street"), c.getString("house"))
+            assertTrue("registryRepairs: $name: kind", got.all { it.kind == OutageKind.REPAIR })
+            val json = JSONArray(got.map { JSONObject().put("id", it.id).put("start", it.start.toString()).put("end", it.end.toString()) })
+            assertEquals("registryRepairs: $name", canon(c.getJSONArray("expect")), canon(json))
         }
     }
 

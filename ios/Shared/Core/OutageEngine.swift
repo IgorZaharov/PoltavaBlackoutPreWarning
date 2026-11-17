@@ -166,8 +166,9 @@ public enum OutageEngine {
             let s = dayStart.plusMinutes(i * OutageConfig.SLOT_MINUTES)
             let e = s.plusMinutes(OutageConfig.SLOT_MINUTES)
             return SlotState(
-                planned: relevant.contains { $0.isPlannedLike && $0.start.isBefore(e) && $0.end.isAfter(s) },
-                emergency: relevant.contains { $0.kind == .EMERGENCY && $0.start.isBefore(e) && $0.end.isAfter(s) }
+                // repair works are drawn like emergencies (owner, 2026-11-17); they still alert like planned outages
+                planned: relevant.contains { $0.kind == .PLANNED && $0.start.isBefore(e) && $0.end.isAfter(s) },
+                emergency: relevant.contains { $0.kind != .PLANNED && $0.start.isBefore(e) && $0.end.isAfter(s) }
             )
         }
 

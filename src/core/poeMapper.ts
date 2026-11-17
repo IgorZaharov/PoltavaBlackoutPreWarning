@@ -289,6 +289,24 @@ export function streetKey(name: string): string {
 }
 
 /** Does a registry row name the address? Registry house lists are incomplete, see section 6. */
+/**
+ * Registry rows (8.7) that name the house itself (registryMatch CONFIRMED), as REPAIR outages of the
+ * address (owner, 2026-11-17: a repair or fault listed for the house must reach the drum, the list and the
+ * timer even when the per-house status says nothing). Rows without an end and ГПВ mirror rows are left out;
+ * a row naming only the street never becomes an outage (registry lists are incomplete).
+ */
+export function registryRepairs(rows: readonly RegistryRow[], settlement: string, street: string, house: string): Outage[] {
+  if (street.trim() === '' || house.trim() === '') return [];
+  const out = new Map<string, Outage>();
+  for (const row of rows) {
+    if (row.kind === 'MIRROR' || row.end === null || !(row.end > row.start)) continue;
+    if (registryMatch(row.places, settlement, street, house) !== 'CONFIRMED') continue;
+    const id = `registry_${formatLocalDateTime(row.start)}_${formatLocalDateTime(row.end)}`;
+    if (!out.has(id)) out.set(id, makeOutage({ id, kind: 'REPAIR', start: row.start, end: row.end, label: LABEL_REPAIR }));
+  }
+  return [...out.values()].sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0));
+}
+
 export function registryMatch(places: readonly Place[], settlement: string, street: string, house: string): RegistryMatch {
   const sk = settlementKey(settlement);
   const stk = streetKey(street);
@@ -389,5 +407,6 @@ export const PoeMapper = {
   settlementKey,
   streetKey,
   registryMatch,
+  registryRepairs,
   nearbyOutages,
 } as const;

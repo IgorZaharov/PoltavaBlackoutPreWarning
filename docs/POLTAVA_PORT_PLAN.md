@@ -342,7 +342,7 @@ New card on the **main screen, directly above the timer (hero countdown) card**.
 
 - **Data:** E5 rows of the active address's branch for today, filtered to the address's settlement; ГПВ mirror rows dropped. One branch request (about 50 KB gzipped) per refresh, cached with the snapshot; a failed fetch keeps the last list and shows its time.
 - **Content:** one row per outage: kind chip (**пошкодження** = `Аварійна перерва`, red; **планова** = `Планова перерва` or empty reason, grey), time range, status (зараз / о HH:MM / завершено), duration, street names. Tapping a row expands it to the streets with their house lists (settlement → street chips with houses), as on online.poltava.ua.
-- **The user's street** is highlighted; if their house is in the list, the row says so. The card stays **display-only**: alerts and the timer come from E4 (section 5.1), because registry lists are incomplete (section 3.4).
+- **The user's street** is highlighted; if their house is in the list, the row says so. The card stays display-only for rows that only name the street. Owner, 2026-11-17: a row whose house list names the user's house becomes a repair outage of the address (drum, list, timer, pre-warning; `spec/POE_API.md` 8.10a), and repair works are drawn with the emergency amber stripes.
 - **Empty state:** the card is hidden when the settlement has no rows today; queue-only subscriptions (no address) do not show it.
 - **Parity:** same card in the web simulator (`MainView.tsx`) and iOS (`MainScreen.swift`); its strings go into `AppStrings.kt` first.
 

@@ -119,7 +119,24 @@ export class OutageStateStore {
   // --- planned repair works from PowerOn (per address) -----------------------------------------
 
   repairs(addressKey: string): Outage[] {
-    return this.readArray(`repair_${addressKey}`, (o) =>
+    return this.readOutages(`repair_${addressKey}`);
+  }
+
+  saveRepairs(addressKey: string, outages: readonly Outage[]): void {
+    this.writeOutages(`repair_${addressKey}`, outages);
+  }
+
+  /** Registry rows (E5) naming the house, as REPAIR outages (PoeMapper.registryRepairs), per address. */
+  registryRepairs(addressKey: string): Outage[] {
+    return this.readOutages(`regrepair_${addressKey}`);
+  }
+
+  saveRegistryRepairs(addressKey: string, outages: readonly Outage[]): void {
+    this.writeOutages(`regrepair_${addressKey}`, outages);
+  }
+
+  private readOutages(key: string): Outage[] {
+    return this.readArray(key, (o) =>
       makeOutage({
         id: reqStr(o.id),
         kind: 'REPAIR',
@@ -130,8 +147,7 @@ export class OutageStateStore {
     );
   }
 
-  saveRepairs(addressKey: string, outages: readonly Outage[]): void {
-    const key = `repair_${addressKey}`;
+  private writeOutages(key: string, outages: readonly Outage[]): void {
     if (outages.length === 0) {
       this.prefs.edit({ [key]: undefined });
       return;
