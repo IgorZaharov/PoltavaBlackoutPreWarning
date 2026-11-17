@@ -105,13 +105,16 @@ const SwitchRow: React.FC<{
   testId: string;
   rowTestId?: string;
   titleClassName?: string;
-}> = ({ icon, title, hint, checked, enabled = true, onToggle, testId, rowTestId, titleClassName = '' }) => (
+  /** Marks the switch for the first-run tour (CoachTour). */
+  tour?: string;
+}> = ({ icon, title, hint, checked, enabled = true, onToggle, testId, rowTestId, titleClassName = '', tour }) => (
   <button
     type="button"
     role="switch"
     aria-checked={checked}
     aria-disabled={!enabled}
     data-testid={testId}
+    data-tour={tour}
     disabled={!enabled}
     onClick={onToggle}
     className={`flex min-h-12 w-full items-center gap-3 text-left ${enabled ? 'cursor-pointer' : 'cursor-not-allowed'}`}
@@ -437,6 +440,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <button
                   type="button"
                   aria-label={`${t.renameAddress}: ${label}`}
+                  data-tour={index === 0 ? 'rename' : undefined}
                   onClick={() => {
                     setRenameText(item.label);
                     setRenameCandidate(item);
@@ -469,6 +473,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 enabled={alertsMaster && item.queue !== null}
                 onToggle={() => applySync(sync.change(settings, (st) => setPlanned(st, item.id, !item.plannedAlerts)))}
                 testId={`ios-switch-planned-${item.id}`}
+                tour={index === 0 ? 'alert-planned' : undefined}
               />
               <SwitchRow
                 icon={<AlertTriangle className="h-5 w-5 text-[#FF5E3A]" />}
@@ -478,6 +483,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 enabled={alertsMaster && item.address !== null}
                 onToggle={() => applySync(sync.change(settings, (st) => setEmergency(st, item.id, !item.emergencyAlerts)))}
                 testId={`ios-switch-emergency-${item.id}`}
+                tour={index === 0 ? 'alert-emergency' : undefined}
                 titleClassName="break-words leading-snug"
               />
               {!isPrimary && (

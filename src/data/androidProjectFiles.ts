@@ -3833,6 +3833,19 @@ import ua.blackout.prewarning.ui.AppStrings
 import ua.blackout.prewarning.ui.components.spinWhile
 import ua.blackout.prewarning.ui.components.GlassCard
 import ua.blackout.prewarning.ui.components.PickerItem
+import ua.blackout.prewarning.ui.components.CoachOverlay
+import ua.blackout.prewarning.ui.components.CoachTargets
+import ua.blackout.prewarning.ui.components.CoachTip
+import ua.blackout.prewarning.ui.components.LocalCoachTargets
+import ua.blackout.prewarning.ui.components.OnboardingTour
+import ua.blackout.prewarning.ui.components.TourInput
+import ua.blackout.prewarning.ui.components.TourPage
+import ua.blackout.prewarning.ui.components.TourStep
+import ua.blackout.prewarning.ui.components.coachTarget
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import ua.blackout.prewarning.ui.components.PickerSearch
 import ua.blackout.prewarning.ui.components.SearchablePickerField
 import ua.blackout.prewarning.ui.components.glassFieldColors
@@ -3881,6 +3894,11 @@ fun SettingsScreen(
     lang: String = "uk",
     autoOpenQueueHelp: Boolean = false,
     onAutoOpenQueueHelpHandled: () -> Unit = {},
+    /** First-run tour (spec/ONBOARDING.md): the lookup dialog shows its PICK / APPLY steps. */
+    tourActive: Boolean = false,
+    onTourSkip: () -> Unit = {},
+    /** The rename dialog was closed (saved or cancelled): the tour goes on from RENAME to ALERTS. */
+    onRenameDialogClosed: () -> Unit = {},
     onAddAddress: (
         queue: String,
         statusText: String?,
@@ -3925,6 +3943,15 @@ fun SettingsScreen(
     var showResetConfirmDialog by remember { mutableStateOf(false) }
     var removeCandidate by remember { mutableStateOf<Subscription?>(null) }
     var renameCandidate by remember { mutableStateOf<Subscription?>(null) }
+    var renameWasOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(renameCandidate) {
+        if (renameCandidate != null) {
+            renameWasOpen = true
+        } else if (renameWasOpen) {
+            renameWasOpen = false
+            onRenameDialogClosed()
+        }
+    }
 
     LaunchedEffect(autoOpenQueueHelp) {
         if (autoOpenQueueHelp) {
@@ -4331,7 +4358,9 @@ fun SettingsScreen(
                 onAddCompany(queue, label)
                 showQueueHelpDialog = false
             },
-            onShowAppBanner = onShowAppBanner
+            onShowAppBanner = onShowAppBanner,
+            tourActive = tourActive,
+            onTourSkip = onTourSkip
         )
     }
 
@@ -4639,6 +4668,8 @@ private fun SubscriptionBlock(
     onSetEmergency: (Boolean) -> Unit,
     /** Gesture and accessibility actions of the reorder handle; null hides it (one address). */
     dragHandle: Modifier? = null,
+    /** The first block marks its rename button and alert switches for the first-run tour. */
+    tourTargets: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val shape = RoundedCornerShape(16.dp)
@@ -4687,7 +4718,12 @@ private fun SubscriptionBlock(
                     )
                 }
             }
-            IconTile(icon = Icons.Default.Edit, description = "\${AppStrings.renameAddress(lang)}: $label", onClick = onRename)
+            IconTile(
+                icon = Icons.Default.Edit,
+                description = "\${AppStrings.renameAddress(lang)}: $label",
+                onClick = onRename,
+                modifier = if (tourTargets) Modifier.coachTarget("rename") else Modifier
+            )
             IconTile(icon = Icons.Default.Delete, description = "\${AppStrings.removeAddress(lang)}: $label", onClick = onRemove, danger = true)
         }
         Text(text = label, style = ZtType.subhead, color = Color.White)
@@ -4703,7 +4739,8 @@ private fun SubscriptionBlock(
             checked = alertsMaster && item.plannedAlerts,
             onCheckedChange = onSetPlanned,
             lang = lang,
-            enabled = alertsMaster && item.queue != null
+            enabled = alertsMaster && item.queue != null,
+            modifier = if (tourTargets) Modifier.coachTarget("alert-planned") else Modifier
         )
         SwitchRow(
             icon = Icons.Default.Warning,
@@ -4713,7 +4750,8 @@ private fun SubscriptionBlock(
             checked = alertsMaster && item.emergencyAlerts && item.address != null,
             onCheckedChange = onSetEmergency,
             lang = lang,
-            enabled = alertsMaster && item.address != null
+            enabled = alertsMaster && item.address != null,
+            modifier = if (tourTargets) Modifier.coachTarget("alert-emergency") else Modifier
         )
         if (!isPrimary) {
             ActionButton(
@@ -4729,9 +4767,9 @@ private fun SubscriptionBlock(
 
 /** 48 dp touch target around a 36 dp icon tile. */
 @Composable
-private fun IconTile(icon: ImageVector, description: String, onClick: () -> Unit, danger: Boolean = false) {
+private fun IconTile(icon: ImageVector, description: String, onClick: () -> Unit, danger: Boolean = false, modifier: Modifier = Modifier) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .size(ZtMinTouch)
             .clickable(role = Role.Button, onClick = onClick)
             .semantics { contentDescription = description },
@@ -4792,11 +4830,12 @@ private fun SwitchRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     lang: String,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    modifier: Modifier = Modifier
 ) {
     val stateText = if (checked) AppStrings.switchOn(lang) else AppStrings.switchOff(lang)
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .heightIn(min = ZtMinTouch)
             .toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange)
@@ -4943,6 +4982,7 @@ private class LevelState {
 // =============================================================================================
 
 @Composable
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 private fun AddressLookupDialog(
     siteUrl: String,
     lang: String,
@@ -4950,8 +4990,14 @@ private fun AddressLookupDialog(
     onDismiss: () -> Unit,
     onApply: (queue: String, statusText: String?, addressLabel: String, query: SelectedAddressQuery) -> Unit,
     onAddCompany: (queue: String, label: String) -> Unit = { _, _ -> },
-    onShowAppBanner: (String) -> Unit
+    onShowAppBanner: (String) -> Unit,
+    tourActive: Boolean = false,
+    onTourSkip: () -> Unit = {}
 ) {
+    // First-run tour inside this dialog window (spec/ONBOARDING.md): PICK, then APPLY once a result card shows
+    val tourTargets = remember { CoachTargets() }
+    var tourResultShown by remember { mutableStateOf(false) }
+    val applyBringer = remember { BringIntoViewRequester() }
     // The cascade starts from the saved address, or from Poltava city (Полтавська об'єднана філія) on a first
     // launch. After that a branch never picks a city for the user: choosing another branch clears city, street and house.
     var selectedRemId by remember { mutableStateOf(saved?.remId?.ifBlank { DEFAULT_BRANCH } ?: DEFAULT_BRANCH) }
@@ -5219,10 +5265,19 @@ private fun AddressLookupDialog(
     val streetItems = remember(streetsList, lang) { streetsList.map { PickerItem(it.id, it.displayName(lang)) } }
     val houseItems = remember(housesList) { housesList.map { PickerItem(it.house, it.house) } }
 
+    LaunchedEffect(tourActive, tourResultShown) {
+        // bring the «Обрати чергу» button into view once the result card has settled
+        if (tourActive && tourResultShown) {
+            kotlinx.coroutines.delay(400)
+            applyBringer.bringIntoView()
+        }
+    }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
+      CompositionLocalProvider(LocalCoachTargets provides tourTargets) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -5332,6 +5387,7 @@ private fun AddressLookupDialog(
                         )
 
                         SearchablePickerField(
+                            modifier = Modifier.coachTarget("settlement"),
                             label = AppStrings.addrCityLabel(lang),
                             value = currentSettlement?.displayName(lang),
                             placeholder = AppStrings.addrCityPlaceholder(lang),
@@ -5356,10 +5412,11 @@ private fun AddressLookupDialog(
                             text = AppStrings.addrCityAnyBranchHint(lang),
                             style = ZtType.caption,
                             color = ZtColors.TextTertiary,
-                            modifier = Modifier.padding(start = 4.dp)
+                            modifier = Modifier.padding(start = 4.dp).coachTarget("settlement-hint")
                         )
 
                         SearchablePickerField(
+                            modifier = Modifier.coachTarget("street"),
                             label = AppStrings.addrStreetLabel(lang),
                             value = currentStreet?.displayName(lang),
                             placeholder = AppStrings.addrStreetPlaceholder(lang),
@@ -5382,6 +5439,7 @@ private fun AddressLookupDialog(
                         )
 
                         SearchablePickerField(
+                            modifier = Modifier.coachTarget("house"),
                             label = AppStrings.addrHouseLabel(lang),
                             value = selectedHouse,
                             placeholder = AppStrings.addrHousePlaceholder(lang),
@@ -5407,6 +5465,7 @@ private fun AddressLookupDialog(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(top = 6.dp)
+                                    .coachTarget("result")
                                     .clip(RoundedCornerShape(16.dp))
                                     .background(Color(0xD9141A29))
                                     .border(2.dp, Color.White.copy(alpha = 0.25f), RoundedCornerShape(16.dp))
@@ -5447,7 +5506,7 @@ private fun AddressLookupDialog(
                                     text = if (pq != null) AppStrings.addCompanyQueue(lang, pq) else AppStrings.chooseQueueTitle(lang),
                                     icon = Icons.Default.Add,
                                     filled = pq != null,
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier.fillMaxWidth().coachTarget("apply").bringIntoViewRequester(applyBringer),
                                     onClick = { if (pq != null) onAddCompany(pq, placeLabel) }
                                 )
                             }
@@ -5471,6 +5530,8 @@ private fun AddressLookupDialog(
                             )
                             else -> null
                         }
+                        val resultShown = placeMode != null || (selectedHouse.isNotBlank() && matchedRecord != null)
+                        SideEffect { tourResultShown = resultShown }
                         if (selectedHouse.isNotBlank() && matchedRecord != null) {
                             // while the site answers, an address without a known queue cannot be confirmed yet
                             val several = matchedRecord.severalConnections && matchedRecord.queue.isBlank()
@@ -5479,6 +5540,7 @@ private fun AddressLookupDialog(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(top = 6.dp)
+                                    .coachTarget("result")
                                     .clip(RoundedCornerShape(16.dp))
                                     .background(Color(0xD9141A29))
                                     .border(2.dp, Color.White.copy(alpha = 0.25f), RoundedCornerShape(16.dp))
@@ -5601,6 +5663,8 @@ private fun AddressLookupDialog(
                                     Box(
                                         modifier = Modifier
                                             .fillMaxWidth()
+                                            .coachTarget("apply")
+                                            .bringIntoViewRequester(applyBringer)
                                             .heightIn(min = ZtMinTouch)
                                             .clip(RoundedCornerShape(16.dp))
                                             .background(if (canApply) ZtColors.Accent else Color(0x66FF5E3A))
@@ -5858,7 +5922,51 @@ private fun AddressLookupDialog(
                     )
                 }
             }
+
+            if (tourActive) {
+                val step = OnboardingTour.step(
+                    TourInput(
+                        active = true,
+                        lookupOpen = true,
+                        resultShown = tourResultShown,
+                        page = TourPage.SETTINGS,
+                        hasAddress = false,
+                        reachedRename = false,
+                        renameDone = false
+                    )
+                )
+                if (step == TourStep.PICK) {
+                    // the tip sits outside the lit block; the next field to fill is ringed
+                    val block = listOf("settlement", "settlement-hint", "street", "house")
+                    val ringKey = when {
+                        currentStreet != null && !noHouses && !noStreets -> "house"
+                        selectedSettlementId.isNotBlank() && !noStreets -> "street"
+                        else -> "settlement"
+                    }
+                    CoachOverlay(
+                        targets = tourTargets,
+                        holes = listOf(block),
+                        tips = listOf(CoachTip(anchor = block, text = AppStrings.tourPick(lang), ring = ringKey, skip = true)),
+                        lang = lang,
+                        onSkip = onTourSkip
+                    )
+                } else if (step == TourStep.APPLY) {
+                    // outside the result card unless the card fills most of the screen; the button is ringed
+                    val screenPx = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp *
+                        androidx.compose.ui.platform.LocalDensity.current.density
+                    val card = tourTargets.rects["result"]
+                    val anchor = if (card != null && card.height < screenPx * 0.55f) "result" else "apply"
+                    CoachOverlay(
+                        targets = tourTargets,
+                        holes = listOf(listOf("result")),
+                        tips = listOf(CoachTip(anchor = listOf(anchor), text = AppStrings.tourApply(lang), ring = "apply", skip = true)),
+                        lang = lang,
+                        onSkip = onTourSkip
+                    )
+                }
+            }
         }
+      }
     }
 }
 `
@@ -6558,6 +6666,17 @@ import ua.blackout.prewarning.notification.ExactAlarmGate
 import ua.blackout.prewarning.notification.NotificationHelper
 import ua.blackout.prewarning.ui.AppStrings
 import ua.blackout.prewarning.ui.components.glassSurface
+import ua.blackout.prewarning.ui.components.CoachOverlay
+import ua.blackout.prewarning.ui.components.CoachTargets
+import ua.blackout.prewarning.ui.components.CoachTip
+import ua.blackout.prewarning.ui.components.LocalCoachTargets
+import ua.blackout.prewarning.ui.components.OnboardingStore
+import ua.blackout.prewarning.ui.components.OnboardingTour
+import ua.blackout.prewarning.ui.components.TourInput
+import ua.blackout.prewarning.ui.components.TourPage
+import ua.blackout.prewarning.ui.components.TourStep
+import ua.blackout.prewarning.ui.components.coachTarget
+import androidx.compose.runtime.CompositionLocalProvider
 import ua.blackout.prewarning.ui.components.PageGlide
 import ua.blackout.prewarning.ui.components.ambientBreath
 import ua.blackout.prewarning.ui.components.ambientDrift
@@ -6635,6 +6754,18 @@ fun BlackoutAppNavigation(
     var vibrationEnabled by remember { mutableStateOf(initialSettings.vibrationEnabled) }
     var currentLanguage by remember { mutableStateOf(initialSettings.language) }
     var autoOpenQueueHelp by remember { mutableStateOf(false) }
+    // First-run tour (spec/ONBOARDING.md): started by the first-launch button, never shown again once finished
+    val onboarding = remember { OnboardingStore(appContext) }
+    val coachTargets = remember { CoachTargets() }
+    var tourActive by remember { mutableStateOf(false) }
+    var tourReachedRename by remember { mutableStateOf(false) }
+    var tourRenameDone by remember { mutableStateOf(false) }
+    fun endTour() {
+        onboarding.setDone(true)
+        tourActive = false
+        tourReachedRename = false
+        tourRenameDone = false
+    }
     var currentTime by remember { mutableStateOf(LocalTime.now(KYIV_ZONE)) }
 
     // An address counts as a selection even when it has no queue and no emergency right now
@@ -6975,6 +7106,7 @@ fun BlackoutAppNavigation(
     val ambient = rememberAmbientSeconds()
     val reduceMotion = remember { reducedMotion(appContext) }
 
+    CompositionLocalProvider(LocalCoachTargets provides coachTargets) {
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -7132,6 +7264,11 @@ fun BlackoutAppNavigation(
                         },
                         onOpenQueueSelection = {
                             autoOpenQueueHelp = true
+                            if (!onboarding.isDone()) {
+                                tourActive = true
+                                tourReachedRename = false
+                                tourRenameDone = false
+                            }
                             coroutineScope.launch {
                                 pagerState.animateScrollToPage(1, animationSpec = PageGlide)
                             }
@@ -7166,6 +7303,9 @@ fun BlackoutAppNavigation(
                         lang = resolvedLang,
                         autoOpenQueueHelp = autoOpenQueueHelp,
                         onAutoOpenQueueHelpHandled = { autoOpenQueueHelp = false },
+                        tourActive = tourActive,
+                        onTourSkip = { endTour() },
+                        onRenameDialogClosed = { if (tourActive && tourReachedRename) tourRenameDone = true },
                         onAddAddress = { resolvedQueue, statusText, addressLabel, query ->
                             val ok = onStoreResult(subscriptionSync.addFromLookup(resolvedQueue, statusText, addressLabel, query))
                             // the user stays in Settings (owner request): the address is added in place
@@ -7362,6 +7502,7 @@ fun BlackoutAppNavigation(
                         val isSchedule = pagerState.currentPage == 0
                         Box(
                             modifier = Modifier
+                                .coachTarget("dock-home")
                                 .size(44.dp)
                                 .clip(CircleShape)
                                 .background(if (isSchedule) Color.White else Color.Transparent)
@@ -7402,6 +7543,7 @@ fun BlackoutAppNavigation(
                         val isAbout = pagerState.currentPage == 2
                         Box(
                             modifier = Modifier
+                                .coachTarget("dock-about")
                                 .size(44.dp)
                                 .clip(CircleShape)
                                 .background(if (isAbout) Color.White else Color.Transparent)
@@ -7421,6 +7563,65 @@ fun BlackoutAppNavigation(
                 }
             }
         }
+
+        // First-run tour on the main window: RENAME, ALERTS (Settings) and ABOUT (main screen); the lookup
+        // dialog draws PICK and APPLY in its own window
+        if (tourActive) {
+            val tourPage = when (pagerState.currentPage) {
+                0 -> TourPage.SCHEDULE
+                1 -> TourPage.SETTINGS
+                2 -> TourPage.ABOUT
+                else -> TourPage.OTHER
+            }
+            val step = OnboardingTour.step(
+                TourInput(
+                    active = true,
+                    lookupOpen = false,
+                    resultShown = false,
+                    page = tourPage,
+                    hasAddress = subscriptions.items.isNotEmpty(),
+                    reachedRename = tourReachedRename,
+                    renameDone = tourRenameDone
+                )
+            )
+            LaunchedEffect(step) { if (step == TourStep.RENAME) tourReachedRename = true }
+            LaunchedEffect(tourPage, tourReachedRename) {
+                if (OnboardingTour.finishedBy(tourPage, tourReachedRename)) endTour()
+            }
+            when (step) {
+                TourStep.RENAME -> CoachOverlay(
+                    targets = coachTargets,
+                    holes = listOf(listOf("rename")),
+                    tips = listOf(CoachTip(anchor = listOf("rename"), text = AppStrings.tourRename(resolvedLang), next = true, skip = true)),
+                    lang = resolvedLang,
+                    onSkip = { endTour() },
+                    onNext = { tourRenameDone = true }
+                )
+                TourStep.ALERTS -> {
+                    val switches = listOf("alert-planned", "alert-emergency")
+                    CoachOverlay(
+                        targets = coachTargets,
+                        holes = listOf(switches, listOf("dock-home")),
+                        tips = listOf(
+                            CoachTip(anchor = switches, text = AppStrings.tourAlerts(resolvedLang), skip = true),
+                            CoachTip(anchor = listOf("dock-home"), text = AppStrings.tourBack(resolvedLang))
+                        ),
+                        lang = resolvedLang,
+                        onSkip = { endTour() }
+                    )
+                }
+                TourStep.ABOUT -> CoachOverlay(
+                    targets = coachTargets,
+                    holes = listOf(listOf("dock-about")),
+                    tips = listOf(CoachTip(anchor = listOf("dock-about"), text = AppStrings.tourDonate(resolvedLang), done = true)),
+                    lang = resolvedLang,
+                    onSkip = { endTour() },
+                    onDone = { endTour() }
+                )
+                else -> Unit
+            }
+        }
+    }
     }
 }
 `
@@ -12880,6 +13081,593 @@ fun QueueChoiceChips(
             }
         }
     }
+}
+`
+  },
+  {
+    path: 'app/src/main/java/ua/blackout/prewarning/ui/components/CoachMarks.kt',
+    language: 'kotlin',
+    description: 'First-run tour spotlight overlay: dims the window except the lit controls, arrow and tip',
+    content: `package ua.blackout.prewarning.ui.components
+
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.State
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathFillType
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
+import ua.blackout.prewarning.ui.AppStrings
+import ua.blackout.prewarning.ui.theme.ZtColors
+import ua.blackout.prewarning.ui.theme.ZtMinTouch
+import ua.blackout.prewarning.ui.theme.ZtType
+
+/**
+ * Spotlight overlay of the first-run tour (spec/ONBOARDING.md), mirrored by src/components/CoachTour.tsx.
+ *
+ * Controls mark themselves with [coachTarget]; [CoachOverlay] dims its window except the lit targets, points
+ * an arrow with a tip at a target (outside it) and rings the control to use next. The dim layer has no
+ * pointer input, so every touch reaches the controls underneath; only the tips' buttons take touches.
+ * A dialog is its own window, so the address lookup dialog has its own [CoachTargets] and overlay.
+ */
+class CoachTargets {
+    /** Target bounds in the coordinates of their window's root. */
+    val rects = mutableStateMapOf<String, Rect>()
+
+    /** The smallest rectangle around all the [keys] that are on screen; null when none is. */
+    fun union(keys: List<String>): Rect? {
+        val found = keys.mapNotNull { rects[it] }
+        if (found.isEmpty()) return null
+        return Rect(found.minOf { it.left }, found.minOf { it.top }, found.maxOf { it.right }, found.maxOf { it.bottom })
+    }
+}
+
+val LocalCoachTargets = staticCompositionLocalOf<CoachTargets?> { null }
+
+/** Registers this element as tour target [key] (no effect outside a [LocalCoachTargets] provider). */
+fun Modifier.coachTarget(key: String): Modifier = composed {
+    val targets = LocalCoachTargets.current ?: return@composed this
+    DisposableEffect(targets, key) { onDispose { targets.rects.remove(key) } }
+    onGloballyPositioned { coordinates ->
+        val p = coordinates.positionInRoot()
+        targets.rects[key] = Rect(p, androidx.compose.ui.geometry.Size(coordinates.size.width.toFloat(), coordinates.size.height.toFloat()))
+    }
+}
+
+/** One tip: an arrow and a text next to [anchor] (the union of its keys), outside it. */
+data class CoachTip(
+    val anchor: List<String>,
+    val text: String,
+    /** The control to use next, ringed in the accent colour. */
+    val ring: String? = null,
+    /** «Далі» goes on to the next step. */
+    val next: Boolean = false,
+    /** «Зрозуміло» ends the tour. */
+    val done: Boolean = false,
+    /** «Пропустити підказки» (one tip per step). */
+    val skip: Boolean = false
+)
+
+private val HolePad = 6.dp
+private val HoleRadius = 14.dp
+private val ArrowSize = 32.dp
+private val TipWidth = 260.dp
+private val DimColor = Color(0xC705080F)
+
+/**
+ * Dims the window except the [holes] (each the union of its keys) and draws the [tips]. Draws nothing until
+ * a tip's anchor is on screen.
+ */
+@Composable
+fun CoachOverlay(
+    targets: CoachTargets,
+    holes: List<List<String>>,
+    tips: List<CoachTip>,
+    lang: String,
+    onSkip: () -> Unit,
+    onNext: () -> Unit = {},
+    onDone: () -> Unit = {},
+    modifier: Modifier = Modifier
+) {
+    // the overlay may sit inside a padded box: target rects are moved into its own coordinates
+    var origin by remember { mutableStateOf(Offset.Zero) }
+    val local = { r: Rect -> r.translate(-origin.x, -origin.y) }
+    val shown = tips.mapNotNull { tip -> targets.union(tip.anchor)?.let { tip to local(it) } }
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxSize()
+            .onGloballyPositioned { origin = it.boundsInRoot().topLeft }
+    ) {
+        if (shown.isEmpty()) return@BoxWithConstraints
+        val density = LocalDensity.current
+        val pad = with(density) { HolePad.toPx() }
+        val radius = with(density) { HoleRadius.toPx() }
+        val holeRects = holes.mapNotNull { keys -> targets.union(keys)?.let(local) }
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val path = Path().apply {
+                fillType = PathFillType.EvenOdd
+                addRect(Rect(0f, 0f, size.width, size.height))
+                holeRects.forEach { addRoundRect(RoundRect(it.inflate(pad), CornerRadius(radius, radius))) }
+            }
+            drawPath(path, DimColor)
+        }
+        val width = with(density) { constraints.maxWidth.toDp() }
+        val height = with(density) { constraints.maxHeight.toDp() }
+        shown.forEach { (tip, anchor) ->
+            TipMark(
+                tip = tip,
+                anchor = anchor,
+                ring = tip.ring?.let { targets.rects[it] }?.let(local),
+                screenWidth = width,
+                screenHeight = height,
+                lang = lang,
+                onSkip = onSkip,
+                onNext = onNext,
+                onDone = onDone
+            )
+        }
+    }
+}
+
+@Composable
+private fun TipMark(
+    tip: CoachTip,
+    anchor: Rect,
+    ring: Rect?,
+    screenWidth: androidx.compose.ui.unit.Dp,
+    screenHeight: androidx.compose.ui.unit.Dp,
+    lang: String,
+    onSkip: () -> Unit,
+    onNext: () -> Unit,
+    onDone: () -> Unit
+) {
+    val density = LocalDensity.current
+    val context = LocalContext.current
+    val animate = remember { !reducedMotion(context) }
+    val a = with(density) { Rect(anchor.left.toDp().value, anchor.top.toDp().value, anchor.right.toDp().value, anchor.bottom.toDp().value) }
+    val cx = (a.left + a.right) / 2f
+    val above = (a.top + a.bottom) / 2f > screenHeight.value * 0.45f
+    val arrowTop = if (above) a.top - HolePad.value - 4f - ArrowSize.value else a.bottom + HolePad.value + 4f
+    val bubbleWidth = minOf(TipWidth.value, screenWidth.value - 24f)
+    val bubbleLeft = (cx - bubbleWidth / 2f).coerceIn(12f, maxOf(12f, screenWidth.value - 12f - bubbleWidth))
+    var bubbleHeight by remember { mutableIntStateOf(0) }
+    val nudge: State<Float>? = if (animate) {
+        rememberInfiniteTransition(label = "coach").animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(700, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+            label = "coachNudge"
+        )
+    } else {
+        null
+    }
+
+    if (ring != null) {
+        val r = with(density) { Rect(ring.left.toDp().value, ring.top.toDp().value, ring.right.toDp().value, ring.bottom.toDp().value) }
+        Box(
+            modifier = Modifier
+                .offset((r.left - 3f).dp, (r.top - 3f).dp)
+                .size((r.width + 6f).dp, (r.height + 6f).dp)
+                .border(2.dp, ZtColors.Accent, RoundedCornerShape(16.dp))
+        )
+    }
+    Icon(
+        imageVector = if (above) Icons.Default.ArrowDownward else Icons.Default.ArrowUpward,
+        contentDescription = null,
+        tint = ZtColors.Accent,
+        modifier = Modifier
+            .offset((cx - ArrowSize.value / 2f).dp, arrowTop.dp)
+            .size(ArrowSize)
+            .graphicsLayer { translationY = (nudge?.value ?: 0f) * 8.dp.toPx() * if (above) 1f else -1f }
+    )
+    Column(
+        modifier = Modifier
+            .offset {
+                val top = if (above) arrowTop.dp.toPx() - 2.dp.toPx() - bubbleHeight else (arrowTop + ArrowSize.value + 2f).dp.toPx()
+                IntOffset(bubbleLeft.dp.roundToPx(), top.roundToInt())
+            }
+            .width(bubbleWidth.dp)
+            .onSizeChanged { bubbleHeight = it.height }
+            .background(ZtColors.CardSolid, RoundedCornerShape(16.dp))
+            .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(16.dp))
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .semantics { liveRegion = LiveRegionMode.Polite },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Text(text = tip.text, style = ZtType.body.copy(fontWeight = FontWeight.Bold), color = Color.White, textAlign = TextAlign.Center)
+        if (tip.next || tip.done) {
+            Box(
+                modifier = Modifier
+                    .heightIn(min = 44.dp)
+                    .background(ZtColors.Accent, RoundedCornerShape(12.dp))
+                    .clickable(role = Role.Button) { if (tip.done) onDone() else onNext() }
+                    .padding(horizontal = 20.dp, vertical = 10.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (tip.done) AppStrings.tourGotIt(lang) else AppStrings.tourNext(lang),
+                    style = ZtType.label.copy(fontWeight = FontWeight.ExtraBold),
+                    color = Color.White
+                )
+            }
+        }
+        if (tip.skip) {
+            Box(
+                modifier = Modifier
+                    .heightIn(min = ZtMinTouch)
+                    .clickable(role = Role.Button, onClick = onSkip)
+                    .padding(horizontal = 12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = AppStrings.tourSkip(lang),
+                    style = ZtType.caption.copy(textDecoration = TextDecoration.Underline, fontWeight = FontWeight.SemiBold),
+                    color = ZtColors.TextSecondary
+                )
+            }
+        }
+    }
+}
+`
+  },
+  {
+    path: 'app/src/main/java/ua/blackout/prewarning/ui/components/OnboardingTour.kt',
+    language: 'kotlin',
+    description: 'First-run tour steps (PICK, APPLY, RENAME, ALERTS, ABOUT) and the "done" flag',
+    content: `package ua.blackout.prewarning.ui.components
+
+import android.content.Context
+
+/**
+ * First-run tour (spec/ONBOARDING.md); mirrored by src/services/onboarding.ts, cases in OnboardingTourTest.
+ *
+ * The tour starts when a new user taps the first-launch «Виберіть чергу» button and walks them through:
+ *  PICK   - the address picker: settlement, street and house are lit, the rest is dimmed;
+ *  APPLY  - the result card: the «Обрати чергу» button is ringed;
+ *  RENAME - Settings with the new address: an arrow at its rename button («Далі» or the rename dialog goes on);
+ *  ALERTS - its planned and emergency alert switches, and an arrow at the dock's home button;
+ *  ABOUT  - the main screen: an arrow at the dock's About button, «Або допоможіть волонтерам...».
+ * It ends on «Зрозуміло», on «Пропустити підказки» or when About is opened, and is never shown again.
+ */
+enum class TourStep { NONE, PICK, APPLY, RENAME, ALERTS, ABOUT }
+
+enum class TourPage { SCHEDULE, SETTINGS, ABOUT, OTHER }
+
+data class TourInput(
+    /** The tour was started (first-launch button) and not finished or skipped. */
+    val active: Boolean,
+    /** The address lookup dialog is open. */
+    val lookupOpen: Boolean,
+    /** The lookup shows a result card (a house, or a settlement / street without lower levels). */
+    val resultShown: Boolean,
+    val page: TourPage,
+    /** At least one address or queue is saved. */
+    val hasAddress: Boolean,
+    /** The RENAME step was shown, so the main screen goes on to ABOUT. */
+    val reachedRename: Boolean,
+    /** «Далі» was tapped on RENAME, or the rename dialog was closed: Settings goes on to ALERTS. */
+    val renameDone: Boolean,
+    /** Another dialog is on top: the tour waits (on Android a dialog is its own window above the overlay). */
+    val covered: Boolean = false
+)
+
+object OnboardingTour {
+    fun step(i: TourInput): TourStep = when {
+        !i.active || i.covered -> TourStep.NONE
+        i.lookupOpen -> if (i.resultShown) TourStep.APPLY else TourStep.PICK
+        !i.hasAddress -> TourStep.NONE
+        i.page == TourPage.SETTINGS -> if (i.renameDone) TourStep.ALERTS else TourStep.RENAME
+        i.page == TourPage.SCHEDULE && i.reachedRename -> TourStep.ABOUT
+        else -> TourStep.NONE
+    }
+
+    /** Opening About after the RENAME step finishes the tour (the donations are there). */
+    fun finishedBy(page: TourPage, reachedRename: Boolean): Boolean = page == TourPage.ABOUT && reachedRename
+}
+
+/** "The tour was finished or skipped": never shown again (a reinstall shows it again). */
+class OnboardingStore(context: Context) {
+    private val prefs = context.applicationContext.getSharedPreferences("onboarding", Context.MODE_PRIVATE)
+
+    fun isDone(): Boolean = prefs.getBoolean(KEY_DONE, false)
+
+    fun setDone(done: Boolean) {
+        prefs.edit().putBoolean(KEY_DONE, done).apply()
+    }
+
+    private companion object {
+        const val KEY_DONE = "done"
+    }
+}
+`
+  },
+  {
+    path: 'app/src/main/java/ua/blackout/prewarning/widget/BlackoutMinimalGlanceWidget.kt',
+    language: 'kotlin',
+    description: 'Minimal 2x2 widget: queue, status, countdown and refresh of the primary address',
+    content: `package ua.blackout.prewarning.widget
+
+import android.content.Context
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.datastore.preferences.core.Preferences
+import androidx.glance.ColorFilter
+import androidx.glance.GlanceId
+import androidx.glance.GlanceModifier
+import androidx.glance.GlanceTheme
+import androidx.glance.Image
+import androidx.glance.ImageProvider
+import androidx.glance.LocalSize
+import androidx.glance.action.clickable
+import androidx.glance.appwidget.CircularProgressIndicator
+import androidx.glance.appwidget.GlanceAppWidget
+import androidx.glance.appwidget.SizeMode
+import androidx.glance.appwidget.action.actionRunCallback
+import androidx.glance.appwidget.cornerRadius
+import androidx.glance.appwidget.provideContent
+import androidx.glance.background
+import androidx.glance.currentState
+import androidx.glance.layout.Alignment
+import androidx.glance.layout.Box
+import androidx.glance.layout.Column
+import androidx.glance.layout.Row
+import androidx.glance.layout.Spacer
+import androidx.glance.layout.fillMaxSize
+import androidx.glance.layout.fillMaxWidth
+import androidx.glance.layout.height
+import androidx.glance.layout.padding
+import androidx.glance.layout.size
+import androidx.glance.layout.width
+import androidx.glance.state.GlanceStateDefinition
+import androidx.glance.state.PreferencesGlanceStateDefinition
+import androidx.glance.text.FontWeight
+import androidx.glance.text.Text
+import androidx.glance.text.TextAlign
+import androidx.glance.text.TextStyle
+import androidx.glance.unit.ColorProvider
+import ua.blackout.prewarning.R
+import ua.blackout.prewarning.ui.AppStrings
+
+/**
+ * Fourth widget (2x2, «Мінімальний»): the queue of the primary address, the status, the countdown to the
+ * next outage or to power on, and the refresh button, on a 50 % transparent layer. It always follows the
+ * primary address (no configuration screen) and draws from the same snapshot as the other widgets, so the
+ * status and the countdown are identical. Text sizes follow the widget size so a resized widget stays filled.
+ */
+class BlackoutMinimalGlanceWidget : GlanceAppWidget() {
+
+    override val stateDefinition: GlanceStateDefinition<*> = PreferencesGlanceStateDefinition
+
+    override val sizeMode = SizeMode.Exact
+
+    override suspend fun provideGlance(context: Context, id: GlanceId) {
+        val appContext = context.applicationContext
+
+        provideContent {
+            val prefs = currentState<Preferences>()
+            // Reading the tick subscribes this composition to the Glance state that syncAllWidgets bumps
+            @Suppress("UNUSED_VARIABLE")
+            val refreshTick = prefs[BlackoutGlanceWidget.KEY_REFRESH_TICK] ?: 0L
+            val refreshingSince = prefs[BlackoutGlanceWidget.KEY_REFRESHING_SINCE] ?: 0L
+            val isRefreshing = refreshingSince > 0L &&
+                System.currentTimeMillis() - refreshingSince < BlackoutGlanceWidget.REFRESH_BUSY_MAX_MS
+            // null app widget id = follow the primary address
+            val source = widgetSource(appContext, null)
+            val model = BlackoutGlanceWidget.buildWidgetModel(source.settings, source.snapshot)
+            val openApp = openAppAction(source.itemId)
+            val m = minimalWidgetTexts(model.lang, model.isUnclear, model.isOffNow, model.countdown)
+
+            val statusColor = when {
+                model.isUnclear -> Color(0xFF9CA3AF)
+                model.isOffNow -> Color(0xFFFF5E3A)
+                else -> Color(0xFF34D399)
+            }
+
+            val size = LocalSize.current
+            val scale = (minOf(size.width.value, size.height.value) / BASE_DP).coerceIn(0.8f, 1.8f)
+            val pad = 12f * scale
+            val button = 34f * scale
+            val innerWidth = size.width.value - 2 * pad
+            val queueSp = fit(14f * scale, model.queueHeader, innerWidth - button - 6f, 0.6f)
+            val statusSp = fit(20f * scale, m.status, innerWidth, 0.68f)
+            val labelSp = m.label?.let { fit(12f * scale, it, innerWidth, 0.52f) } ?: 0f
+            val countdownSp = m.countdown?.let { fit(22f * scale, it, innerWidth, 0.58f) } ?: 0f
+
+            GlanceTheme {
+                Column(
+                    modifier = GlanceModifier
+                        .fillMaxSize()
+                        .cornerRadius(20.dp)
+                        .background(ColorProvider(Color(0x80141A29)))
+                        .padding(pad.dp)
+                        .clickable(openApp)
+                ) {
+                    Row(
+                        modifier = GlanceModifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.Vertical.CenterVertically
+                    ) {
+                        Text(
+                            text = model.queueHeader,
+                            style = TextStyle(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = queueSp.sp,
+                                color = ColorProvider(Color.White)
+                            ),
+                            maxLines = 1,
+                            modifier = GlanceModifier.defaultWeight()
+                        )
+                        RefreshButton(button.dp, isRefreshing, m.refreshDescription)
+                    }
+
+                    Column(
+                        modifier = GlanceModifier.fillMaxWidth().defaultWeight(),
+                        horizontalAlignment = Alignment.Horizontal.CenterHorizontally,
+                        verticalAlignment = Alignment.Vertical.CenterVertically
+                    ) {
+                        Text(
+                            text = m.status,
+                            style = TextStyle(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = statusSp.sp,
+                                color = ColorProvider(statusColor),
+                                textAlign = TextAlign.Center
+                            ),
+                            maxLines = 1
+                        )
+                        if (m.label != null) {
+                            Spacer(modifier = GlanceModifier.height((4f * scale).dp))
+                            Text(
+                                text = m.label,
+                                style = TextStyle(
+                                    fontSize = labelSp.sp,
+                                    color = ColorProvider(Color(0xFFA9B4C2)),
+                                    textAlign = TextAlign.Center
+                                ),
+                                maxLines = 1
+                            )
+                        }
+                        if (m.countdown != null) {
+                            Text(
+                                text = m.countdown,
+                                style = TextStyle(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = countdownSp.sp,
+                                    color = ColorProvider(Color.White),
+                                    textAlign = TextAlign.Center
+                                ),
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @androidx.compose.runtime.Composable
+    private fun RefreshButton(size: Dp, isRefreshing: Boolean, description: String) {
+        Box(
+            modifier = GlanceModifier
+                .size(size)
+                .cornerRadius(size / 2)
+                .background(ColorProvider(Color(0x26FFFFFF)))
+                .clickable(actionRunCallback<RefreshWidgetActionCallback>()),
+            contentAlignment = Alignment.Center
+        ) {
+            val icon = size * 0.5f
+            if (isRefreshing) {
+                // Glance cannot rotate an image; the platform progress ring animates on its own
+                CircularProgressIndicator(
+                    color = ColorProvider(Color.White),
+                    modifier = GlanceModifier.size(icon)
+                )
+            } else {
+                Image(
+                    provider = ImageProvider(R.drawable.ic_refresh),
+                    contentDescription = description,
+                    colorFilter = ColorFilter.tint(ColorProvider(Color.White)),
+                    modifier = GlanceModifier.size(icon)
+                )
+            }
+        }
+    }
+
+    private companion object {
+        /** Widget side (dp) the base text sizes are designed for: a usual 2x2 launcher cell. */
+        const val BASE_DP = 150f
+
+        /** [base] sp, or smaller so [text] fits [widthDp] at about [emPerChar] em per character. */
+        fun fit(base: Float, text: String, widthDp: Float, emPerChar: Float): Float {
+            if (text.isEmpty() || widthDp <= 0f) return base
+            return minOf(base, widthDp / (text.length * emPerChar))
+        }
+    }
+}
+
+/** The texts of the minimal widget; null [label] or [countdown] = that line is not drawn. */
+internal data class MinimalWidgetTexts(
+    val status: String,
+    val label: String?,
+    val countdown: String?,
+    val refreshDescription: String
+)
+
+/**
+ * Unclear: the status alone. No outage ahead while the power is on: «Відключень немає» instead of a
+ * countdown of dashes. Otherwise the label and the countdown of the other widgets (\`HHг. MMхв.\`).
+ */
+internal fun minimalWidgetTexts(lang: String, isUnclear: Boolean, isOffNow: Boolean, countdown: String): MinimalWidgetTexts {
+    val isUk = lang == "uk"
+    val refresh = if (isUk) "Оновити дані" else "Refresh"
+    if (isUnclear) return MinimalWidgetTexts(AppStrings.powerUnclear(lang), null, null, refresh)
+    val status = if (isOffNow) "СВІТЛА НЕМАЄ" else "СВІТЛО Є"
+    if (!isOffNow && countdown.contains("--")) {
+        return MinimalWidgetTexts(status, AppStrings.widgetNoOutages(lang), null, refresh)
+    }
+    val label = when {
+        isOffNow -> if (isUk) "До увімкнення:" else "Power on in:"
+        else -> if (isUk) "До відключення:" else "Time to blackout:"
+    }
+    return MinimalWidgetTexts(status, label, countdown, refresh)
 }
 `
   }

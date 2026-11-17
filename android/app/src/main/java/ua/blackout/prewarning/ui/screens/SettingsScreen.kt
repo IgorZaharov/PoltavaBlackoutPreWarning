@@ -131,6 +131,19 @@ import ua.blackout.prewarning.ui.AppStrings
 import ua.blackout.prewarning.ui.components.spinWhile
 import ua.blackout.prewarning.ui.components.GlassCard
 import ua.blackout.prewarning.ui.components.PickerItem
+import ua.blackout.prewarning.ui.components.CoachOverlay
+import ua.blackout.prewarning.ui.components.CoachTargets
+import ua.blackout.prewarning.ui.components.CoachTip
+import ua.blackout.prewarning.ui.components.LocalCoachTargets
+import ua.blackout.prewarning.ui.components.OnboardingTour
+import ua.blackout.prewarning.ui.components.TourInput
+import ua.blackout.prewarning.ui.components.TourPage
+import ua.blackout.prewarning.ui.components.TourStep
+import ua.blackout.prewarning.ui.components.coachTarget
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import ua.blackout.prewarning.ui.components.PickerSearch
 import ua.blackout.prewarning.ui.components.SearchablePickerField
 import ua.blackout.prewarning.ui.components.glassFieldColors
@@ -179,6 +192,11 @@ fun SettingsScreen(
     lang: String = "uk",
     autoOpenQueueHelp: Boolean = false,
     onAutoOpenQueueHelpHandled: () -> Unit = {},
+    /** First-run tour (spec/ONBOARDING.md): the lookup dialog shows its PICK / APPLY steps. */
+    tourActive: Boolean = false,
+    onTourSkip: () -> Unit = {},
+    /** The rename dialog was closed (saved or cancelled): the tour goes on from RENAME to ALERTS. */
+    onRenameDialogClosed: () -> Unit = {},
     onAddAddress: (
         queue: String,
         statusText: String?,
@@ -223,6 +241,15 @@ fun SettingsScreen(
     var showResetConfirmDialog by remember { mutableStateOf(false) }
     var removeCandidate by remember { mutableStateOf<Subscription?>(null) }
     var renameCandidate by remember { mutableStateOf<Subscription?>(null) }
+    var renameWasOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(renameCandidate) {
+        if (renameCandidate != null) {
+            renameWasOpen = true
+        } else if (renameWasOpen) {
+            renameWasOpen = false
+            onRenameDialogClosed()
+        }
+    }
 
     LaunchedEffect(autoOpenQueueHelp) {
         if (autoOpenQueueHelp) {
@@ -629,7 +656,9 @@ fun SettingsScreen(
                 onAddCompany(queue, label)
                 showQueueHelpDialog = false
             },
-            onShowAppBanner = onShowAppBanner
+            onShowAppBanner = onShowAppBanner,
+            tourActive = tourActive,
+            onTourSkip = onTourSkip
         )
     }
 
@@ -937,6 +966,8 @@ private fun SubscriptionBlock(
     onSetEmergency: (Boolean) -> Unit,
     /** Gesture and accessibility actions of the reorder handle; null hides it (one address). */
     dragHandle: Modifier? = null,
+    /** The first block marks its rename button and alert switches for the first-run tour. */
+    tourTargets: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val shape = RoundedCornerShape(16.dp)
@@ -985,7 +1016,12 @@ private fun SubscriptionBlock(
                     )
                 }
             }
-            IconTile(icon = Icons.Default.Edit, description = "${AppStrings.renameAddress(lang)}: $label", onClick = onRename)
+            IconTile(
+                icon = Icons.Default.Edit,
+                description = "${AppStrings.renameAddress(lang)}: $label",
+                onClick = onRename,
+                modifier = if (tourTargets) Modifier.coachTarget("rename") else Modifier
+            )
             IconTile(icon = Icons.Default.Delete, description = "${AppStrings.removeAddress(lang)}: $label", onClick = onRemove, danger = true)
         }
         Text(text = label, style = ZtType.subhead, color = Color.White)
@@ -1001,7 +1037,8 @@ private fun SubscriptionBlock(
             checked = alertsMaster && item.plannedAlerts,
             onCheckedChange = onSetPlanned,
             lang = lang,
-            enabled = alertsMaster && item.queue != null
+            enabled = alertsMaster && item.queue != null,
+            modifier = if (tourTargets) Modifier.coachTarget("alert-planned") else Modifier
         )
         SwitchRow(
             icon = Icons.Default.Warning,
@@ -1011,7 +1048,8 @@ private fun SubscriptionBlock(
             checked = alertsMaster && item.emergencyAlerts && item.address != null,
             onCheckedChange = onSetEmergency,
             lang = lang,
-            enabled = alertsMaster && item.address != null
+            enabled = alertsMaster && item.address != null,
+            modifier = if (tourTargets) Modifier.coachTarget("alert-emergency") else Modifier
         )
         if (!isPrimary) {
             ActionButton(
@@ -1027,9 +1065,9 @@ private fun SubscriptionBlock(
 
 /** 48 dp touch target around a 36 dp icon tile. */
 @Composable
-private fun IconTile(icon: ImageVector, description: String, onClick: () -> Unit, danger: Boolean = false) {
+private fun IconTile(icon: ImageVector, description: String, onClick: () -> Unit, danger: Boolean = false, modifier: Modifier = Modifier) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .size(ZtMinTouch)
             .clickable(role = Role.Button, onClick = onClick)
             .semantics { contentDescription = description },
@@ -1090,11 +1128,12 @@ private fun SwitchRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     lang: String,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    modifier: Modifier = Modifier
 ) {
     val stateText = if (checked) AppStrings.switchOn(lang) else AppStrings.switchOff(lang)
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .heightIn(min = ZtMinTouch)
             .toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange)
@@ -1241,6 +1280,7 @@ private class LevelState {
 // =============================================================================================
 
 @Composable
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 private fun AddressLookupDialog(
     siteUrl: String,
     lang: String,
@@ -1248,8 +1288,14 @@ private fun AddressLookupDialog(
     onDismiss: () -> Unit,
     onApply: (queue: String, statusText: String?, addressLabel: String, query: SelectedAddressQuery) -> Unit,
     onAddCompany: (queue: String, label: String) -> Unit = { _, _ -> },
-    onShowAppBanner: (String) -> Unit
+    onShowAppBanner: (String) -> Unit,
+    tourActive: Boolean = false,
+    onTourSkip: () -> Unit = {}
 ) {
+    // First-run tour inside this dialog window (spec/ONBOARDING.md): PICK, then APPLY once a result card shows
+    val tourTargets = remember { CoachTargets() }
+    var tourResultShown by remember { mutableStateOf(false) }
+    val applyBringer = remember { BringIntoViewRequester() }
     // The cascade starts from the saved address, or from Poltava city (Полтавська об'єднана філія) on a first
     // launch. After that a branch never picks a city for the user: choosing another branch clears city, street and house.
     var selectedRemId by remember { mutableStateOf(saved?.remId?.ifBlank { DEFAULT_BRANCH } ?: DEFAULT_BRANCH) }
@@ -1517,10 +1563,19 @@ private fun AddressLookupDialog(
     val streetItems = remember(streetsList, lang) { streetsList.map { PickerItem(it.id, it.displayName(lang)) } }
     val houseItems = remember(housesList) { housesList.map { PickerItem(it.house, it.house) } }
 
+    LaunchedEffect(tourActive, tourResultShown) {
+        // bring the «Обрати чергу» button into view once the result card has settled
+        if (tourActive && tourResultShown) {
+            kotlinx.coroutines.delay(400)
+            applyBringer.bringIntoView()
+        }
+    }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
+      CompositionLocalProvider(LocalCoachTargets provides tourTargets) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -1630,6 +1685,7 @@ private fun AddressLookupDialog(
                         )
 
                         SearchablePickerField(
+                            modifier = Modifier.coachTarget("settlement"),
                             label = AppStrings.addrCityLabel(lang),
                             value = currentSettlement?.displayName(lang),
                             placeholder = AppStrings.addrCityPlaceholder(lang),
@@ -1654,10 +1710,11 @@ private fun AddressLookupDialog(
                             text = AppStrings.addrCityAnyBranchHint(lang),
                             style = ZtType.caption,
                             color = ZtColors.TextTertiary,
-                            modifier = Modifier.padding(start = 4.dp)
+                            modifier = Modifier.padding(start = 4.dp).coachTarget("settlement-hint")
                         )
 
                         SearchablePickerField(
+                            modifier = Modifier.coachTarget("street"),
                             label = AppStrings.addrStreetLabel(lang),
                             value = currentStreet?.displayName(lang),
                             placeholder = AppStrings.addrStreetPlaceholder(lang),
@@ -1680,6 +1737,7 @@ private fun AddressLookupDialog(
                         )
 
                         SearchablePickerField(
+                            modifier = Modifier.coachTarget("house"),
                             label = AppStrings.addrHouseLabel(lang),
                             value = selectedHouse,
                             placeholder = AppStrings.addrHousePlaceholder(lang),
@@ -1705,6 +1763,7 @@ private fun AddressLookupDialog(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(top = 6.dp)
+                                    .coachTarget("result")
                                     .clip(RoundedCornerShape(16.dp))
                                     .background(Color(0xD9141A29))
                                     .border(2.dp, Color.White.copy(alpha = 0.25f), RoundedCornerShape(16.dp))
@@ -1745,7 +1804,7 @@ private fun AddressLookupDialog(
                                     text = if (pq != null) AppStrings.addCompanyQueue(lang, pq) else AppStrings.chooseQueueTitle(lang),
                                     icon = Icons.Default.Add,
                                     filled = pq != null,
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier.fillMaxWidth().coachTarget("apply").bringIntoViewRequester(applyBringer),
                                     onClick = { if (pq != null) onAddCompany(pq, placeLabel) }
                                 )
                             }
@@ -1769,6 +1828,8 @@ private fun AddressLookupDialog(
                             )
                             else -> null
                         }
+                        val resultShown = placeMode != null || (selectedHouse.isNotBlank() && matchedRecord != null)
+                        SideEffect { tourResultShown = resultShown }
                         if (selectedHouse.isNotBlank() && matchedRecord != null) {
                             // while the site answers, an address without a known queue cannot be confirmed yet
                             val several = matchedRecord.severalConnections && matchedRecord.queue.isBlank()
@@ -1777,6 +1838,7 @@ private fun AddressLookupDialog(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(top = 6.dp)
+                                    .coachTarget("result")
                                     .clip(RoundedCornerShape(16.dp))
                                     .background(Color(0xD9141A29))
                                     .border(2.dp, Color.White.copy(alpha = 0.25f), RoundedCornerShape(16.dp))
@@ -1899,6 +1961,8 @@ private fun AddressLookupDialog(
                                     Box(
                                         modifier = Modifier
                                             .fillMaxWidth()
+                                            .coachTarget("apply")
+                                            .bringIntoViewRequester(applyBringer)
                                             .heightIn(min = ZtMinTouch)
                                             .clip(RoundedCornerShape(16.dp))
                                             .background(if (canApply) ZtColors.Accent else Color(0x66FF5E3A))
@@ -2156,6 +2220,50 @@ private fun AddressLookupDialog(
                     )
                 }
             }
+
+            if (tourActive) {
+                val step = OnboardingTour.step(
+                    TourInput(
+                        active = true,
+                        lookupOpen = true,
+                        resultShown = tourResultShown,
+                        page = TourPage.SETTINGS,
+                        hasAddress = false,
+                        reachedRename = false,
+                        renameDone = false
+                    )
+                )
+                if (step == TourStep.PICK) {
+                    // the tip sits outside the lit block; the next field to fill is ringed
+                    val block = listOf("settlement", "settlement-hint", "street", "house")
+                    val ringKey = when {
+                        currentStreet != null && !noHouses && !noStreets -> "house"
+                        selectedSettlementId.isNotBlank() && !noStreets -> "street"
+                        else -> "settlement"
+                    }
+                    CoachOverlay(
+                        targets = tourTargets,
+                        holes = listOf(block),
+                        tips = listOf(CoachTip(anchor = block, text = AppStrings.tourPick(lang), ring = ringKey, skip = true)),
+                        lang = lang,
+                        onSkip = onTourSkip
+                    )
+                } else if (step == TourStep.APPLY) {
+                    // outside the result card unless the card fills most of the screen; the button is ringed
+                    val screenPx = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp *
+                        androidx.compose.ui.platform.LocalDensity.current.density
+                    val card = tourTargets.rects["result"]
+                    val anchor = if (card != null && card.height < screenPx * 0.55f) "result" else "apply"
+                    CoachOverlay(
+                        targets = tourTargets,
+                        holes = listOf(listOf("result")),
+                        tips = listOf(CoachTip(anchor = listOf(anchor), text = AppStrings.tourApply(lang), ring = "apply", skip = true)),
+                        lang = lang,
+                        onSkip = onTourSkip
+                    )
+                }
+            }
         }
+      }
     }
 }

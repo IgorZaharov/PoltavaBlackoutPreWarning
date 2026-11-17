@@ -139,6 +139,15 @@ public enum AppStrings {
     public static func blackoutHoursForTomorrowHeader(_ lang: String) -> String { lang == "uk" ? "Години відключень на завтра:" : "Blackout hours for tomorrow:" }
     public static func selectQueueAction(_ lang: String) -> String { lang == "uk" ? "Виберіть чергу" : "Select queue" }
     public static func firstStartTip(_ lang: String) -> String { lang == "uk" ? "Спробуйте вибрати будь-яку адресу або чергу" : "Try selecting any address or queue" }
+    public static func tourPick(_ lang: String) -> String { lang == "uk" ? "Тепер виберіть населений пункт, вулицю та будинок" : "Now choose your settlement, street and house" }
+    public static func tourApply(_ lang: String) -> String { lang == "uk" ? "Натисніть, щоб обрати чергу" : "Tap to choose the queue" }
+    public static func tourRename(_ lang: String) -> String { lang == "uk" ? "Перейменуйте адресу для зручності: «Дім», «Робота»" : "Rename the address for convenience: “Home”, “Work”" }
+    public static func tourAlerts(_ lang: String) -> String { lang == "uk" ? "Оберіть, про які відключення сповіщати для цієї адреси: планові чи аварійні" : "Choose which outages to be notified about for this address: planned or emergency" }
+    public static func tourNext(_ lang: String) -> String { lang == "uk" ? "Далі" : "Next" }
+    public static func tourBack(_ lang: String) -> String { lang == "uk" ? "Поверніться на головний екран" : "Go back to the main screen" }
+    public static func tourDonate(_ lang: String) -> String { lang == "uk" ? "Або допоможіть волонтерам, якщо хочете задонатити" : "Or help volunteers if you want to donate" }
+    public static func tourSkip(_ lang: String) -> String { lang == "uk" ? "Пропустити підказки" : "Skip tips" }
+    public static func tourGotIt(_ lang: String) -> String { lang == "uk" ? "Зрозуміло" : "Got it" }
     public static func emergencyOutageTitle(_ lang: String) -> String { lang == "uk" ? "Аварійне відключення!" : "Emergency outage!" }
     public static func emergencyStartLabel(_ lang: String) -> String { lang == "uk" ? "Початок:" : "Start:" }
     public static func emergencyRestoreLabel(_ lang: String) -> String { lang == "uk" ? "Орієнтовне відновлення:" : "Estimated restoration:" }
