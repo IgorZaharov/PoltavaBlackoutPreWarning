@@ -143,6 +143,45 @@ poe = {
         {"name": "constructed: apostrophe variant and a whole street", "row": ENTITY_ROW, "settlement": "село Нижні Млини", "street": "вул. Дем’яна Бідного", "house": "4", "out": "CONFIRMED"},
         {"name": "constructed: a street without a house list matches only the street", "row": ENTITY_ROW, "settlement": "село Нижні Млини", "street": "вул. Шевченка", "house": "10", "out": "STREET"},
     ],
+    "nearby": [
+        {"name": "live Полтава rows at 12:00: the mirror row is dropped, two groups of one street merge, the user's house is listed",
+         "rows": [POLTAVA_ROW, MIRROR_ROW, ZUIVTSI_ROW], "settlement": "місто Полтава", "street": "вул. Олександра Бідного", "house": "5", "now": "2026-11-16T12:00",
+         "expect": [{"id": "poe_reg_2026-11-16T09:25", "kind": "REPAIR", "start": "2026-11-16T09:25", "end": "2026-11-16T16:00", "reason": "Планова перерва", "status": "ACTIVE",
+                     "streets": [{"name": "вул.Олександра Бідного", "houses": ["1а", "1", "1-1а", "5"], "mine": True},
+                                 {"name": "вул. Української Повстанської Армії", "houses": ["35"], "mine": False}],
+                     "match": "CONFIRMED"}]},
+        {"name": "live Зуївці row: house 3 is off per E4 but the registry omits it, so only the street matches; the same row from two branches is one item",
+         "rows": [ZUIVTSI_ROW, ZUIVTSI_ROW], "settlement": "село Зуївці", "street": "вул. Дружби", "house": "3", "now": "2026-11-16T10:30",
+         "expect": [{"id": "poe_reg_2026-11-16T08:59", "kind": "EMERGENCY", "start": "2026-11-16T08:59", "end": "2026-11-16T15:59", "reason": E3, "status": "ACTIVE",
+                     "streets": [{"name": "вул.Дружби", "houses": ["1", "9", "15", "17", "26", "28"], "mine": True},
+                                 {"name": "вул.Зелена", "houses": ["2", "13", "23", "27"], "mine": False},
+                                 {"name": "вул.Молодіжна", "houses": ["28"], "mine": False}],
+                     "match": "STREET"}]},
+        {"name": "order: active, then upcoming, then finished; a row without the user's street is dropped (owner: same settlement and street)",
+         "rows": [ZUIVTSI_ROW, "<tr><td>16.11.2026 18:00:00</td><td>16.11.2026 19:00</td><td><b>с.Зуївці</b><br><b>вул.Садова</b><br></td><td>Планова перерва</td><tr>",
+                  "<tr><td>16.11.2026 07:00:00</td><td>16.11.2026 08:00</td><td><b>с.Зуївці</b><br><b>вул.Садова</b> (б. 2)<br></td><td>Аварійна перерва</td><tr>",
+                  "<tr><td>16.11.2026 11:00:00</td><td>16.11.2026 13:00</td><td><b>с.Зуївці</b><br><b>вул.Садова</b> (б. 5)<br><b>вул.Зелена</b> (б. 1)<br></td><td>Аварійна перерва</td><tr>"],
+         "settlement": "Зуївці", "street": "вул. Садова", "house": "2", "now": "2026-11-16T12:00",
+         "expect": [
+             {"id": "poe_reg_2026-11-16T11:00", "kind": "EMERGENCY", "start": "2026-11-16T11:00", "end": "2026-11-16T13:00", "reason": E3, "status": "ACTIVE",
+              "streets": [{"name": "вул.Садова", "houses": ["5"], "mine": True}, {"name": "вул.Зелена", "houses": ["1"], "mine": False}], "match": "STREET"},
+             {"id": "poe_reg_2026-11-16T18:00", "kind": "REPAIR", "start": "2026-11-16T18:00", "end": "2026-11-16T19:00", "reason": "Планова перерва", "status": "UPCOMING",
+              "streets": [{"name": "вул.Садова", "houses": [], "mine": True}], "match": "STREET"},
+             {"id": "poe_reg_2026-11-16T07:00", "kind": "EMERGENCY", "start": "2026-11-16T07:00", "end": "2026-11-16T08:00", "reason": E3, "status": "FINISHED",
+              "streets": [{"name": "вул.Садова", "houses": ["2"], "mine": True}], "match": "CONFIRMED"}]},
+        {"name": "queue-only subscription (no street, no house): nothing is shown",
+         "rows": [ZUIVTSI_ROW], "settlement": "Зуївці", "street": "", "house": "", "now": "2026-11-16T12:00", "expect": []},
+        {"name": "constructed: no end is active; a whole-street entry makes the merged street whole; an empty reason reads as repair",
+         "rows": [ENTITY_ROW, "<tr><td>16.11.2026 11:00:00</td><td>16.11.2026 12:00</td><td><b>с.Нижні Млини</b><br><b>вул.Шевченка</b> (б. 1, 3)<br><br><b>с.Нижні Млини</b><br><b>вул. Шевченка</b><br></td><td></td><tr>"],
+         "settlement": "село Нижні Млини", "street": "вул. Шевченка", "house": "10", "now": "2026-11-16T11:30",
+         "expect": [
+             {"id": "poe_reg_2026-11-16T10:00", "kind": "EMERGENCY", "start": "2026-11-16T10:00", "end": None, "reason": E3, "status": "ACTIVE",
+              "streets": [{"name": "вул.Дем'яна Бідного", "houses": ["4"], "mine": False}, {"name": "вул.Шевченка", "houses": [], "mine": True}], "match": "STREET"},
+             {"id": "poe_reg_2026-11-16T11:00", "kind": "REPAIR", "start": "2026-11-16T11:00", "end": "2026-11-16T12:00", "reason": "", "status": "ACTIVE",
+              "streets": [{"name": "вул.Шевченка", "houses": [], "mine": True}], "match": "STREET"}]},
+        {"name": "constructed: another settlement, a mirror only and nothing at all give no items",
+         "rows": [MIRROR_ROW, ZUIVTSI_ROW], "settlement": "село Хомутець", "street": "вул. Дружби", "house": "9", "now": "2026-11-16T12:00", "expect": []},
+    ],
 }
 
 # ---------------------------------------------------------------- outage_engine_poe.json
@@ -210,7 +249,109 @@ engine = {
     ],
 }
 
-for name, obj in (('poe_api.json', poe), ('outage_engine_poe.json', engine)):
+# Several connections at one address (live, 17.11 for Полтава, Європейська 88): no queue in the answer,
+# which is not "no queue" (spec/POE_API.md 8.5, 8.11)
+for c in poe['addressStatus']:
+    c['expect'].setdefault('severalConnections', False)
+poe['addressStatus'].append(
+    {"name": "live (17.11): several connections at the address (Полтава, Європейська 88): no queue given, which is not 'no queue'",
+     "today": "2026-11-17", "in": fx('type0_several'),
+     "expect": {"messageType": 0, "queue": None, "emergency": None, "repairs": [], "scheduleMirror": False, "unparsed": False,
+                "severalConnections": True}})
+
+# ---------------------------------------------------------------- queue_catalogue.json (spec/POE_API.md 8.11)
+def ce(q, branch, row, settlement, street, houses=(), ranges=(), whole=None):
+    return {"q": q, "branch": branch, "row": row, "settlement": settlement, "street": street,
+            "houses": list(houses), "ranges": [list(r) for r in ranges], "whole": whole}
+
+
+CAT = [
+    ce("3.1", "poltavska", 28, "Полтава", "Європейська", ["78", "86", "88"]),
+    ce("1.1", "poltavska", 37, "Полтава", "Європейська", whole="street"),
+    ce("5.1", "poltavska", 19, "Полтава", "Європейська", ["88б", "28"]),
+    ce("5.1", "poltavska", 39, "Полтава", "Юліана Матвійчука", ["47", "49"]),
+    ce("1.1", "poltavska", 46, "Полтава", "Матвійчука", ["44", "49"]),
+    ce("2.1", "pyriatynska", 10, "Пирятин", "Приудайський Узвіз", ranges=[[1, 33], [2, 60]]),
+    ce("2.2", "reshetylivska", 5, "Братешки", None, whole="settlement"),
+    ce("4.1", "pyriatynska", 3, "Пирятин", "Європейська", ["88"]),
+    ce("6.1", "poltavska", 50, "Полтава", "П.Дорошенка", ["15"]),
+    ce("1.2", "poltavska", 11, "Полтава", "Дорошенка", ["15"]),
+    # row 1 of «П'ята черга І підчерга», Полтавська дільниця (page 66): streets without house numbers, a whole village
+    ce("5.1", "poltavska-rem", 1, "Головач", "Кринична", whole="street"),
+    ce("5.1", "poltavska-rem", 1, "Минівка", None, whole="settlement"),
+]
+
+
+def hit(q, kind, branch, row, exact=True):
+    return {"queue": q, "kind": kind, "branch": branch, "row": row, "exact": exact}
+
+
+catalogue = {
+    "_doc": "Golden cases for QueueCatalogue.lookup (spec/POE_API.md 8.11): the queues the hourly-schedule catalogue gives "
+            "for one address, best first, one per queue. 'entries' is a reduced catalogue (rows of the PDF of 2026-10-08 "
+            "or constructed). 'branches' empty = any branch.",
+    "entries": CAT,
+    "cases": [
+        {"name": "Європейська 88: the house is listed in 3.1; the whole street in 1.1 comes after; 88б of 5.1 is another house",
+         "settlement": "місто Полтава", "branches": ["poltavska", "poltavska-rem"], "street": "вул. Європейська", "house": "88",
+         "expect": [hit("3.1", "HOUSE", "poltavska", 28), hit("1.1", "STREET", "poltavska", 37)]},
+        {"name": "88б is its own house; the street type and a Latin-free key do not matter",
+         "settlement": "Полтава", "branches": [], "street": "Європейська", "house": "88Б",
+         "expect": [hit("5.1", "HOUSE", "poltavska", 19), hit("1.1", "STREET", "poltavska", 37)]},
+        {"name": "several rows list the same house: the full street name first, then the last-word match",
+         "settlement": "місто Полтава", "branches": ["poltavska"], "street": "вул. Юліана Матвійчука", "house": "49",
+         "expect": [hit("5.1", "HOUSE", "poltavska", 39), hit("1.1", "HOUSE", "poltavska", 46, exact=False)]},
+        {"name": "an initial in the PDF (П.Дорошенка) meets the full name; the bare surname of another row comes later",
+         "settlement": "місто Полтава", "branches": ["poltavska"], "street": "вул. Петра Дорошенка", "house": "15",
+         "expect": [hit("1.2", "HOUSE", "poltavska", 11, exact=False), hit("6.1", "HOUSE", "poltavska", 50, exact=False)]},
+        {"name": "a house range covers plain numbers only",
+         "settlement": "місто Пирятин", "branches": [], "street": "вул. Приудайський Узвіз", "house": "14",
+         "expect": [hit("2.1", "RANGE", "pyriatynska", 10)]},
+        {"name": "a lettered house is not inside a number range",
+         "settlement": "місто Пирятин", "branches": [], "street": "вул. Приудайський Узвіз", "house": "14а",
+         "expect": []},
+        {"name": "a whole village",
+         "settlement": "село Братешки", "branches": ["reshetylivska"], "street": "вул. Шевченка", "house": "3",
+         "expect": [hit("2.2", "SETTLEMENT", "reshetylivska", 5)]},
+        {"name": "the same street name in another settlement does not count",
+         "settlement": "місто Пирятин", "branches": [], "street": "вул. Європейська", "house": "88",
+         "expect": [hit("4.1", "HOUSE", "pyriatynska", 3)]},
+        {"name": "entries of other branches are skipped when the address's branches are known",
+         "settlement": "місто Пирятин", "branches": ["poltavska"], "street": "вул. Європейська", "house": "88",
+         "expect": []},
+        {"name": "no street and no house: nothing but a whole settlement can match",
+         "settlement": "місто Полтава", "branches": [], "street": "", "house": "",
+         "expect": []},
+        {"name": "a whole village without a street (село Минівка: the picker has no street to offer)",
+         "settlement": "село Минівка", "branches": ["poltavska-rem"], "street": "", "house": "",
+         "expect": [hit("5.1", "SETTLEMENT", "poltavska-rem", 1)]},
+        {"name": "a whole street without a house number (село Головач, вул. Кринична: POE lists no houses)",
+         "settlement": "село Головач", "branches": [], "street": "вул. Кринична", "house": "",
+         "expect": [hit("5.1", "STREET", "poltavska-rem", 1)]},
+        {"name": "a street without a house number matches the whole street only, never a listed house",
+         "settlement": "місто Полтава", "branches": ["poltavska"], "street": "вул. Європейська", "house": "",
+         "expect": [hit("1.1", "STREET", "poltavska", 37)]},
+        {"name": "a whole village also covers a street of it given without a house",
+         "settlement": "село Братешки", "branches": [], "street": "вул. Шевченка", "house": "",
+         "expect": [hit("2.2", "SETTLEMENT", "reshetylivska", 5)]},
+    ],
+    "confident": [
+        {"name": "the best hint is the only one of its kind: a refresh may take it",
+         "hints": [hit("3.1", "HOUSE", "poltavska", 28), hit("1.1", "STREET", "poltavska", 37)], "expect": "3.1"},
+        {"name": "one house in rows of two queues: a tie, the user chooses",
+         "hints": [hit("2.2", "HOUSE", "poltavska", 4), hit("5.1", "HOUSE", "poltavska", 19)], "expect": None},
+        {"name": "same kind but an exact street name beats a last-word match",
+         "hints": [hit("1.2", "HOUSE", "poltavska", 11), hit("6.1", "HOUSE", "poltavska", 50, exact=False)], "expect": "1.2"},
+        {"name": "two last-word matches of the same kind: a tie",
+         "hints": [hit("1.2", "HOUSE", "poltavska", 11, exact=False), hit("6.1", "HOUSE", "poltavska", 50, exact=False)], "expect": None},
+        {"name": "a whole village alone",
+         "hints": [hit("5.1", "SETTLEMENT", "poltavska-rem", 1)], "expect": "5.1"},
+        {"name": "no hints",
+         "hints": [], "expect": None},
+    ],
+}
+
+for name, obj in (('poe_api.json', poe), ('outage_engine_poe.json', engine), ('queue_catalogue.json', catalogue)):
     with open(f'{ROOT}/spec/vectors/{name}', 'w', encoding='utf-8', newline='\n') as f:
         json.dump(obj, f, ensure_ascii=False, indent=1)
         f.write('\n')

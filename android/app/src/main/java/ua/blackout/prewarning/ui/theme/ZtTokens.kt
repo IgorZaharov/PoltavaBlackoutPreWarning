@@ -69,6 +69,11 @@ object ZtColors {
     val EmergencyAmberEnd = Color(0xFFC96A0B)
     val EmergencyStripeDark = Color(0x8C1A1208)
     val EmergencyStripeLight = Color(0xD9FFB020)
+
+    // POE switching half-hour on the drum (design-tokens.json drum.switchingGradient): top half, no stripes
+    val SwitchingStart = Color(0xFFE3AE2E)
+    val SwitchingMid = Color(0xFFF5C242)
+    val SwitchingEnd = Color(0xFFD9A62C)
 }
 
 /**

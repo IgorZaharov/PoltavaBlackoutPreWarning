@@ -32,6 +32,21 @@ while ((match = entryRegex.exec(existingTs)) !== null) {
 
 const additionalFiles = [
   {
+    path: 'app/src/main/java/ua/blackout/prewarning/core/QueueCatalogue.kt',
+    language: 'kotlin',
+    description: 'Address -> queue lookup in the POE hourly-schedule catalogue (several connections, whole streets and villages)',
+  },
+  {
+    path: 'app/src/main/java/ua/blackout/prewarning/data/poe/PoeQueues.kt',
+    language: 'kotlin',
+    description: 'Bundled queue catalogue (poe_queues.json), weekly refresh, company list',
+  },
+  {
+    path: 'app/src/main/java/ua/blackout/prewarning/ui/components/QueueChoiceChips.kt',
+    language: 'kotlin',
+    description: 'Selectable queue chips for houses with several connections, places and companies',
+  },
+  {
     path: 'app/src/main/java/ua/blackout/prewarning/core/PoeSchedule.kt',
     language: 'kotlin',
     description: 'POE schedule page parser: 12 queues x 48 cells (on / off / switching)',

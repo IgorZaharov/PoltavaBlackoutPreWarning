@@ -11,6 +11,7 @@ import ua.blackout.prewarning.core.IntervalStatus
 import ua.blackout.prewarning.core.Outage
 import ua.blackout.prewarning.core.OutageEngine
 import ua.blackout.prewarning.core.OutageKind
+import ua.blackout.prewarning.core.PoeMapper
 import ua.blackout.prewarning.core.SiteState
 import ua.blackout.prewarning.core.StatusInfo
 import ua.blackout.prewarning.core.StreetKey
@@ -26,14 +27,25 @@ import ua.blackout.prewarning.data.model.UserSettings
 import ua.blackout.prewarning.data.poe.AddressStatusFetch
 import ua.blackout.prewarning.data.poe.FetchStatus
 import ua.blackout.prewarning.data.poe.PoeAddressLookup
+import ua.blackout.prewarning.data.poe.PoeBranches
+import ua.blackout.prewarning.data.poe.PoeQueues
+import ua.blackout.prewarning.core.QueueCatalogue
 import ua.blackout.prewarning.data.poe.PoeClient
 import ua.blackout.prewarning.data.poe.PoeScheduleSync
+import ua.blackout.prewarning.data.poe.RegistryFetch
 import ua.blackout.prewarning.notification.NotificationHelper
 import java.time.LocalDate
 import java.time.LocalDateTime
 
 private fun hhmm(minuteOfDay: Int): String =
     "${(minuteOfDay / 60).toString().padStart(2, '0')}:${(minuteOfDay % 60).toString().padStart(2, '0')}"
+
+/**
+ * The card «Ремонти й пошкодження поруч» (spec/POE_API.md 8.10): today's registry rows of the
+ * address's settlement. [fetchedMs] is the oldest branch answer used; [complete] is false when a
+ * branch could not be asked on the last attempt (the card then shows the time of its data).
+ */
+data class NearbySnapshot(val items: List<PoeMapper.NearbyOutage>, val fetchedMs: Long, val complete: Boolean)
 
 /** Everything the screens, widgets and alarms need, derived from local state only (no network). */
 data class OutageSnapshot(
@@ -47,13 +59,31 @@ data class OutageSnapshot(
     val poweron: PowerOnSnapshot?,
     val hasAddress: Boolean,
     /** POE switching half-hours of the queue (spec/OUTAGE_ENGINE.md 3.5). */
-    val switching: List<SwitchWindow> = emptyList()
+    val switching: List<SwitchWindow> = emptyList(),
+    /** Today's active POE measures (ГАВ, ГОП ...), one per line, or null. */
+    val measures: String? = null,
+    /** POE's info line of the house (`gav_message`), or null. */
+    val gavMessage: String? = null,
+    /** Registry rows of the address's settlement for today; null for a queue only or before the first answer. */
+    val nearby: NearbySnapshot? = null
 ) {
     val today: LocalDate get() = now.toLocalDate()
 
     fun dayView(date: LocalDate): DayView = OutageEngine.dayView(outages, date, now, switching = switching)
 
     fun status(): StatusInfo = OutageEngine.status(outages, now, switching = switching)
+
+    /**
+     * Start and end of the switching half-hour after the shown span (spec/OUTAGE_ENGINE.md 3.5): power
+     * comes back somewhere inside it. Null when unknown or when the day is unclear.
+     */
+    fun restoreWindow(): Pair<LocalDateTime, LocalDateTime>? {
+        if (isUnclear) return null
+        val st = status()
+        val until = st.restoreUntil ?: return null
+        val span = st.currentSpan ?: st.nextSpan ?: return null
+        return span.end to until
+    }
 
     /** The planned schedule is unknown and nothing else is known either: screens go grey. */
     val isUnclear: Boolean
@@ -132,6 +162,22 @@ data class RefreshOutcome(
  * can no longer disagree about what is off and when (spec/OUTAGE_ENGINE.md).
  */
 class OutageRepository(context: Context) {
+    companion object {
+        /** The registry of a branch is asked at most this often (it is about 50 KB gzipped). */
+        const val NEARBY_TTL_MS = 10 * 60 * 1000L
+
+        private val parsedCache = HashMap<Int, Pair<Long, List<PoeMapper.RegistryRow>>>()
+
+        /** The last nearby card, keyed by address, the stored answers it used and the minute (the screen asks every second). */
+        private var nearbyCache: Pair<String, NearbySnapshot?>? = null
+
+        /** Registry rows are parsed once per stored answer, not on every snapshot. */
+        private fun parsedRows(registryId: Int, cache: RegistryCache): List<PoeMapper.RegistryRow> = synchronized(parsedCache) {
+            parsedCache[registryId]?.takeIf { it.first == cache.fetchedMs }?.second
+                ?: cache.rows.mapNotNull { PoeMapper.parseRegistryRow(it) }.also { parsedCache[registryId] = cache.fetchedMs to it }
+        }
+    }
+
     private val appContext: Context = context.applicationContext
     private val schedule = ScheduleRepository(appContext)
     private val store = OutageStateStore(appContext)
@@ -139,6 +185,7 @@ class OutageRepository(context: Context) {
 
     init {
         PoeAddressLookup.init(appContext)
+        PoeQueues.attach(appContext)
     }
 
     /** Stable key of the selected address; survives duplicate-street merges because it uses the canonical street key. */
@@ -157,7 +204,7 @@ class OutageRepository(context: Context) {
         settings: UserSettings,
         now: LocalDateTime = LocalDateTime.now(KYIV_ZONE),
         key: String? = addressKey(settings.selectedAddressQuery)
-    ): OutageSnapshot = snapshotOf(settings.queue, key, now, store.poweron())
+    ): OutageSnapshot = snapshotOf(settings.queue, key, now, store.poweron(), settings.selectedAddressQuery)
 
     /**
      * The snapshot of one non-primary subscription for the main screen (spec/SUBSCRIPTIONS.md 9).
@@ -165,10 +212,11 @@ class OutageRepository(context: Context) {
      */
     fun snapshotFor(item: Subscription, now: LocalDateTime = LocalDateTime.now(KYIV_ZONE)): OutageSnapshot {
         val key = item.address?.key
-        return snapshotOf(item.queue.orEmpty(), key, now, key?.let { store.poweron(it) })
+        val query = item.address?.let { SelectedAddressQuery(it.remSlug, it.settlementId, it.streetId, it.house) }
+        return snapshotOf(item.queue.orEmpty(), key, now, key?.let { store.poweron(it) }, query)
     }
 
-    private fun snapshotOf(q: String, key: String?, now: LocalDateTime, poweron: PowerOnSnapshot?): OutageSnapshot =
+    private fun snapshotOf(q: String, key: String?, now: LocalDateTime, poweron: PowerOnSnapshot?, address: SelectedAddressQuery?): OutageSnapshot =
         OutageSnapshot(
             now = now,
             queue = q,
@@ -180,8 +228,56 @@ class OutageRepository(context: Context) {
             hasAddress = key != null,
             switching = if (q.isBlank()) emptyList() else OutageEngine.switchWindows(
                 now.toLocalDate(), schedule.todayCells(q), schedule.tomorrowCells(q), schedule.yesterdayCells(q)
-            )
+            ),
+            measures = store.measures(now.toLocalDate()),
+            gavMessage = key?.let { store.gavMessage(it) },
+            nearby = if (key != null) nearbyOf(address, now) else null
         )
+
+    /** Registry ids of every branch [address]'s settlement belongs to (its registry may list the outage). */
+    private fun branchesOf(address: SelectedAddressQuery?): List<Int> {
+        address ?: return emptyList()
+        val settlement = PoeAddressLookup.findSettlementById(address.settlementId)
+        val slugs = settlement?.branchIds?.takeIf { it.isNotEmpty() } ?: listOf(address.remId)
+        return slugs.mapNotNull { PoeBranches.bySlug(it)?.registryId }.distinct()
+    }
+
+    private fun nearbyOf(address: SelectedAddressQuery?, now: LocalDateTime): NearbySnapshot? {
+        address ?: return null
+        val branches = branchesOf(address)
+        val cacheKey = "${address.settlementId}|${address.streetId}|${address.house}|${now.withSecond(0).withNano(0)}|" +
+            branches.joinToString(",") { "$it=${store.registryMeta(it)}" }
+        synchronized(parsedCache) { nearbyCache?.takeIf { it.first == cacheKey }?.let { return it.second } }
+        val result = buildNearby(address, branches, now)
+        synchronized(parsedCache) { nearbyCache = cacheKey to result }
+        return result
+    }
+
+    private fun buildNearby(address: SelectedAddressQuery, branches: List<Int>, now: LocalDateTime): NearbySnapshot? {
+        val settlement = PoeAddressLookup.findSettlementById(address.settlementId) ?: return null
+        val caches = branches.mapNotNull { id -> store.registry(id)?.takeIf { it.date == now.toLocalDate() }?.let { id to it } }
+        if (caches.isEmpty()) return null
+        val rows = caches.flatMap { (id, c) -> parsedRows(id, c) }
+        val street = PoeAddressLookup.findStreetById(address.streetId)?.nameUk.orEmpty()
+        val items = PoeMapper.nearbyOutages(rows, settlement.nameUk, street, address.house, now)
+        return NearbySnapshot(items, caches.minOf { it.second.fetchedMs }, caches.size == branches.size && caches.all { it.second.lastOk })
+    }
+
+    /**
+     * Fetches the registry (E5) of every branch of [address]'s settlement, at most once per
+     * [NEARBY_TTL_MS] unless [force]. A failure keeps the stored rows (spec/POE_API.md section 9).
+     */
+    private fun refreshNearby(address: SelectedAddressQuery?, nowMs: Long, force: Boolean) {
+        val today = LocalDate.now(KYIV_ZONE)
+        for (id in branchesOf(address)) {
+            val cached = store.registry(id)
+            if (!force && cached != null && cached.date == today && cached.lastOk && nowMs - cached.fetchedMs in 0 until NEARBY_TTL_MS) continue
+            when (val r = runCatching { client.registry(id, today) }.getOrNull()) {
+                is RegistryFetch.Confirmed -> store.saveRegistry(id, today, r.raw, nowMs)
+                else -> store.saveRegistry(id, today, null, nowMs)
+            }
+        }
+    }
 
     /**
      * The outages of one queue and address key (either may be absent), local state only. One POE
@@ -225,7 +321,8 @@ class OutageRepository(context: Context) {
         if (anyQueue && (forceNetwork || !schedule.isCacheFresh(1L))) {
             try {
                 val res = PoeScheduleSync.refresh(appContext)
-                store.saveSite(res.siteState, nowMs, res.notice)
+                store.saveSite(res.siteState, nowMs)
+                if (res.measuresKnown) store.saveMeasures(LocalDate.now(KYIV_ZONE), res.notice)
                 if (settings.queue.isNotBlank()) {
                     fetchStatus = res.status
                     siteState = res.siteState
@@ -245,12 +342,14 @@ class OutageRepository(context: Context) {
             events = polled?.events.orEmpty()
             store.savePowerOn(poweronOk, nowMs)
             polled?.status?.let { st ->
-                val queue = st.status.queue.orEmpty()
-                val statusText = if (queue.isEmpty()) PoeAddressLookup.NO_QUEUE_TEXT else null
-                if (queue != settings.queue || statusText != settings.customQueueStatusText) {
-                    // into the primary subscription, which is mirrored back into the settings keys
-                    runCatching { SubscriptionSync(appContext).assignPrimaryQueue(queue, statusText, null) }
-                    queueChanged = true
+                val target = queueFromStatus(st, query, settings.queue.takeIf { it.isNotBlank() })
+                if (target != null) {
+                    val (queue, statusText) = target
+                    if (queue.orEmpty() != settings.queue || statusText != settings.customQueueStatusText) {
+                        // into the primary subscription, which is mirrored back into the settings keys
+                        runCatching { SubscriptionSync(appContext).assignPrimaryQueue(queue.orEmpty(), statusText, null) }
+                        queueChanged = true
+                    }
                 }
             }
             if (notify && events.isNotEmpty() && settings.emergencyNotificationsEnabled) {
@@ -263,7 +362,14 @@ class OutageRepository(context: Context) {
             }
         }
         if (subs != null) refreshOtherAddresses(settings, subs.first, subs.second, key, nowMs, notify, shownId)
+
+        // The nearby outages card of the address the main screen shows (the primary unless another is shown)
+        val shown = subs?.first?.items?.firstOrNull { it.id == shownId && it.id != subs.first.primaryId }?.address
+        val nearbyAddress = shown?.let { SelectedAddressQuery(it.remSlug, it.settlementId, it.streetId, it.house) } ?: query
+        if (key != null || shown != null) runCatching { refreshNearby(nearbyAddress, nowMs, forceNetwork) }
         val current = if (queueChanged) runCatching { SettingsRepository(appContext).getSettings() }.getOrDefault(settings) else settings
+        // The hourly-schedule catalogue from this repository's CI, at most once a week (spec/POE_API.md 8.11), last
+        runCatching { PoeQueues.refreshIfDue(appContext) }
         return RefreshOutcome(siteState, fetchStatus, poweronOk, events, snapshot(current))
     }
 
@@ -297,10 +403,12 @@ class OutageRepository(context: Context) {
             store.savePowerOn(key, polled?.ok ?: false, nowMs)
             if (polled == null) continue
             polled.status?.let { st ->
-                val queue = st.status.queue
-                val statusText = if (queue == null) PoeAddressLookup.NO_QUEUE_TEXT else null
-                if (queue != item.queue || statusText != item.queueStatusText) {
-                    runCatching { SubscriptionSync(appContext).assignItemQueue(item.id, queue, statusText) }
+                val target = queueFromStatus(st, SelectedAddressQuery(a.remSlug, a.settlementId, a.streetId, a.house), item.queue)
+                if (target != null) {
+                    val (queue, statusText) = target
+                    if (queue != item.queue || statusText != item.queueStatusText) {
+                        runCatching { SubscriptionSync(appContext).assignItemQueue(item.id, queue, statusText) }
+                    }
                 }
             }
             if (notify && alerts && polled.events.isNotEmpty()) {
@@ -311,6 +419,21 @@ class OutageRepository(context: Context) {
                 )
             }
         }
+    }
+
+    /**
+     * The queue (and no-queue text) an address gets from a confirmed per-house status, or null to leave it as
+     * it is. "Several connections" (spec/POE_API.md 8.11) never clears a queue: an address that has one keeps
+     * it; one that has none takes the queue of POE's hourly-schedule catalogue when it names one without doubt
+     * ([QueueCatalogue.confident]); otherwise the user picks it in the address dialog.
+     */
+    private fun queueFromStatus(st: AddressStatusFetch.Confirmed, query: SelectedAddressQuery, current: String?): Pair<String?, String?>? {
+        val queue = st.status.queue
+        if (queue != null) return queue to null
+        if (!st.status.severalConnections) return null to PoeAddressLookup.NO_QUEUE_TEXT
+        if (current != null) return null
+        val sure = runCatching { QueueCatalogue.confident(PoeQueues.queuesFor(query)) }.getOrNull() ?: return null to null
+        return sure to null
     }
 
     /** Second line of an emergency notification for [item] (spec/SUBSCRIPTIONS.md 8.4). */
@@ -342,7 +465,10 @@ class OutageRepository(context: Context) {
             val ledger = EmergencyLedger.reconcile(store.ledger(key), PoeClient.emergencyFetch(fetch, today), now)
             store.saveLedger(key, ledger.entries)
             val confirmed = fetch as? AddressStatusFetch.Confirmed
-            if (confirmed != null) store.saveRepairs(key, confirmed.status.repairs)
+            if (confirmed != null) {
+                store.saveRepairs(key, confirmed.status.repairs)
+                store.saveGavMessage(key, confirmed.gavMessage)
+            }
             Poll(confirmed != null, ledger.events, confirmed)
         }
     } catch (_: Exception) {

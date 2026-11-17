@@ -72,6 +72,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -108,6 +109,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import ua.blackout.prewarning.core.Subscription
 import ua.blackout.prewarning.core.SubscriptionStore
@@ -116,6 +118,10 @@ import ua.blackout.prewarning.data.model.SelectedAddressQuery
 import ua.blackout.prewarning.data.poe.AddressLookupResult
 import ua.blackout.prewarning.data.poe.FetchStatus
 import ua.blackout.prewarning.data.poe.PoeAddressLookup
+import ua.blackout.prewarning.data.poe.DirectoryUpdate
+import ua.blackout.prewarning.data.poe.PoeQueues
+import ua.blackout.prewarning.ui.components.QueueChoiceChips
+import ua.blackout.prewarning.ui.components.hintCaption
 import ua.blackout.prewarning.data.poe.PoeBranchOption
 import ua.blackout.prewarning.data.poe.PoeHouseLookupResult
 import ua.blackout.prewarning.data.poe.PoeScheduleSync
@@ -180,6 +186,8 @@ fun SettingsScreen(
         query: SelectedAddressQuery
     ) -> Unit = { _, _, _, _ -> },
     onAddQueueOnly: (String) -> Unit = {},
+    /** A workplace from the company search: its queue as a queue-only entry named after the company. */
+    onAddCompany: (queue: String, label: String) -> Unit = { _, _ -> },
     onRemoveSubscription: (String) -> Unit = {},
     onMakePrimary: (String) -> Unit = {},
     onSetPlanned: (id: String, on: Boolean) -> Unit = { _, _ -> },
@@ -615,6 +623,10 @@ fun SettingsScreen(
             onDismiss = { showQueueHelpDialog = false },
             onApply = { queue, statusText, addressLabel, query ->
                 onAddAddress(queue, statusText, addressLabel, query)
+                showQueueHelpDialog = false
+            },
+            onAddCompany = { queue, label ->
+                onAddCompany(queue, label)
                 showQueueHelpDialog = false
             },
             onShowAppBanner = onShowAppBanner
@@ -1199,6 +1211,20 @@ private fun PoeSettlementOption.displayName(lang: String) = nameUk
 @Suppress("UNUSED_PARAMETER")
 private fun PoeStreetOption.displayName(lang: String) = nameUk
 
+/** One company of the search by workplace: its queues and the text the search matches. */
+private data class CompanyChoice(
+    val id: String,
+    val name: String,
+    val label: String,
+    val town: String?,
+    val queues: List<String>,
+    val search: String,
+    val context: String
+)
+
+/** The twelve POE queues, for an address whose queue POE does not name. */
+private val QUEUE_IDS = listOf("1.1", "1.2", "2.1", "2.2", "3.1", "3.2", "4.1", "4.2", "5.1", "5.2", "6.1", "6.2")
+
 /** First-launch cascade: Полтавська об'єднана філія (spec/branches.json) and місто Полтава (POE city_id 11389). */
 private const val DEFAULT_BRANCH = "poltavska"
 private const val DEFAULT_SETTLEMENT = "11389"
@@ -1221,6 +1247,7 @@ private fun AddressLookupDialog(
     saved: SelectedAddressQuery?,
     onDismiss: () -> Unit,
     onApply: (queue: String, statusText: String?, addressLabel: String, query: SelectedAddressQuery) -> Unit,
+    onAddCompany: (queue: String, label: String) -> Unit = { _, _ -> },
     onShowAppBanner: (String) -> Unit
 ) {
     // The cascade starts from the saved address, or from Poltava city (Полтавська об'єднана філія) on a first
@@ -1249,6 +1276,22 @@ private fun AddressLookupDialog(
 
     var isCheckingAddressOnSite by remember { mutableStateOf(false) }
     var addressCheckFailed by remember { mutableStateOf(false) }
+    // "My address is missing" (plan section 4.4): which refresh runs, and a counter that reloads the lists after one
+    var refreshing by remember { mutableStateOf<String?>(null) }
+    // The queue the user picks when POE names none ("several connections", spec/POE_API.md 8.11)
+    var chosenQueue by remember(selectedStreetId, selectedHouse) { mutableStateOf<String?>(null) }
+    // Company search (hourly-schedule catalogue): one entry per company name with all its queues
+    var companies by remember { mutableStateOf<List<CompanyChoice>>(emptyList()) }
+    var selectedCompany by remember { mutableStateOf<String?>(null) }
+    // set together with selectedCompany in onSelect (a key on selectedCompany would drop that value)
+    var companyQueue by remember { mutableStateOf<String?>(null) }
+    var catalogueReady by remember { mutableStateOf(false) }
+    // POE answered with no houses for the chosen street (not a failure): the street is taken as a whole
+    var housesAnswered by remember(selectedStreetId) { mutableStateOf(false) }
+    var directoryVersion by remember { mutableIntStateOf(0) }
+    // "settlementId|directoryVersion" of the street list on screen: "no streets" only for the list of the chosen one
+    var streetsFor by remember { mutableStateOf("") }
+    val refreshScope = rememberCoroutineScope()
     var addressLookupResult by remember { mutableStateOf<AddressLookupResult?>(null) }
 
     fun clearBelowRem() {
@@ -1267,9 +1310,39 @@ private fun AddressLookupDialog(
         addressLookupResult = null
     }
 
+    // The hourly-schedule catalogue (about 2 MB) is read off the main thread
+    val appContextForQueues = LocalContext.current.applicationContext
+    LaunchedEffect(Unit) {
+        companies = withContext(Dispatchers.IO) {
+            runCatching {
+                PoeQueues.init(appContextForQueues)
+                // one entry per name and town: «Школа № 27» of Кременчук and of Полтава are two
+                PoeQueues.companies()
+                    .groupBy { "${it.name}|${it.settlement.orEmpty()}" }
+                    .map { (id, rows) ->
+                        val name = rows.first().name
+                        val town = rows.first().settlement
+                        CompanyChoice(
+                            id = id,
+                            name = name,
+                            label = if (town != null && rows.any { it.aliases.isNotBlank() }) "$name, $town" else name,
+                            town = town,
+                            queues = rows.map { it.queue }.distinct().sorted(),
+                            // the words the PDF does not use ("ЗОШ" for «Школа № 27») find it like the name
+                            search = (listOf(name) + rows.map { it.aliases }).filter { it.isNotBlank() }.distinct().joinToString(" "),
+                            // the words around the name in the PDF ("М'ясокомбінат ТОВ «Ясні Зорі-Полтавщина»") after every name
+                            context = rows.map { it.rowText }.filter { it.isNotBlank() }.distinct().joinToString("; ")
+                        )
+                    }
+                    .sortedBy { it.name.lowercase() }
+            }.getOrDefault(emptyList())
+        }
+        catalogueReady = PoeQueues.current() != null
+    }
+
     // Branch list (spec/branches.json) and the bundled POE address directory, loaded off the main thread
     val appContext = LocalContext.current.applicationContext
-    LaunchedEffect(remsState.retry) {
+    LaunchedEffect(remsState.retry, directoryVersion) {
         remsState.loading = true
         remsState.failed = false
         withContext(Dispatchers.IO) { runCatching { PoeAddressLookup.init(appContext) } }
@@ -1280,7 +1353,7 @@ private fun AddressLookupDialog(
     }
 
     // City list of the chosen REM. Never selects a city by itself; only drops a choice that no longer exists.
-    LaunchedEffect(selectedRemId, settlementsState.retry) {
+    LaunchedEffect(selectedRemId, settlementsState.retry, directoryVersion) {
         settlementsState.loading = true
         settlementsState.failed = false
         settlementsList = withContext(Dispatchers.IO) {
@@ -1296,7 +1369,7 @@ private fun AddressLookupDialog(
     }
 
     // Street list of the settlement (bundled POE address directory, spelling variants merged)
-    LaunchedEffect(selectedRemId, selectedSettlementId, streetsState.retry) {
+    LaunchedEffect(selectedRemId, selectedSettlementId, streetsState.retry, directoryVersion) {
         if (selectedSettlementId.isBlank()) {
             streetsList = emptyList()
             streetsState.loading = false
@@ -1311,6 +1384,7 @@ private fun AddressLookupDialog(
         }
         streetsState.failed = streetsList.isEmpty()
         streetsState.loading = false
+        streetsFor = "$selectedSettlementId|$directoryVersion"
     }
 
     // House list of the chosen street: live from POE (address search, E3), cached per street
@@ -1330,11 +1404,37 @@ private fun AddressLookupDialog(
             }.getOrNull()
         }
         if (!fetched.isNullOrEmpty()) housesList = fetched
-        housesState.failed = housesList.isEmpty()
+        housesAnswered = fetched != null
+        // an answer with no houses is not a failure: the street has no house numbers
+        housesState.failed = fetched == null && housesList.isEmpty()
         housesState.loading = false
     }
 
     val currentRem = allRems.firstOrNull { it.id == selectedRemId }
+    // A settlement whose directory has no streets (only once the directory is loaded), or a street POE lists no
+    // houses for: the lower picker is disabled and the place is added as a queue-only entry (spec/POE_API.md 8.11)
+    val noStreets = selectedSettlementId.isNotBlank() && !remsState.loading && !remsState.failed &&
+        !streetsState.loading && streetsFor == "$selectedSettlementId|$directoryVersion" && streetsList.isEmpty()
+    val noHouses = selectedStreetId.isNotBlank() && !housesState.loading && housesAnswered && housesList.isEmpty()
+    val placeMode: String? = when {
+        noStreets -> "settlement"
+        noHouses -> "street"
+        else -> null
+    }
+    val placeHints = remember(placeMode, selectedRemId, selectedSettlementId, selectedStreetId, catalogueReady, directoryVersion) {
+        if (placeMode == null || PoeQueues.current() == null) emptyList()
+        else runCatching {
+            PoeQueues.queuesFor(
+                SelectedAddressQuery(
+                    remId = selectedRemId,
+                    settlementId = selectedSettlementId,
+                    streetId = if (placeMode == "street") selectedStreetId else "",
+                    house = ""
+                )
+            )
+        }.getOrDefault(emptyList())
+    }
+    var placeQueue by remember(placeMode, selectedSettlementId, selectedStreetId, placeHints) { mutableStateOf(placeHints.firstOrNull()?.queue) }
     val currentSettlement = if (selectedSettlementId.isBlank()) null else {
         settlementsList.find { it.id == selectedSettlementId } ?: PoeAddressLookup.findSettlementById(selectedSettlementId)
     }
@@ -1342,6 +1442,9 @@ private fun AddressLookupDialog(
         streetsList.find { it.id == selectedStreetId } ?: PoeAddressLookup.findStreetById(selectedStreetId)
     }
     val currentHouseRecord = housesList.find { it.house.equals(selectedHouse, ignoreCase = true) }
+    val placeLabel = listOfNotNull(currentSettlement?.nameUk, currentStreet?.nameUk?.takeIf { placeMode == "street" })
+        .filter { it.isNotBlank() }
+        .joinToString(", ")
 
     // Asks POE (per-house status, E4) when street and house are chosen. Nothing closes or applies until the user presses the button.
     LaunchedEffect(selectedRemId, selectedSettlementId, selectedStreetId, selectedHouse) {
@@ -1367,6 +1470,8 @@ private fun AddressLookupDialog(
         isCheckingAddressOnSite = false
         addressLookupResult = res
         addressCheckFailed = res == null
+        // the catalogue's best queue is pre-selected; the user confirms or picks another
+        if (res?.severalConnections == true) chosenQueue = res.hints.firstOrNull()?.queue
         if (res != null) {
             val exists = housesList.any { it.house.equals(res.house, ignoreCase = true) }
             housesList = if (!exists) {
@@ -1395,7 +1500,20 @@ private fun AddressLookupDialog(
     }
 
     val remItems = remember(allRems, lang) { allRems.map { PickerItem(it.id, it.displayName(lang)) } }
-    val settlementItems = remember(settlementsList, lang) { settlementsList.map { PickerItem(it.id, it.displayName(lang)) } }
+    // Oblast-wide search (D4): the branch's settlements first, then every other one with its branch named
+    val settlementChoices = remember(settlementsList, selectedRemId, lang, directoryVersion) { PoeAddressLookup.settlementChoices(selectedRemId, lang) }
+    val settlementItems = remember(settlementChoices) { settlementChoices.map { PickerItem(it.option.id, it.label) } }
+
+    fun runRefresh(kind: String, work: () -> Boolean?, okText: (Boolean) -> String) {
+        if (refreshing != null) return
+        refreshing = kind
+        refreshScope.launch {
+            val ok = withContext(Dispatchers.IO) { runCatching { work() }.getOrNull() }
+            refreshing = null
+            if (ok != null) directoryVersion++
+            onShowAppBanner(if (ok == null) AppStrings.refreshListFailed(lang) else okText(ok))
+        }
+    }
     val streetItems = remember(streetsList, lang) { streetsList.map { PickerItem(it.id, it.displayName(lang)) } }
     val houseItems = remember(housesList) { housesList.map { PickerItem(it.house, it.house) } }
 
@@ -1519,6 +1637,10 @@ private fun AddressLookupDialog(
                             selectedId = selectedSettlementId.ifBlank { null },
                             onSelect = { item ->
                                 if (item.id != selectedSettlementId) {
+                                    // A settlement of another branch fills the branch in (most users do not know their дільниця)
+                                    val choice = settlementChoices.firstOrNull { it.option.id == item.id }
+                                    val branch = choice?.option?.branchIds?.firstOrNull()
+                                    if (choice != null && !choice.inBranch && branch != null) selectedRemId = branch
                                     selectedSettlementId = item.id
                                     clearBelowSettlement()
                                 }
@@ -1527,6 +1649,12 @@ private fun AddressLookupDialog(
                             loading = settlementsState.loading,
                             loadFailed = settlementsState.failed,
                             onRetry = { settlementsState.retry++ }
+                        )
+                        Text(
+                            text = AppStrings.addrCityAnyBranchHint(lang),
+                            style = ZtType.caption,
+                            color = ZtColors.TextTertiary,
+                            modifier = Modifier.padding(start = 4.dp)
                         )
 
                         SearchablePickerField(
@@ -1544,10 +1672,10 @@ private fun AddressLookupDialog(
                                 }
                             },
                             lang = lang,
-                            enabled = selectedSettlementId.isNotBlank(),
-                            disabledHint = AppStrings.pickerChooseFirst(lang),
+                            enabled = selectedSettlementId.isNotBlank() && !noStreets,
+                            disabledHint = if (noStreets) AppStrings.noStreetsHint(lang) else AppStrings.pickerChooseFirst(lang),
                             loading = streetsState.loading,
-                            loadFailed = streetsState.failed && selectedSettlementId.isNotBlank(),
+                            loadFailed = streetsState.failed && selectedSettlementId.isNotBlank() && !noStreets,
                             onRetry = { streetsState.retry++ }
                         )
 
@@ -1562,13 +1690,66 @@ private fun AddressLookupDialog(
                                 addressLookupResult = null
                             },
                             lang = lang,
-                            enabled = currentStreet != null,
-                            disabledHint = AppStrings.pickerChooseFirst(lang),
+                            enabled = currentStreet != null && !noHouses && !noStreets,
+                            disabledHint = if (noHouses) AppStrings.noHousesHint(lang) else AppStrings.pickerChooseFirst(lang),
                             loading = housesState.loading,
                             loadFailed = housesState.failed && currentStreet != null,
                             onRetry = { housesState.retry++ },
                             kind = PickerSearch.Kind.HOUSE
                         )
+
+                        // A settlement without streets, or a street POE lists no houses for (spec/POE_API.md 8.11):
+                        // the catalogue's queue for the whole place, added as a queue-only entry named after it
+                        if (placeMode != null) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 6.dp)
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(Color(0xD9141A29))
+                                    .border(2.dp, Color.White.copy(alpha = 0.25f), RoundedCornerShape(16.dp))
+                                    .padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Text(text = placeLabel, style = ZtType.label, color = Color(0xE6BAE6FD))
+                                Text(
+                                    text = if (placeMode == "settlement") AppStrings.noStreetsHint(lang) else AppStrings.noHousesHint(lang),
+                                    style = ZtType.label,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                                Text(
+                                    text = if (placeHints.isNotEmpty()) AppStrings.catalogueHintsTitle(lang) else AppStrings.chooseQueueTitle(lang),
+                                    style = ZtType.caption,
+                                    color = ZtColors.TextSecondary
+                                )
+                                QueueChoiceChips(
+                                    choices = if (placeHints.isNotEmpty()) placeHints.map { it.queue to hintCaption(lang, it.kind) }
+                                    else QUEUE_IDS.map { it to null },
+                                    selected = placeQueue,
+                                    lang = lang,
+                                    onSelect = { placeQueue = it }
+                                )
+                                if (placeHints.isNotEmpty()) {
+                                    Text(text = AppStrings.chooseQueueTitle(lang), style = ZtType.caption, color = ZtColors.TextTertiary)
+                                    QueueChoiceChips(
+                                        choices = QUEUE_IDS.filter { q -> placeHints.none { it.queue == q } }.map { it to null },
+                                        selected = placeQueue,
+                                        lang = lang,
+                                        onSelect = { placeQueue = it }
+                                    )
+                                }
+                                Text(text = AppStrings.placeQueueHint(lang), style = ZtType.caption, color = ZtColors.TextTertiary)
+                                val pq = placeQueue
+                                ActionButton(
+                                    text = if (pq != null) AppStrings.addCompanyQueue(lang, pq) else AppStrings.chooseQueueTitle(lang),
+                                    icon = Icons.Default.Add,
+                                    filled = pq != null,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    onClick = { if (pq != null) onAddCompany(pq, placeLabel) }
+                                )
+                            }
+                        }
 
                         // Result card (shown when a house is selected)
                         val validLookupResult = addressLookupResult?.takeIf {
@@ -1590,7 +1771,8 @@ private fun AddressLookupDialog(
                         }
                         if (selectedHouse.isNotBlank() && matchedRecord != null) {
                             // while the site answers, an address without a known queue cannot be confirmed yet
-                            val canApply = !(isCheckingAddressOnSite && matchedRecord.queue.isBlank())
+                            val several = matchedRecord.severalConnections && matchedRecord.queue.isBlank()
+                            val canApply = !(isCheckingAddressOnSite && matchedRecord.queue.isBlank()) && (!several || chosenQueue != null)
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -1686,6 +1868,33 @@ private fun AddressLookupDialog(
                                         }
                                     }
 
+                                    // Several connections: POE names no queue; the catalogue's queues, or all twelve, to choose from
+                                    if (several) {
+                                        Text(text = AppStrings.severalConnections(lang), style = ZtType.label, fontWeight = FontWeight.Bold, color = Color.White)
+                                        val hints = matchedRecord.hints
+                                        Text(
+                                            text = if (hints.isNotEmpty()) AppStrings.catalogueHintsTitle(lang) else AppStrings.chooseQueueTitle(lang),
+                                            style = ZtType.caption,
+                                            color = ZtColors.TextSecondary
+                                        )
+                                        QueueChoiceChips(
+                                            choices = if (hints.isNotEmpty()) hints.map { it.queue to hintCaption(lang, it.kind) }
+                                            else QUEUE_IDS.map { it to null },
+                                            selected = chosenQueue,
+                                            lang = lang,
+                                            onSelect = { chosenQueue = it }
+                                        )
+                                        if (hints.isNotEmpty()) {
+                                            Text(text = AppStrings.chooseQueueTitle(lang), style = ZtType.caption, color = ZtColors.TextTertiary)
+                                            QueueChoiceChips(
+                                                choices = QUEUE_IDS.filter { q -> hints.none { it.queue == q } }.map { it to null },
+                                                selected = chosenQueue,
+                                                lang = lang,
+                                                onSelect = { chosenQueue = it }
+                                            )
+                                        }
+                                    }
+
                                     // Full-width "Обрати чергу X.Y" / "Apply Queue X.Y" button under the address
                                     Box(
                                         modifier = Modifier
@@ -1701,7 +1910,11 @@ private fun AddressLookupDialog(
                                                     house = selectedHouse
                                                 )
                                                 val addressToSave = selectedAddressStr.ifBlank { matchedRecord.addressLabel }
-                                                if (matchedRecord.queue.isNotBlank()) {
+                                                val picked = chosenQueue
+                                                if (several && picked != null) {
+                                                    onApply(picked, null, addressToSave, query)
+                                                    onShowAppBanner("${AppStrings.queue(lang)} $picked")
+                                                } else if (matchedRecord.queue.isNotBlank()) {
                                                     onApply(matchedRecord.queue, null, addressToSave, query)
                                                     onShowAppBanner("${AppStrings.queue(lang)} ${matchedRecord.queue}")
                                                 } else {
@@ -1713,7 +1926,9 @@ private fun AddressLookupDialog(
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(
-                                            text = if (matchedRecord.queue.isNotBlank()) {
+                                            text = if (several && chosenQueue != null) {
+                                                if (lang == "uk") "Обрати чергу $chosenQueue" else "Apply Queue $chosenQueue"
+                                            } else if (matchedRecord.queue.isNotBlank()) {
                                                 if (lang == "uk") "Обрати чергу ${matchedRecord.queue}" else "Apply Queue ${matchedRecord.queue}"
                                             } else {
                                                 AppStrings.addrConfirm(lang)
@@ -1728,6 +1943,122 @@ private fun AddressLookupDialog(
                             }
                         }
                     }
+                }
+
+                // 1a) Search by workplace: companies named in POE's hourly-schedule PDF (spec/POE_API.md 8.11)
+                if (companies.isNotEmpty()) {
+                    val companyItems = remember(companies) {
+                        companies.map { c ->
+                            PickerItem(c.id, listOfNotNull(c.name, c.town, c.queues.joinToString(", ")).joinToString(" · "), c.search, c.context)
+                        }
+                    }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(24.dp))
+                            .background(Color(0x0DFFFFFF))
+                            .border(2.dp, Color.White.copy(alpha = 0.25f), RoundedCornerShape(24.dp))
+                            .padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            text = AppStrings.companyTitle(lang).uppercase(),
+                            style = ZtType.label,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 0.7.sp,
+                            color = Color.White
+                        )
+                        SearchablePickerField(
+                            label = AppStrings.companyLabel(lang),
+                            value = companies.firstOrNull { it.id == selectedCompany }?.name,
+                            placeholder = AppStrings.companyPlaceholder(lang),
+                            items = companyItems,
+                            selectedId = selectedCompany,
+                            onSelect = { item ->
+                                selectedCompany = item.id
+                                companyQueue = companies.firstOrNull { it.id == item.id }?.queues?.singleOrNull()
+                            },
+                            lang = lang,
+                            contextLabel = AppStrings.companyRowMatch(lang)
+                        )
+                        Text(text = AppStrings.companyHint(lang), style = ZtType.caption, color = ZtColors.TextTertiary)
+                        val company = companies.firstOrNull { it.id == selectedCompany }
+                        if (company != null) {
+                            if (company.queues.size > 1) {
+                                QueueChoiceChips(
+                                    choices = company.queues.map { it to null },
+                                    selected = companyQueue,
+                                    lang = lang,
+                                    onSelect = { companyQueue = it }
+                                )
+                            }
+                            val q = companyQueue
+                            ActionButton(
+                                text = if (q != null) AppStrings.addCompanyQueue(lang, q) else AppStrings.chooseQueueTitle(lang),
+                                icon = Icons.Default.Add,
+                                filled = q != null,
+                                modifier = Modifier.fillMaxWidth(),
+                                onClick = { if (q != null) onAddCompany(q, company.label) }
+                            )
+                        }
+                    }
+                }
+
+                // 1b) "Немає вашої адреси?": scoped refresh, never a crawl of POE from the phone (plan section 4.4)
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(horizontal = 4.dp)) {
+                    Text(
+                        text = AppStrings.addrMissingTitle(lang),
+                        style = ZtType.label,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    ActionButton(
+                        text = AppStrings.refreshSettlements(lang),
+                        icon = Icons.Default.Refresh,
+                        filled = false,
+                        subdued = true,
+                        busy = refreshing == "settlements",
+                        busyText = AppStrings.refreshing(lang),
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = {
+                            val rem = selectedRemId
+                            runRefresh("settlements", { PoeAddressLookup.refreshSettlements(rem).takeIf { it } }) { AppStrings.refreshListDone(lang) }
+                        }
+                    )
+                    if (selectedSettlementId.isNotBlank()) {
+                        ActionButton(
+                            text = AppStrings.refreshStreets(lang),
+                            icon = Icons.Default.Refresh,
+                            filled = false,
+                            subdued = true,
+                            busy = refreshing == "streets",
+                            busyText = AppStrings.refreshing(lang),
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = {
+                                val rem = selectedRemId
+                                val city = selectedSettlementId
+                                runRefresh("streets", { PoeAddressLookup.refreshStreets(rem, city).takeIf { it } }) { AppStrings.refreshListDone(lang) }
+                            }
+                        )
+                    }
+                    ActionButton(
+                        text = AppStrings.refreshDirectory(lang),
+                        icon = Icons.Default.Refresh,
+                        filled = false,
+                        subdued = true,
+                        busy = refreshing == "directory",
+                        busyText = AppStrings.refreshing(lang),
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = {
+                            runRefresh("directory", {
+                                when (PoeAddressLookup.updateDirectory()) {
+                                    DirectoryUpdate.UPDATED -> true
+                                    DirectoryUpdate.UP_TO_DATE -> false
+                                    DirectoryUpdate.FAILED -> null
+                                }
+                            }) { updated -> if (updated) AppStrings.directoryUpdated(lang) else AppStrings.directoryUpToDate(lang) }
+                        }
+                    )
                 }
 
                 // 2) "Пошук вручну" / "Manual search"

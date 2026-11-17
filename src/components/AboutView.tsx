@@ -6,7 +6,6 @@ import {
   Smartphone, 
   Monitor, 
   ShieldAlert, 
-  Zap,
   Heart,
   Globe
 } from 'lucide-react';
@@ -63,9 +62,8 @@ export const AboutView: React.FC<AboutViewProps> = ({ lang }) => {
     <div className="flex flex-col gap-4 max-w-lg mx-auto select-none">
       {/* App Identity Banner */}
       <div className="zt-glass rounded-3xl p-6 flex flex-col items-center text-center">
-        <div className="w-16 h-16 rounded-2xl bg-[#FF5E3A] flex items-center justify-center text-white shadow-lg mb-3 shadow-[#FF5E3A]/30">
-          <Zap className="w-8 h-8 fill-current" />
-        </div>
+        {/* The app logo (owner, 2026-11-16; scripts/build_app_icons.py makes it from public/logo.png) */}
+        <img src="/app-logo.png" alt="" aria-hidden="true" className="w-[72px] h-[72px] mb-3 object-contain" />
 
         <h1 className="text-xl font-bold text-white tracking-tight">
           {t.appTitle}

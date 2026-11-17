@@ -677,6 +677,9 @@ fun BlackoutAppNavigation(
                             if (ok) showAppBanner(AppStrings.addressAdded(resolvedLang))
                         },
                         onAddQueueOnly = { newQueue -> onStoreResult(subscriptionSync.addQueueOnly(newQueue)) },
+                        onAddCompany = { companyQueue, label ->
+                            if (onStoreResult(subscriptionSync.addQueueOnly(companyQueue, label))) showAppBanner(AppStrings.addressAdded(resolvedLang))
+                        },
                         onRemoveSubscription = { id -> onStoreResult(subscriptionSync.change { Subscriptions.remove(it, id) }) },
                         onMakePrimary = { id -> onStoreResult(subscriptionSync.change { Subscriptions.setPrimary(it, id) }) },
                         onSetPlanned = { id, on -> onStoreResult(subscriptionSync.change { Subscriptions.setPlanned(it, id, on) }) },

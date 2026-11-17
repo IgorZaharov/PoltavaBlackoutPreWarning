@@ -22,7 +22,11 @@ import { OutageStateStore, getOutageStateStore, type PowerOnSnapshot, type SiteS
 import { ScheduleCache, getScheduleCache } from './scheduleCache';
 import { PoeClient, type AddressStatusFetch } from './poeClient';
 import { getPoeClient, syncPoeSchedule, type PoeFetchStatus, type ScheduleSyncOptions, type ScheduleSyncResult } from './poeScheduleSync';
-import { NO_QUEUE_TEXT, findStreetById, type PoeStreetOption } from './poeAddressLookup';
+import { ensurePoeQueues, queuesFor, refreshQueuesIfDue } from './poeQueues';
+import { QueueCatalogue, type QueueHint } from '../core/queueCatalogue';
+import { NO_QUEUE_TEXT, findSettlementById, findStreetById, getRems, type PoeSettlementOption, type PoeStreetOption } from './poeAddressLookup';
+import { PoeMapper, type AddressStatus, type NearbyOutage, type RegistryRow } from '../core/poeMapper';
+import type { RegistryCache } from './outageStore';
 import { triggerEmergencyEventAlerts } from './alertManager';
 import { resolveLanguage } from './i18n';
 import { addressKey as subscriptionAddressKey, alertOrder, displayLabel, type Subscription, type SubscriptionStore } from '../core/subscriptions';
@@ -40,6 +44,20 @@ export interface ScheduleStatusInfo {
   isUnclear: boolean;
 }
 
+/**
+ * The card «Ремонти й пошкодження поруч» (spec/POE_API.md 8.10): today's registry rows of the
+ * address's settlement. `fetchedMs` is the oldest branch answer used; `complete` is false when a branch
+ * could not be asked on the last attempt (the card then shows the time of its data).
+ */
+export interface NearbySnapshot {
+  items: NearbyOutage[];
+  fetchedMs: number;
+  complete: boolean;
+}
+
+/** The registry of a branch is asked at most this often (it is about 50 KB gzipped). */
+export const NEARBY_TTL_MS = 10 * 60 * 1000;
+
 export interface OutageSnapshotInit {
   now: LocalDateTime;
   queue: string;
@@ -52,6 +70,12 @@ export interface OutageSnapshotInit {
   hasAddress: boolean;
   /** POE switching half-hours of the queue (spec/OUTAGE_ENGINE.md 3.5). */
   switching?: readonly SwitchWindow[];
+  /** Today's active POE measures (ГАВ, ГОП ...), one per line, or null. */
+  measures?: string | null;
+  /** POE's info line of the house (`gav_message`), or null. */
+  gavMessage?: string | null;
+  /** Registry rows of the address's settlement for today; null for a queue only or before the first answer. */
+  nearby?: NearbySnapshot | null;
 }
 
 /** Everything the screens, the widget simulator and alert checks need, derived from local state only. */
@@ -65,6 +89,9 @@ export class OutageSnapshot {
   readonly poweron: PowerOnSnapshot | null;
   readonly hasAddress: boolean;
   readonly switching: readonly SwitchWindow[];
+  readonly measures: string | null;
+  readonly gavMessage: string | null;
+  readonly nearby: NearbySnapshot | null;
 
   constructor(init: OutageSnapshotInit) {
     this.now = init.now;
@@ -76,6 +103,9 @@ export class OutageSnapshot {
     this.poweron = init.poweron;
     this.hasAddress = init.hasAddress;
     this.switching = init.switching ?? [];
+    this.measures = init.measures ?? null;
+    this.gavMessage = init.gavMessage ?? null;
+    this.nearby = init.nearby ?? null;
   }
 
   get today(): LocalDate {
@@ -88,6 +118,18 @@ export class OutageSnapshot {
 
   status(): StatusInfo {
     return engineStatus(this.outages, this.now, undefined, this.switching);
+  }
+
+  /**
+   * Start and end of the switching half-hour after the shown span (spec/OUTAGE_ENGINE.md 3.5): power comes
+   * back somewhere inside it. Null when unknown or when the day is unclear. Mirrors OutageSnapshot.restoreWindow.
+   */
+  restoreWindow(): [LocalDateTime, LocalDateTime] | null {
+    if (this.isUnclear) return null;
+    const st = this.status();
+    if (st.restoreUntil == null) return null;
+    const span = st.currentSpan ?? st.nextSpan;
+    return span ? [span.end, st.restoreUntil] : null;
   }
 
   /** The planned schedule is unknown and nothing else is known either: screens go grey. */
@@ -178,14 +220,29 @@ export interface RefreshOutcome {
   snapshot: OutageSnapshot;
 }
 
-/** Streets of the selected address, resolved from the POE address directory (a seam for tests). */
+/** Streets and settlements of the selected address, resolved from the POE address directory (a seam for tests). */
 export interface AddressResolver {
   street(streetId: string): Pick<PoeStreetOption, 'nameUk' | 'allIds'> | undefined;
+  /** Name and branches of a settlement (the nearby outages card); optional for tests that do not need it. */
+  settlement?(settlementId: string): Pick<PoeSettlementOption, 'nameUk' | 'branchIds'> | undefined;
 }
 
 export const defaultAddressResolver: AddressResolver = {
   street: findStreetById,
+  settlement: findSettlementById,
 };
+
+const parsedRegistry = new Map<number, { fetchedMs: number; rows: RegistryRow[] }>();
+/** The last nearby card, keyed by address, the stored answers it used and the minute (the view asks every second). */
+let nearbyCache: { key: string; value: NearbySnapshot | null } | null = null;
+/** Registry rows are parsed once per stored answer, not on every snapshot. */
+function parsedRows(registryId: number, cache: RegistryCache): RegistryRow[] {
+  const hit = parsedRegistry.get(registryId);
+  if (hit && hit.fetchedMs === cache.fetchedMs) return hit.rows;
+  const rows = cache.rows.map((r) => PoeMapper.parseRegistryRow(r)).filter((r): r is RegistryRow => r !== null);
+  parsedRegistry.set(registryId, { fetchedMs: cache.fetchedMs, rows });
+  return rows;
+}
 
 export interface OutageRepositoryDeps {
   schedule?: ScheduleCache;
@@ -285,7 +342,7 @@ export class OutageRepository {
 
   /** Local state only. [now] is the Kyiv wall clock. */
   snapshot(settings: UserSettings, now: LocalDateTime = fromInstant(this.nowMs()), key: string | null = this.addressKey(settings.selectedAddressQuery)): OutageSnapshot {
-    return this.snapshotOf(settings.queue || '', key, now, this.store.poweron());
+    return this.snapshotOf(settings.queue || '', key, now, this.store.poweron(), settings.selectedAddressQuery ?? null);
   }
 
   /**
@@ -294,10 +351,71 @@ export class OutageRepository {
    */
   snapshotFor(item: Subscription, now: LocalDateTime = fromInstant(this.nowMs())): OutageSnapshot {
     const key = item.address ? subscriptionAddressKey(item.address) : null;
-    return this.snapshotOf(item.queue ?? '', key, now, key !== null ? this.store.poweronFor(key) : null);
+    const a = item.address;
+    const query = a ? { remId: a.remSlug, settlementId: a.settlementId, streetId: a.streetId, house: a.house } : null;
+    return this.snapshotOf(item.queue ?? '', key, now, key !== null ? this.store.poweronFor(key) : null, query);
   }
 
-  private snapshotOf(q: string, key: string | null, now: LocalDateTime, poweron: PowerOnSnapshot | null): OutageSnapshot {
+  /** Registry ids of every branch [address]'s settlement belongs to (its registry may list the outage). */
+  private branchesOf(address: SelectedAddressQuery | null): number[] {
+    if (!address) return [];
+    const settlement = this.address.settlement?.(address.settlementId);
+    const slugs = settlement && settlement.branchIds.length > 0 ? settlement.branchIds : [address.remId];
+    const rems = getRems();
+    const ids = slugs.map((s) => rems.find((r) => r.id === s)?.registryId).filter((x): x is number => x !== undefined);
+    return [...new Set(ids)];
+  }
+
+  private nearbyOf(address: SelectedAddressQuery | null, now: LocalDateTime): NearbySnapshot | null {
+    if (!address) return null;
+    const branches = this.branchesOf(address);
+    const minute = now - (now % 60_000);
+    const key = `${address.settlementId}|${address.streetId}|${address.house}|${minute}|${branches.map((id) => `${id}=${this.store.registryMeta(id)}`).join(',')}`;
+    if (nearbyCache !== null && nearbyCache.key === key) return nearbyCache.value;
+    const value = this.buildNearby(address, branches, now);
+    nearbyCache = { key, value };
+    return value;
+  }
+
+  private buildNearby(address: SelectedAddressQuery, branches: number[], now: LocalDateTime): NearbySnapshot | null {
+    const settlement = this.address.settlement?.(address.settlementId);
+    if (!settlement) return null;
+    const today = formatLocalDate(toLocalDate(now));
+    const caches = branches
+      .map((id) => [id, this.store.registry(id)] as const)
+      .filter((p): p is readonly [number, RegistryCache] => p[1] !== null && p[1].date === today);
+    if (caches.length === 0) return null;
+    const rows = caches.flatMap(([id, c]) => parsedRows(id, c));
+    const street = this.address.street(address.streetId)?.nameUk ?? '';
+    return {
+      items: PoeMapper.nearbyOutages(rows, settlement.nameUk, street, address.house, now),
+      fetchedMs: Math.min(...caches.map(([, c]) => c.fetchedMs)),
+      complete: caches.length === branches.length && caches.every(([, c]) => c.lastOk),
+    };
+  }
+
+  /**
+   * Fetches the registry (E5) of every branch of [address]'s settlement, at most once per NEARBY_TTL_MS
+   * unless [force]. A failure keeps the stored rows (spec/POE_API.md section 9).
+   */
+  private async refreshNearby(address: SelectedAddressQuery | null, nowMs: number, force: boolean): Promise<void> {
+    const today = toLocalDate(fromInstant(nowMs));
+    const day = formatLocalDate(today);
+    for (const id of this.branchesOf(address)) {
+      const cached = this.store.registry(id);
+      const age = nowMs - (cached?.fetchedMs ?? 0);
+      if (!force && cached && cached.date === day && cached.lastOk && age >= 0 && age < NEARBY_TTL_MS) continue;
+      let r: Awaited<ReturnType<PoeClient['registry']>> | null = null;
+      try {
+        r = await this.poe.registry(id, today);
+      } catch {
+        r = null;
+      }
+      this.store.saveRegistry(id, day, r && r.kind === 'confirmed' ? r.raw : null, nowMs);
+    }
+  }
+
+  private snapshotOf(q: string, key: string | null, now: LocalDateTime, poweron: PowerOnSnapshot | null, address: SelectedAddressQuery | null = null): OutageSnapshot {
     const today = toLocalDate(now);
     const hasQueue = q.trim() !== '';
     return new OutageSnapshot({
@@ -312,6 +430,9 @@ export class OutageRepository {
       switching: hasQueue
         ? switchWindows(today, this.schedule.todayCells(q, today), this.schedule.tomorrowCells(q, today), this.schedule.yesterdayCells(q, today))
         : [],
+      measures: this.store.measures(formatLocalDate(today)),
+      gavMessage: key !== null ? this.store.gavMessage(key) : null,
+      nearby: key !== null ? this.nearbyOf(address, now) : null,
     });
   }
 
@@ -364,7 +485,8 @@ export class OutageRepository {
     if (anyQueue && (forceNetwork || !fresh)) {
       try {
         const res = await this.syncSchedule({ cache: this.schedule, nowMs });
-        this.store.saveSite(res.siteState, nowMs, res.notice ?? null);
+        this.store.saveSite(res.siteState, nowMs);
+        if (res.measuresKnown) this.store.saveMeasures(formatLocalDate(toLocalDate(fromInstant(nowMs))), res.notice ?? null);
         if (primaryQueue !== '') {
           fetchStatus = res.status;
           siteState = res.siteState;
@@ -384,9 +506,12 @@ export class OutageRepository {
       poweronOk = polled?.ok ?? false;
       events = polled?.events ?? [];
       this.store.savePowerOn(poweronOk, nowMs);
-      if (polled?.status) {
-        const queue = polled.status.status.queue ?? '';
-        const statusText = queue === '' ? NO_QUEUE_TEXT : null;
+      // the catalogue answers for "several connections" houses: load it first (in the browser; null elsewhere)
+      if (polled?.status?.status.severalConnections) await ensurePoeQueues().catch(() => null);
+      const target = polled?.status ? queueFromStatus(polled.status.status, query, settings.queue || null) : null;
+      if (target !== null) {
+        const queue = target.queue ?? '';
+        const statusText = target.statusText;
         if (queue !== (settings.queue || '') || statusText !== (settings.customQueueStatusText ?? null)) {
           // into the primary subscription, which is mirrored back into the settings
           try {
@@ -406,6 +531,23 @@ export class OutageRepository {
       }
     }
     const otherEvents = subs ? await this.refreshOtherAddresses(settings, subs, key, nowMs, notify, shownId, widgetIds) : [];
+
+    // The hourly-schedule catalogue from this repository's CI, at most once a week (spec/POE_API.md 8.11);
+    // in the browser only, and without holding up the refresh
+    if (typeof window !== 'undefined') void refreshQueuesIfDue().catch(() => 'FAILED');
+
+    // The nearby outages card of the address the main view shows (the primary unless another is shown)
+    const shownItem = subs ? subs.store.items.find((i) => i.id === shownId && i.id !== subs!.store.primaryId) ?? null : null;
+    const shownAddress = shownItem?.address
+      ? { remId: shownItem.address.remSlug, settlementId: shownItem.address.settlementId, streetId: shownItem.address.streetId, house: shownItem.address.house }
+      : null;
+    if (key !== null || shownAddress !== null) {
+      try {
+        await this.refreshNearby(shownAddress ?? query ?? null, nowMs, forceNetwork);
+      } catch {
+        // the card keeps its last rows
+      }
+    }
     const primaryItem = subs ? subs.store.items.find((i) => i.id === subs.store.primaryId) ?? null : null;
     return {
       siteState,
@@ -443,9 +585,12 @@ export class OutageRepository {
       if (key === primaryKey) continue;
       const polled = await this.pollPoe({ remId: a.remSlug, settlementId: a.settlementId, streetId: a.streetId, house: a.house }, key, nowMs);
       this.store.savePowerOnFor(key, polled?.ok ?? false, nowMs);
-      if (polled?.status) {
-        const queue = polled.status.status.queue;
-        const statusText = queue === null ? NO_QUEUE_TEXT : null;
+      if (polled?.status?.status.severalConnections) await ensurePoeQueues().catch(() => null);
+      const target = polled?.status
+        ? queueFromStatus(polled.status.status, { remId: a.remSlug, settlementId: a.settlementId, streetId: a.streetId, house: a.house }, item.queue)
+        : null;
+      if (target !== null) {
+        const { queue, statusText } = target;
         if (queue !== item.queue || statusText !== item.queueStatusText) {
           try {
             this.assignQueue(settings, item.id, queue, statusText);
@@ -493,7 +638,10 @@ export class OutageRepository {
       }
       const ledger = reconcile(this.store.ledger(key), PoeClient.emergencyFetch(fetch, today), now);
       this.store.saveLedger(key, ledger.entries);
-      if (fetch.kind === 'confirmed') this.store.saveRepairs(key, fetch.status.repairs);
+      if (fetch.kind === 'confirmed') {
+        this.store.saveRepairs(key, fetch.status.repairs);
+        this.store.saveGavMessage(key, fetch.gavMessage ?? null);
+      }
       return { ok: fetch.kind === 'confirmed', events: ledger.events, status: fetch.kind === 'confirmed' ? fetch : null };
     } catch {
       return null;
@@ -511,4 +659,28 @@ let defaultRepository: OutageRepository | null = null;
 /** Process-wide repository on the default storage and network (used by the views and the alert checks). */
 export function getOutageRepository(): OutageRepository {
   return (defaultRepository ??= new OutageRepository());
+}
+
+/**
+ * The queue (and no-queue text) an address gets from a confirmed per-house status, or null to leave it as it
+ * is (mirrors OutageRepository.queueFromStatus). "Several connections" (spec/POE_API.md 8.11) never clears a
+ * queue: an address that has one keeps it; one that has none takes the queue of POE's hourly-schedule catalogue
+ * when it names one without doubt (QueueCatalogue.confident); otherwise the user picks it in the address dialog.
+ */
+export function queueFromStatus(
+  status: Pick<AddressStatus, 'queue' | 'severalConnections'>,
+  query: SelectedAddressQuery,
+  current: string | null,
+  hints: (q: SelectedAddressQuery) => readonly QueueHint[] = queuesFor
+): { queue: string | null; statusText: string | null } | null {
+  if (status.queue !== null) return { queue: status.queue, statusText: null };
+  if (!status.severalConnections) return { queue: null, statusText: NO_QUEUE_TEXT };
+  if (current !== null && current !== '') return null;
+  let best: string | null = null;
+  try {
+    best = QueueCatalogue.confident(hints(query));
+  } catch {
+    best = null;
+  }
+  return { queue: best, statusText: null };
 }

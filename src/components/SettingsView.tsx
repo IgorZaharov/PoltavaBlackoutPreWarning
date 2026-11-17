@@ -11,6 +11,10 @@ import {
   getHousesForStreet,
   getRems,
   getSettlementsForRem,
+  refreshSettlements,
+  refreshStreets,
+  settlementChoices as settlementChoicesOf,
+  updateDirectory,
   getStreetsForSettlement,
   type PoeHouseLookupResult,
   type PoeBranchOption,
@@ -18,6 +22,8 @@ import {
   type PoeStreetOption
 } from '../services/poeAddressLookup';
 import { getSubscriptionSync, type SyncResult } from '../services/subscriptionSync';
+import { companyChoices, ensurePoeQueues, queuesFor, type CompanyChoice } from '../services/poeQueues';
+import { QueueChoiceChips, hintCaption } from './QueueChoiceChips';
 import {
   ERR_DUPLICATE,
   ERR_LIMIT,
@@ -35,10 +41,13 @@ import {
   type Subscription,
 } from '../core/subscriptions';
 import {
+  addCompanyQueue,
   addressLimitReached,
   addressesCount,
   addressesLeft,
   plannedDesc,
+  QUEUE_HELP_URL,
+  queueHelpSteps,
   rangeMinutes,
   removeConfirmBody,
   translations,
@@ -791,6 +800,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             // the user stays in Settings (owner request): the address is added in place
             if (applySync(synced)) showToast(wasEmpty ? toast : t.addressAdded);
           }}
+          onAddCompany={(queue, label) => {
+            setShowQueueHelp(false);
+            if (applySync(sync.addQueueOnly(settings, queue, label))) showToast(t.addressAdded);
+          }}
         />
         </ModalPortal>
       )}
@@ -868,9 +881,11 @@ interface AddressLookupDialogProps {
   lang: 'uk' | 'en';
   onDismiss: () => void;
   onApply: (next: UserSettings, toast: string) => void;
+  /** A workplace from the company search: its queue as a queue-only entry named after the company. */
+  onAddCompany: (queue: string, label: string) => void;
 }
 
-const AddressLookupDialog: React.FC<AddressLookupDialogProps> = ({ settings, lang, onDismiss, onApply }) => {
+const AddressLookupDialog: React.FC<AddressLookupDialogProps> = ({ settings, lang, onDismiss, onApply, onAddCompany }) => {
   const t = translations[lang];
   const siteUrl = settings.url;
   const saved = settings.selectedAddressQuery;
@@ -894,6 +909,22 @@ const AddressLookupDialog: React.FC<AddressLookupDialogProps> = ({ settings, lan
   const [isChecking, setIsChecking] = useState(false);
   const [checkFailed, setCheckFailed] = useState(false);
   const [lookup, setLookup] = useState<PoeHouseLookupResult | null>(null);
+  // "My address is missing" (plan section 4.4): which refresh runs and what it reported
+  const [refreshing, setRefreshing] = useState<'settlements' | 'streets' | 'directory' | null>(null);
+  const [refreshNote, setRefreshNote] = useState<string | null>(null);
+  // The queue the user picks when POE names none ("several connections", spec/POE_API.md 8.11)
+  const [chosenQueue, setChosenQueue] = useState<string | null>(null);
+  // Company search (hourly-schedule catalogue): one entry per company name with all its queues
+  const [companies, setCompanies] = useState<CompanyChoice[]>([]);
+  const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
+  const [companyQueue, setCompanyQueue] = useState<string | null>(null);
+  const [catalogueReady, setCatalogueReady] = useState(false);
+  // POE answered with no houses for the chosen street (not a failure): the street is taken as a whole
+  const [housesAnswered, setHousesAnswered] = useState<string | null>(null);
+  // "settlementId|directoryVersion" of the street list on screen: "no streets" only for the list of the chosen one
+  const [streetsFor, setStreetsFor] = useState('');
+  // The queue picked for a place without streets or house numbers
+  const [placeQueue, setPlaceQueue] = useState<string | null>(null);
 
   const patch = (set: React.Dispatch<React.SetStateAction<LevelState>>, p: Partial<LevelState>) => set((s) => ({ ...s, ...p }));
 
@@ -927,6 +958,20 @@ const AddressLookupDialog: React.FC<AddressLookupDialogProps> = ({ settings, lan
     };
   }, [rems.retry]);
 
+  // The hourly-schedule catalogue (about 2 MB), loaded once
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      await ensurePoeQueues();
+      if (cancelled) return;
+      setCompanies(companyChoices());
+      setCatalogueReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // City list of the chosen branch. Never selects a city by itself; only drops a choice that no longer exists.
   useEffect(() => {
     const list = getSettlementsForRem(selectedRemId);
@@ -948,6 +993,7 @@ const AddressLookupDialog: React.FC<AddressLookupDialogProps> = ({ settings, lan
     }
     const list = getStreetsForSettlement(selectedSettlementId);
     setStreetsList(list);
+    setStreetsFor(`${selectedSettlementId}|${directoryVersion}`);
     patch(setStreets, { loading: false, failed: list.length === 0 });
   }, [selectedSettlementId, streets.retry, directoryVersion]);
 
@@ -956,22 +1002,27 @@ const AddressLookupDialog: React.FC<AddressLookupDialogProps> = ({ settings, lan
     if (!selectedStreetId) {
       setHousesList([]);
       patch(setHouses, { loading: false, failed: false });
+      setHousesAnswered(null);
       return;
     }
     let cancelled = false;
     setHousesList(getHousesForStreet(selectedStreetId));
+    setHousesAnswered(null);
     patch(setHouses, { loading: true, failed: false });
     (async () => {
-      let fetched: PoeHouseLookupResult[] = [];
+      let fetched: PoeHouseLookupResult[] | null = null;
       try {
-        fetched = (await fetchHousesForStreet(selectedRemId, selectedSettlementId, selectedStreetId)) ?? [];
+        fetched = await fetchHousesForStreet(selectedRemId, selectedSettlementId, selectedStreetId);
       } catch {
-        fetched = [];
+        fetched = null;
       }
       if (cancelled) return;
-      const list = fetched.length > 0 ? fetched : getHousesForStreet(selectedStreetId);
+      const list = fetched !== null && fetched.length > 0 ? fetched : getHousesForStreet(selectedStreetId);
       setHousesList(list);
-      patch(setHouses, { loading: false, failed: list.length === 0 });
+      // the street id POE answered for, so a list of the previous street never reads as "no houses"
+      setHousesAnswered(fetched !== null ? selectedStreetId : null);
+      // an answer with no houses is not a failure: the street has no house numbers
+      patch(setHouses, { loading: false, failed: fetched === null && list.length === 0 });
     })();
     return () => {
       cancelled = true;
@@ -989,6 +1040,7 @@ const AddressLookupDialog: React.FC<AddressLookupDialogProps> = ({ settings, lan
   useEffect(() => {
     setLookup(null);
     setCheckFailed(false);
+    setChosenQueue(null);
     if (!selectedStreetId || !selectedHouse) {
       setIsChecking(false);
       return;
@@ -1006,6 +1058,8 @@ const AddressLookupDialog: React.FC<AddressLookupDialogProps> = ({ settings, lan
       setIsChecking(false);
       setLookup(res);
       setCheckFailed(res === null);
+      // the catalogue's best queue is pre-selected; the user confirms or picks another
+      if (res?.severalConnections) setChosenQueue(res.hints?.[0]?.queue ?? null);
       if (res) {
         setHousesList((prev) => {
           const exists = prev.some((h) => sameHouse(h.house, res!.house));
@@ -1029,33 +1083,90 @@ const AddressLookupDialog: React.FC<AddressLookupDialogProps> = ({ settings, lan
       : '';
 
   const remItems = useMemo<PickerItem[]>(() => allRems.map((r) => ({ id: r.id, label: displayName(r, lang) })), [allRems, lang]);
-  const settlementItems = useMemo<PickerItem[]>(() => settlementsList.map((s) => ({ id: s.id, label: placeName(s) })), [settlementsList, lang]);
+  // Oblast-wide search (D4): the branch's settlements first, then every other one with its branch named
+  const settlementChoices = useMemo(() => settlementChoicesOf(selectedRemId, lang), [settlementsList, selectedRemId, lang, directoryVersion]);
+  const settlementItems = useMemo<PickerItem[]>(() => settlementChoices.map((c) => ({ id: c.option.id, label: c.label })), [settlementChoices]);
+
+  const runRefresh = async (kind: 'settlements' | 'streets' | 'directory', work: () => Promise<boolean | null>, okText: (v: boolean) => string) => {
+    if (refreshing !== null) return;
+    setRefreshing(kind);
+    setRefreshNote(null);
+    let ok: boolean | null = null;
+    try {
+      ok = await work();
+    } catch {
+      ok = null;
+    }
+    setRefreshing(null);
+    if (ok !== null) setDirectoryVersion((v) => v + 1);
+    setRefreshNote(ok === null ? t.refreshListFailed : okText(ok));
+  };
   const streetItems = useMemo<PickerItem[]>(() => streetsList.map((s) => ({ id: s.id, label: placeName(s) })), [streetsList, lang]);
   const houseItems = useMemo<PickerItem[]>(() => housesList.map((h) => ({ id: h.house, label: h.house })), [housesList]);
+  const companyItems = useMemo<PickerItem[]>(
+    () => companies.map((c) => ({ id: c.id, label: [c.name, c.town, c.queues.join(', ')].filter(Boolean).join(' · '), search: c.search, context: c.context })),
+    [companies]
+  );
+  const currentCompany = companies.find((c) => c.id === selectedCompany) ?? null;
+
+  // A settlement whose directory has no streets, or a street POE lists no houses for (spec/POE_API.md 8.11):
+  // the lower picker is disabled and the place is added as a queue-only entry named after it
+  // only once the directory is loaded (an empty list before that means nothing)
+  const noStreets =
+    selectedSettlementId !== '' &&
+    !rems.loading &&
+    !rems.failed &&
+    !streets.loading &&
+    streetsFor === `${selectedSettlementId}|${directoryVersion}` &&
+    streetsList.length === 0;
+  const noHouses = Boolean(currentStreet) && !houses.loading && housesAnswered === selectedStreetId && housesList.length === 0;
+  const placeMode: 'settlement' | 'street' | null = noStreets ? 'settlement' : noHouses ? 'street' : null;
+  const placeHints = useMemo(
+    () =>
+      placeMode === null
+        ? []
+        : queuesFor({
+            remId: selectedRemId,
+            settlementId: selectedSettlementId,
+            streetId: placeMode === 'street' ? selectedStreetId : '',
+            house: '',
+          }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [placeMode, selectedRemId, selectedSettlementId, selectedStreetId, catalogueReady, directoryVersion]
+  );
+  const placeLabel = [currentSettlement ? placeName(currentSettlement) : '', placeMode === 'street' && currentStreet ? placeName(currentStreet) : '']
+    .filter((x) => x !== '')
+    .join(', ');
+  useEffect(() => {
+    setPlaceQueue(placeHints[0]?.queue ?? null);
+  }, [placeHints]);
 
   // Result card (shown when a house is selected)
   const validLookup = lookup && sameHouse(lookup.house, selectedHouse) ? lookup : null;
   const matched: PoeHouseLookupResult | null = validLookup && currentHouseRecord
     ? { ...validLookup, queue: validLookup.queue || currentHouseRecord.queue, statusText: validLookup.statusText ?? currentHouseRecord.statusText }
     : validLookup ?? currentHouseRecord ?? (selectedHouse.trim() !== '' ? { house: selectedHouse, queue: '', addressLabel: selectedAddressStr } : null);
+  const several = Boolean(matched?.severalConnections) && !matched?.queue;
+  const hints = matched?.hints ?? [];
   // while the site answers, an address without a known queue cannot be confirmed yet
-  const canApply = matched ? !(isChecking && !matched.queue) : false;
+  const canApply = matched ? !(isChecking && !matched.queue) && (!several || chosenQueue !== null) : false;
+  const applyQueue = several ? chosenQueue ?? '' : matched?.queue ?? '';
 
   const apply = () => {
     if (!matched) return;
     const query = { remId: selectedRemId, settlementId: selectedSettlementId, streetId: selectedStreetId, house: selectedHouse };
     const addressToSave = selectedAddressStr || matched.addressLabel;
-    const hasQueue = Boolean(matched.queue);
+    const hasQueue = applyQueue !== '';
     onApply(
       {
         ...settings,
-        queue: hasQueue ? matched.queue : '',
+        queue: hasQueue ? applyQueue : '',
         customQueueStatusText: hasQueue ? undefined : matched.statusText ?? undefined,
         selectedAddress: addressToSave,
         selectedAddressQuery: query,
         activeEmergencyOutage: null
       },
-      hasQueue ? `${t.queue} ${matched.queue}` : matched.statusText || t.addrSaved
+      hasQueue ? `${t.queue} ${applyQueue}` : matched.statusText || t.addrSaved
     );
   };
 
@@ -1148,11 +1259,18 @@ const AddressLookupDialog: React.FC<AddressLookupDialogProps> = ({ settings, lan
             onRetry={() => patch(setSettlements, { retry: settlements.retry + 1 })}
             onSelect={(item) => {
               if (item.id !== selectedSettlementId) {
+                // A settlement of another branch fills the branch in (most users do not know their дільниця)
+                const choice = settlementChoices.find((c) => c.option.id === item.id);
+                const branch = choice?.option.branchIds[0];
+                if (choice && !choice.inBranch && branch) setSelectedRemId(branch);
                 setSelectedSettlementId(item.id);
                 clearBelowSettlement();
               }
             }}
           />
+          <div data-testid="settlement-any-branch-hint" className="-mt-2 px-1 text-[13px] font-medium leading-[19px] text-[#BAE6FD]/60">
+            {t.addrCityAnyBranchHint}
+          </div>
 
           <SearchablePickerField
             testId="ztoe-select-street"
@@ -1162,10 +1280,10 @@ const AddressLookupDialog: React.FC<AddressLookupDialogProps> = ({ settings, lan
             items={streetItems}
             selectedId={selectedStreetId || null}
             lang={lang}
-            enabled={selectedSettlementId !== ''}
-            disabledHint={t.pickerChooseFirst}
+            enabled={selectedSettlementId !== '' && !noStreets}
+            disabledHint={noStreets ? t.noStreetsHint : t.pickerChooseFirst}
             loading={streets.loading}
-            loadFailed={streets.failed && selectedSettlementId !== ''}
+            loadFailed={streets.failed && selectedSettlementId !== '' && !noStreets}
             onRetry={() => patch(setStreets, { retry: streets.retry + 1 })}
             onSelect={(item) => {
               if (item.id !== selectedStreetId) {
@@ -1185,8 +1303,8 @@ const AddressLookupDialog: React.FC<AddressLookupDialogProps> = ({ settings, lan
             items={houseItems}
             selectedId={selectedHouse || null}
             lang={lang}
-            enabled={Boolean(currentStreet)}
-            disabledHint={t.pickerChooseFirst}
+            enabled={Boolean(currentStreet) && !noHouses && !noStreets}
+            disabledHint={noHouses ? t.noHousesHint : t.pickerChooseFirst}
             loading={houses.loading}
             loadFailed={houses.failed && Boolean(currentStreet)}
             onRetry={() => patch(setHouses, { retry: houses.retry + 1 })}
@@ -1196,6 +1314,51 @@ const AddressLookupDialog: React.FC<AddressLookupDialogProps> = ({ settings, lan
               setLookup(null);
             }}
           />
+
+          {placeMode !== null && (
+            <div
+              data-testid="place-queue-result"
+              className="mt-1.5 flex flex-col gap-2.5 rounded-2xl border-2 border-white/25 bg-[#141A29]/85 p-4 shadow-[0_12px_40px_rgba(0,0,0,0.45)] backdrop-blur-2xl"
+            >
+              <div className="text-sm font-semibold leading-5 text-[#BAE6FD]/90">{placeLabel}</div>
+              <div className="text-sm font-bold leading-5 text-white">{placeMode === 'settlement' ? t.noStreetsHint : t.noHousesHint}</div>
+              <div className={`text-[13px] font-medium leading-[19px] ${TEXT_SECONDARY}`}>
+                {placeHints.length > 0 ? t.catalogueHintsTitle : t.chooseQueueTitle}
+              </div>
+              <QueueChoiceChips
+                testId="place-queue"
+                label={placeHints.length > 0 ? t.catalogueHintsTitle : t.chooseQueueTitle}
+                choices={
+                  placeHints.length > 0 ? placeHints.map((h) => [h.queue, hintCaption(lang, h.kind)] as const) : QUEUES.map((q) => [q.id, null] as const)
+                }
+                selected={placeQueue}
+                lang={lang}
+                onSelect={setPlaceQueue}
+              />
+              {placeHints.length > 0 && (
+                <>
+                  <div className={`text-[13px] font-medium leading-[19px] ${TEXT_TERTIARY}`}>{t.chooseQueueTitle}</div>
+                  <QueueChoiceChips
+                    testId="place-other-queue"
+                    label={t.chooseQueueTitle}
+                    choices={QUEUES.filter((q) => !placeHints.some((h) => h.queue === q.id)).map((q) => [q.id, null] as const)}
+                    selected={placeQueue}
+                    lang={lang}
+                    onSelect={setPlaceQueue}
+                  />
+                </>
+              )}
+              <div className={`text-[13px] font-medium leading-[19px] ${TEXT_TERTIARY}`}>{t.placeQueueHint}</div>
+              <ActionButton
+                text={placeQueue !== null ? addCompanyQueue(lang, placeQueue) : t.chooseQueueTitle}
+                filled={placeQueue !== null}
+                testId="place-add"
+                onClick={() => {
+                  if (placeQueue !== null) onAddCompany(placeQueue, placeLabel);
+                }}
+              />
+            </div>
+          )}
 
           {selectedHouse.trim() !== '' && matched && (
             <div
@@ -1238,6 +1401,37 @@ const AddressLookupDialog: React.FC<AddressLookupDialogProps> = ({ settings, lan
                 </div>
               )}
 
+              {/* Several connections: POE names no queue; the catalogue's queues, or all twelve, to choose from */}
+              {several && !isChecking && (
+                <div data-testid="several-connections" className="flex flex-col gap-2">
+                  <div className="text-sm font-bold leading-5 text-white">{t.severalConnections}</div>
+                  <div className={`text-[13px] font-medium leading-[19px] ${TEXT_SECONDARY}`}>
+                    {hints.length > 0 ? t.catalogueHintsTitle : t.chooseQueueTitle}
+                  </div>
+                  <QueueChoiceChips
+                    testId="catalogue-queue"
+                    label={hints.length > 0 ? t.catalogueHintsTitle : t.chooseQueueTitle}
+                    choices={hints.length > 0 ? hints.map((h) => [h.queue, hintCaption(lang, h.kind)] as const) : QUEUES.map((q) => [q.id, null] as const)}
+                    selected={chosenQueue}
+                    lang={lang}
+                    onSelect={setChosenQueue}
+                  />
+                  {hints.length > 0 && (
+                    <>
+                      <div className={`text-[13px] font-medium leading-[19px] ${TEXT_TERTIARY}`}>{t.chooseQueueTitle}</div>
+                      <QueueChoiceChips
+                        testId="other-queue"
+                        label={t.chooseQueueTitle}
+                        choices={QUEUES.filter((q) => !hints.some((h) => h.queue === q.id)).map((q) => [q.id, null] as const)}
+                        selected={chosenQueue}
+                        lang={lang}
+                        onSelect={setChosenQueue}
+                      />
+                    </>
+                  )}
+                </div>
+              )}
+
               <button
                 type="button"
                 data-testid="ztoe-lookup-confirm-btn"
@@ -1247,84 +1441,126 @@ const AddressLookupDialog: React.FC<AddressLookupDialogProps> = ({ settings, lan
                   canApply ? 'cursor-pointer bg-[#FF5E3A] shadow-lg shadow-[#FF5E3A]/30 hover:bg-[#ff4b24]' : 'cursor-not-allowed bg-[#FF5E3A]/40'
                 }`}
               >
-                {matched.queue ? `${t.applyQueue} ${matched.queue}` : t.addrConfirm}
+                {applyQueue ? `${t.applyQueue} ${applyQueue}` : t.addrConfirm}
               </button>
             </div>
           )}
         </div>
 
+        {/* 1a) Search by workplace: companies named in POE's hourly-schedule PDF (spec/POE_API.md 8.11) */}
+        {companies.length > 0 && (
+          <div
+            data-testid="company-search-section"
+            className="flex w-full flex-col gap-3 rounded-3xl border-2 border-white/25 bg-white/[0.05] p-5"
+          >
+            <div className="text-sm font-extrabold uppercase leading-5 tracking-wider text-white">{t.companyTitle}</div>
+            <SearchablePickerField
+              testId="company-select"
+              label={t.companyLabel}
+              value={currentCompany?.name ?? null}
+              placeholder={t.companyPlaceholder}
+              items={companyItems}
+              selectedId={selectedCompany}
+              lang={lang}
+              contextLabel={t.companyRowMatch}
+              onSelect={(item) => {
+                setSelectedCompany(item.id);
+                const c = companies.find((x) => x.id === item.id);
+                setCompanyQueue(c && c.queues.length === 1 ? c.queues[0] : null);
+              }}
+            />
+            <div className={`text-[13px] font-medium leading-[19px] ${TEXT_TERTIARY}`}>{t.companyHint}</div>
+            {currentCompany && (
+              <>
+                {currentCompany.queues.length > 1 && (
+                  <QueueChoiceChips
+                    testId="company-queue"
+                    label={t.chooseQueueTitle}
+                    choices={currentCompany.queues.map((q) => [q, null] as const)}
+                    selected={companyQueue}
+                    lang={lang}
+                    onSelect={setCompanyQueue}
+                  />
+                )}
+                <ActionButton
+                  text={companyQueue !== null ? addCompanyQueue(lang, companyQueue) : t.chooseQueueTitle}
+                  filled={companyQueue !== null}
+                  testId="company-add"
+                  onClick={() => {
+                    if (companyQueue !== null) onAddCompany(companyQueue, currentCompany.label);
+                  }}
+                />
+              </>
+            )}
+          </div>
+        )}
+
         {/* 2) Manual search heading ("Пошук вручну" / "Manual search") */}
+        {/* 1b) "Немає вашої адреси?": scoped refresh, never a crawl of POE from the browser (plan section 4.4) */}
+        <div data-testid="address-missing-section" className="flex flex-col gap-2 px-1">
+          <div className="text-sm font-bold leading-5 text-white">{t.addrMissingTitle}</div>
+          {(
+            [
+              ['settlements', t.refreshSettlements, () => refreshSettlements(selectedRemId).then((ok) => (ok ? true : null))],
+              ...(selectedSettlementId
+                ? [['streets', t.refreshStreets, () => refreshStreets(selectedRemId, selectedSettlementId).then((ok) => (ok ? true : null))]]
+                : []),
+              [
+                'directory',
+                t.refreshDirectory,
+                () => updateDirectory().then((r) => (r === 'UPDATED' ? true : r === 'UP_TO_DATE' ? false : null)),
+              ],
+            ] as ['settlements' | 'streets' | 'directory', string, () => Promise<boolean | null>][]
+          ).map(([kind, label, work]) => (
+            <button
+              key={kind}
+              type="button"
+              data-testid={`refresh-${kind}`}
+              disabled={refreshing !== null}
+              aria-busy={refreshing === kind}
+              onClick={() =>
+                runRefresh(kind, work, (v) => (kind === 'directory' ? (v ? t.directoryUpdated : t.directoryUpToDate) : t.refreshListDone))
+              }
+              className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-white/10 px-3 py-2.5 text-sm font-semibold leading-5 text-[#BAE6FD]/80 hover:bg-white/5 disabled:opacity-60"
+            >
+              <RefreshCw className={`h-4 w-4 ${refreshing === kind ? 'animate-spin motion-reduce:animate-none' : ''}`} aria-hidden="true" />
+              {label}
+            </button>
+          ))}
+          {refreshNote !== null && (
+            <div role="status" data-testid="refresh-note" className="text-[13px] font-medium leading-[19px] text-[#BAE6FD]/80">
+              {refreshNote}
+            </div>
+          )}
+        </div>
+
         <div data-testid="queue-help-manual-search-title" className="px-1 pt-1 text-sm font-extrabold uppercase leading-5 tracking-wider text-white">
           {t.queueHelpManualSearchTitle}
         </div>
 
-        {/* 3) Numbered instruction steps (1..4) */}
+        {/* 3) Numbered instruction steps (1..4): the approved POE text (owner, 2026-11-16), as AppStrings.queueHelpSteps */}
         <div className="flex flex-col gap-3 text-base leading-6 text-zinc-100">
-          {/* Step 1 */}
-          <div className={stepClass}>
-            <span className={numClass}>1</span>
-            <div className="flex-1">
-              {lang === 'uk' ? (
-                <span>
-                  1. Відкрийте сторінку пошуку черги на сайті{' '}
-                  <a href={settings.url || DEFAULT_POE_URL} target="_blank" rel="noopener noreferrer" className={linkClass}>
-                    https://www.ztoe.com.ua/unhooking-search.php <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                  </a>
-                </span>
-              ) : (
-                <span>
-                  1. Open the queue lookup page on{' '}
-                  <a href={settings.url || DEFAULT_POE_URL} target="_blank" rel="noopener noreferrer" className={linkClass}>
-                    https://www.ztoe.com.ua/unhooking-search.php <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                  </a>
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Step 2 */}
-          <div className={stepClass}>
-            <span className={numClass}>2</span>
-            <div className="flex-1">
-              {lang === 'uk' ? (
-                <span>2. Оберіть свій РЕМ, населений пункт і вулицю.</span>
-              ) : (
-                <span>2. Select your distribution district (РЕМ), settlement, and street.</span>
-              )}
-            </div>
-          </div>
-
-          {/* Step 3 */}
-          <div className={stepClass}>
-            <span className={numClass}>3</span>
-            <div className="flex-1">
-              {lang === 'uk' ? (
-                <span>
-                  3. У таблиці знайдіть свій будинок і подивіться стовпці «Черга» і «Підчерга». Наприклад, черга 5 і підчерга 2 - це 5.2.
-                </span>
-              ) : (
-                <span>
-                  3. In the table, find your building and check the «Queue» and «Subqueue» columns. For example, queue 5 and subqueue 2 is 5.2.
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Step 4 */}
-          <div className={stepClass}>
-            <span className={numClass}>4</span>
-            <div className="flex-1">
-              {lang === 'uk' ? (
-                <span>
-                  4. Виберіть це значення у полі «Черга» у вікні налаштувань (кнопка ⚙).
-                </span>
-              ) : (
-                <span>
-                  4. Select this value in the «Queue» field in the Settings window (⚙ button).
-                </span>
-              )}
-            </div>
-          </div>
+          {queueHelpSteps(lang).map((step, i) => {
+            const at = step.indexOf(QUEUE_HELP_URL);
+            return (
+              <div key={i} className={stepClass}>
+                <span className={numClass}>{i + 1}</span>
+                <div className="flex-1">
+                  {at < 0 ? (
+                    <span>{step}</span>
+                  ) : (
+                    <span>
+                      {step.slice(0, at)}
+                      <a href={QUEUE_HELP_URL} target="_blank" rel="noopener noreferrer" className={linkClass}>
+                        {QUEUE_HELP_URL} <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                      </a>
+                      {step.slice(at + QUEUE_HELP_URL.length)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         {/* Got it action button */}

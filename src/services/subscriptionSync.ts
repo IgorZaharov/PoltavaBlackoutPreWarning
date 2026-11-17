@@ -9,6 +9,7 @@
 import {
   ERR_NOT_FOUND,
   add,
+  cleanLabel,
   isValidQueue,
   makeSubscription,
   primaryMirror,
@@ -145,9 +146,10 @@ export class SubscriptionSync {
     return this.change(settings, (s) => add(s, item));
   }
 
-  addQueueOnly(settings: UserSettings, queue: string): SyncResult {
+  /** A queue without an address; [label] names it (a workplace found in the company search). */
+  addQueueOnly(settings: UserSettings, queue: string, label?: string | null): SyncResult {
     this.ensureReady(settings);
-    const item = makeSubscription(this.repo.newItemId(), { queue, queueSource: 'MANUAL', createdAtMs: Date.now() });
+    const item = makeSubscription(this.repo.newItemId(), { queue, queueSource: 'MANUAL', label: cleanLabel(label), createdAtMs: Date.now() });
     return this.change(settings, (s) => add(s, item));
   }
 

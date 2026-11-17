@@ -5,7 +5,7 @@
  * Run: tsx tests/picker-search.test.ts
  */
 import assert from 'node:assert/strict';
-import { CONTAINS, NO_MATCH, PREFIX, PickerIndex, WORD_PREFIX, filterItems, rank, type SearchKind } from '../src/components/pickerSearch';
+import { CONTAINS, NO_MATCH, PREFIX, PickerIndex, WORD_PREFIX, contextSnippet, filterItems, rank, type SearchKind } from '../src/components/pickerSearch';
 
 const search = (items: string[], query: string, kind: SearchKind = 'TEXT'): string[] => filterItems(items, query, kind, (s) => s);
 
@@ -125,7 +125,42 @@ test('indexCanBeReusedForManyQueries', () => {
   assert.deepEqual(index.search('вулиця9').slice(0, 1), ['вул. Вулиця9']);
 });
 
+test('contextIsSearchedAfterLabelsAndShowsTheMatchedPiece', () => {
+  // owner, 2026-11-17: «кафе» listed companies whose names do not have the word (it was in their PDF row)
+  const items = [
+    { name: 'КНП «ЛІЛ 1 рівня»', row: 'Дніпра 10/13, 12, 14 КНП "ЛІЛ 1 рівня" (ЗТП-64); КП ВУВКГ (ПНС Миру 31); кафе "Аква"; вул.Миру 18' },
+    { name: 'кафе «Аква»', row: 'кафе "Аква"; вул.Миру 18' },
+    { name: 'ТОВ «Ромашка»', row: 'вул. Миру 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, кафешка Світанок, 24' },
+  ];
+  const index = new PickerIndex(items, 'TEXT', (it) => it.name, (it) => it.row);
+  const hits = index.searchHits('кафе');
+  // the КНП row only names «кафе "Аква"», which is listed already
+  assert.deepEqual(hits.map((h) => [h.item.name, h.snippet]), [
+    ['кафе «Аква»', null],
+    ['ТОВ «Ромашка»', 'кафешка Світанок'],
+  ]);
+  assert.deepEqual(index.searchHits('ЗТП-64').map((h) => [h.item.name, h.snippet]), [['КНП «ЛІЛ 1 рівня»', 'Дніпра 10/13, 12, 14 КНП "ЛІЛ 1 рівня" (ЗТП-64)']]);
+  assert.equal(contextSnippet('вул. Миру 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, Кафе "Ні пуху, ні пера", 24', 'пера'), 'Кафе "Ні пуху, ні пера"', 'a comma inside quotes does not cut');
+  assert.equal(
+    contextSnippet('вул. Миру 1, 2, 3, 4, 5, 6, ТОВ «Татнєфть-АЗС Україна, ПП «Лякун», Кафе «Ні пуху, ні пера», База «Владтранс»', 'кафе'),
+    'Кафе «Ні пуху, ні пера»',
+    'unbalanced quotes of the PDF'
+  );
+  assert.deepEqual(index.searchHits('').map((h) => h.snippet), [null, null, null]);
+  assert.equal(contextSnippet('a'.repeat(100), 'b'), 'a'.repeat(69) + '…', 'no piece matches: the clipped start');
+});
+
 let failed = 0;
+test('quotesOfEveryKindCountAsSpaces', () => {
+  // owner, 2026-11-17: ТОВ "ГЛОБИНСЬКИЙ БІОЕНЕРГЕТИЧНИЙ КОМПЛЕКС was not found
+  const items = ['ТОВ «ГЛОБИНСЬКИЙ БІОЕНЕРГЕТИЧНИЙ КОМПЛЕКС» · 2.1', "КП «Полтавський м'ясокомбінат» · 1.1"];
+  for (const q of ['ТОВ "ГЛОБИНСЬКИЙ БІОЕНЕРГЕТИЧНИЙ КОМПЛЕКС', 'ТОВ ГЛОБИНСЬКИЙ', 'тов «глобинський', 'ТОВ „Глобинський“']) {
+    assert.deepEqual(search(items, q), [items[0]], q);
+  }
+  assert.deepEqual(search(items, 'КП "Полтавський мясокомбінат'), [items[1]]);
+  assert.deepEqual(search(['Школа № 27 · Кременчук', 'Школа № 2 · Кременчук'], 'школа 27'), ['Школа № 27 · Кременчук']);
+});
+
 for (const [name, fn] of tests) {
   try {
     fn();

@@ -1,22 +1,27 @@
-name: POE data (live probe and address directory)
+name: POE data (live probe, address directory, queue catalogue)
 
 # docs/POLTAVA_PORT_PLAN.md sections 4.4 and 8:
 # - probe: every day, reads the live POE endpoints through the web client and fails loudly when
 #   today's schedule or a per-house status can not be read (site format change);
 # - directory: every week, re-crawls the address directory and commits poe_directory.json (and its
 #   synced copies) to main when it changed. The commit is made by github-actions[bot], for which
-#   build-apk.yml skips its "Publish GitHub Release" step.
+#   build-apk.yml skips its "Publish GitHub Release" step;
+# - queues: every day, checks the hourly-schedule PDF (графік погодинних відключень) on
+#   www.poe.pl.ua and rebuilds poe_queues.json (address and company -> queue) only when the PDF or
+#   the parser changed: one page request and a conditional request (ETag / Last-Modified) on a quiet
+#   day, nothing downloaded or committed when nothing changed.
 
 on:
   schedule:
     - cron: '15 5 * * *'   # probe, daily 05:15 UTC
     - cron: '0 2 * * 1'    # directory, Mondays 02:00 UTC
+    - cron: '45 5 * * *'   # queue catalogue, daily 05:45 UTC
   workflow_dispatch:
     inputs:
       job:
         description: 'What to run'
         type: choice
-        options: [probe, directory, both]
+        options: [probe, directory, queues, both, all]
         default: probe
 
 permissions:
@@ -25,7 +30,7 @@ permissions:
 jobs:
   probe:
     name: Live probe of www.poe.pl.ua
-    if: github.event_name == 'workflow_dispatch' && inputs.job != 'directory' || github.event_name == 'schedule' && github.event.schedule == '15 5 * * *'
+    if: github.event_name == 'workflow_dispatch' && (inputs.job == 'probe' || inputs.job == 'both' || inputs.job == 'all') || github.event_name == 'schedule' && github.event.schedule == '15 5 * * *'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -40,7 +45,7 @@ jobs:
 
   directory:
     name: Re-crawl the POE address directory
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' && inputs.job != 'probe' || github.event_name == 'schedule' && github.event.schedule == '0 2 * * 1')
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' && (inputs.job == 'directory' || inputs.job == 'both' || inputs.job == 'all') || github.event_name == 'schedule' && github.event.schedule == '0 2 * * 1')
     runs-on: ubuntu-latest
     timeout-minutes: 150
     steps:
@@ -67,4 +72,34 @@ jobs:
           python3 scripts/build_android_zip.py
           git add public/PoltavaBlackoutPreWarning.zip
           git commit -m "Update the POE address directory snapshot"
+          git push
+
+  queues:
+    name: Rebuild the queue catalogue when the POE schedule PDF changed
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' && (inputs.job == 'queues' || inputs.job == 'all') || github.event_name == 'schedule' && github.event.schedule == '45 5 * * *')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install PyMuPDF
+        run: pip install pymupdf==2.1
+      - name: Parser self-test
+        run: python -X utf8 scripts/build_poe_queue_catalogue.py --selftest
+      - name: Rebuild when the PDF changed
+        id: build
+        run: python -X utf8 scripts/build_poe_queue_catalogue.py --update poe_queues.json
+      - name: Commit the new catalogue
+        if: steps.build.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          cp poe_queues.json public/poe_queues.json
+          cp poe_queues.json android/app/src/main/assets/poe_queues.json
+          git add poe_queues.json public/poe_queues.json android/app/src/main/assets/poe_queues.json
+          python3 scripts/build_android_zip.py
+          git add public/PoltavaBlackoutPreWarning.zip
+          git commit -m "Update the POE queue catalogue from the hourly-schedule PDF"
           git push

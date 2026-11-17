@@ -51,10 +51,21 @@ Per address key `settlementId|StreetKey|HouseKey` (`ADDRESS_KEY.md`):
 |---|---|
 | `ledger_<addr>` | JSON array of ledger entries (`id`, `start`, `estimatedEnd`, `label`, `firstSeen`, `lastSeen`, `closedAt`, `startEmitted`, `endEmitted`, `lastEmittedEta`), ISO local date-times, 48 h retention |
 | `repair_<addr>` | JSON array of planned repair works (`id`, `start`, `end`, `label`) |
-| `ids_<addr>` | resolved PowerOn ids `{cityIds, streetIds, resolvedAtMs}`, TTL 7 days |
+| `ids_<addr>` | resolved PowerOn ids `{cityIds, streetIds, resolvedAtMs}`, TTL 7 days (iOS until I2; not used by POE) |
+| `gav_<addr>` | POE `gav_message` of the house (info line under the address), replaced by every confirmed per-house status |
 
 Global keys: `site_state`, `site_checked_ms`, `site_last_success_ms`, `poweron_ok`,
 `poweron_checked_ms`, `poweron_last_ok_ms`.
+
+POE keys (P4):
+
+| Key | Content |
+|---|---|
+| `poe_measures_date`, `poe_measures` | date (`yyyy-MM-dd`) and text of the active measures (E2), one measure per line; shown only on that date; a failed fetch keeps the last answer |
+| `registry_<registryId>` | JSON `{date, rows, fetchedMs, lastOk}`: the raw `out_text` rows of one branch registry (E5) for the nearby outages card (`POE_API.md` 8.10); a failure keeps `rows` and sets `lastOk = false` |
+| `registry_meta_<registryId>` | `date|fetchedMs|lastOk` of the same answer, read every second by the main screen without parsing the rows |
+
+The address directory refreshed on the device (plan section 4.4) is a file, not a key: Android `filesDir/poe_directory_local.json` (same layout as `poe_directory.json`; used while its `crawledAt` is not older than the bundled one); the web simulator keeps it in memory.
 
 ## 4. Alert registry (`zt_notified_blackouts_v1`)
 

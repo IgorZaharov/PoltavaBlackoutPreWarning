@@ -2,7 +2,7 @@
 
 The 48-cell "drum" (an analog electricity-meter dial) that shows one day, the list of outages under it, and how both are fed by `DayView`. Reference rendering: `android/app/src/main/java/ua/blackout/prewarning/ui/components/TimelineBar.kt` (Compose) and `widget/BlackoutGlanceWidget.kt` (`renderAnalogCounterBitmap`, same colours). Values flow from `spec/design-tokens.json` (`drum`). Layout is in dp (Android) or pt (iOS); colours are `#RRGGBB` or `#AARRGGBB`.
 
-Status of this document: the planned/on/unclear cells, the needle and the ticks describe the code as it is. The emergency stripes and the new list-row rules come from the approved 1.4.0 design (plan section 3.3); `TimelineBar.kt` does not draw them yet.
+Status of this document: describes the code as it is. Since P4 of the Poltava port both the main drum (`TimelineBar.kt`, `DrumChart.tsx`) and the widget bitmap draw their cells from one classification (`ui/components/DrumCells.kt`, `drumCells` in `DrumChart.tsx`), whose 48-character signature (`0` on, `1` planned, `2` emergency, `3` both, `4` switching, `5` switching with an emergency) the parity tests compare. The screen-reader sentence names the switching half-hours too ("перемикання: 19:00 – 19:30").
 
 ## 1. Cell states
 
@@ -14,7 +14,7 @@ Input per cell: `SlotState(planned, emergency, switching)` from `dayView` (`plan
 | true | false | off, planned | crimson vertical gradient `#9E1E18` -> `#D62E26` -> `#8C1914` |
 | false | true | emergency | top half: on (or the unclear grey); bottom half: amber vertical gradient `#FFB020` -> `#F28A1B` -> `#C96A0B` with dark stripes |
 | true | true | both | top half: the planned crimson; bottom half: amber with dark stripes, as above |
-| switching (`planned` false) | false | may be off | top half: POE yellow vertical gradient `#E3AE2E` -> `#F5C242` -> `#D9A62C` (token `drum.switchingGradient`, POE's own `gpv-s3` colour), no stripes; bottom half: on |
+| switching (`planned` false) | false | may be off | the whole cell: POE yellow vertical gradient `#E3AE2E` -> `#F5C242` -> `#D9A62C` (token `drum.switchingGradient`, POE's own `gpv-s3` colour), no stripes (owner, 2026-11-16: full height, not half) |
 | switching (`planned` false) | true | may be off + emergency | top half: the switching yellow; bottom half: amber with dark stripes |
 
 An emergency takes only the **bottom half** of its cells, so the planned state behind it (a scheduled outage or power on) stays readable in the top half (owner request after 1.4.0; before, the emergency filled the whole cell and hid the schedule).
@@ -95,7 +95,7 @@ Leading slot: a fixed 20 x 20 box so the text of all rows starts at the same x.
 
 ## 6. Colour usage summary
 
-- Off (planned or repair): crimson. Emergency: amber with stripes. Both: crimson with amber stripes. Switching (POE, may be off): plain yellow in the top half. On: ivory. Unknown: grey.
+- Off (planned or repair): crimson. Emergency: amber with stripes. Both: crimson with amber stripes. Switching (POE, may be off): plain yellow, the whole cell. On: ivory. Unknown: grey.
 - The status dot of the hero is separate: on `#34D399`, off `#FF5E3A`, unclear `#9CA3AF`.
 
 ## Vectors

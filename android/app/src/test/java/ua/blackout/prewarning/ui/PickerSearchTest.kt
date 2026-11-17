@@ -157,7 +157,48 @@ class PickerSearchTest {
         assertEquals(listOf("вул. Сонячна"), search(streets("вул. Садова", "вул. Сонячна"), "сон"))
     }
 
+    @Test
+    fun quotesOfEveryKindCountAsSpaces() {
+        // owner, 2026-11-17: ТОВ "ГЛОБИНСЬКИЙ БІОЕНЕРГЕТИЧНИЙ КОМПЛЕКС was not found
+        val items = listOf("ТОВ «ГЛОБИНСЬКИЙ БІОЕНЕРГЕТИЧНИЙ КОМПЛЕКС» · 2.1", "КП «Полтавський м'ясокомбінат» · 1.1")
+        for (q in listOf("ТОВ \"ГЛОБИНСЬКИЙ БІОЕНЕРГЕТИЧНИЙ КОМПЛЕКС", "ТОВ ГЛОБИНСЬКИЙ", "тов «глобинський", "ТОВ „Глобинський“")) {
+            assertEquals(q, listOf(items[0]), search(items, q))
+        }
+        assertEquals(listOf(items[1]), search(items, "КП \"Полтавський мясокомбінат"))
+        assertEquals(listOf("Школа № 27 · Кременчук"), search(listOf("Школа № 27 · Кременчук", "Школа № 2 · Кременчук"), "школа 27"))
+    }
+
     // ---- index ----
+
+    @Test
+    fun contextIsSearchedAfterLabelsAndShowsTheMatchedPiece() {
+        // owner, 2026-11-17: «кафе» listed companies whose names do not have the word (it was in their PDF row)
+        val items = listOf(
+            "КНП «ЛІЛ 1 рівня»" to "Дніпра 10/13, 12, 14 КНП \"ЛІЛ 1 рівня\" (ЗТП-64); КП ВУВКГ (ПНС Миру 31); кафе \"Аква\"; вул.Миру 18",
+            "кафе «Аква»" to "кафе \"Аква\"; вул.Миру 18",
+            "ТОВ «Ромашка»" to "вул. Миру 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, кафешка Світанок, 24"
+        )
+        val index = PickerSearch.Index(items, PickerSearch.Kind.TEXT, { it.second }) { it.first }
+        // the КНП row only names «кафе "Аква"», which is listed already
+        assertEquals(
+            listOf("кафе «Аква»" to null, "ТОВ «Ромашка»" to "кафешка Світанок"),
+            index.searchHits("кафе").map { it.item.first to it.snippet }
+        )
+        assertEquals(
+            listOf("КНП «ЛІЛ 1 рівня»" to "Дніпра 10/13, 12, 14 КНП \"ЛІЛ 1 рівня\" (ЗТП-64)"),
+            index.searchHits("ЗТП-64").map { it.item.first to it.snippet }
+        )
+        assertEquals(
+            "Кафе «Ні пуху, ні пера»",
+            PickerSearch.contextSnippet("вул. Миру 1, 2, 3, 4, 5, 6, ТОВ «Татнєфть-АЗС Україна, ПП «Лякун», Кафе «Ні пуху, ні пера», База «Владтранс»", "кафе")
+        )
+        assertEquals(
+            "Кафе \"Ні пуху, ні пера\"",
+            PickerSearch.contextSnippet("вул. Миру 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, Кафе \"Ні пуху, ні пера\", 24", "пера")
+        )
+        assertEquals(listOf(null, null, null), index.searchHits("").map { it.snippet })
+        assertEquals("a".repeat(69) + "…", PickerSearch.contextSnippet("a".repeat(100), "b"))
+    }
 
     @Test
     fun indexCanBeReusedForManyQueries() {

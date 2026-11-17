@@ -11,7 +11,8 @@ import { OutageStateStore } from '../src/services/outageStore';
 import { OutageRepository } from '../src/services/outageRepository';
 import { createMemoryStorage } from '../src/services/storage';
 import type { UserSettings } from '../src/types';
-import { translations } from '../src/services/i18n';
+import { queueHelpSteps, translations } from '../src/services/i18n';
+import { drumSignature } from '../src/components/DrumChart';
 import {
   DEFAULT_DONATIONS,
   DONATIONS_REFRESH_INTERVAL_MS,
@@ -84,6 +85,14 @@ async function runUnitTestA() {
   const offSlotsCount = slots.filter((s) => s.status === 'POWER_OFF').length;
   console.log(`Determined ${offSlotsCount} half-hour blackout slots for queue ${randomQueue}`);
   assert.ok(!slots.some((s) => s.isSwitching && s.status === 'POWER_OFF'), 'The switching half-hour is never drawn as off');
+  // Tri-state drum (P4): the main drum and the widget bitmap draw the same 48 states, switching ("4") included
+  const signature = drumSignature(slots);
+  assert.equal(signature.length, 48, 'drum signature has 48 cells');
+  assert.ok(signature.includes('4'), `the switching half-hour of queue ${randomQueue} is drawn (${signature})`);
+  slots.forEach((s, i) => {
+    const expected = s.status === 'POWER_OFF' ? '1' : s.isSwitching ? '4' : '0';
+    assert.equal(signature[i], expected, `cell ${i} of queue ${randomQueue}`);
+  });
 
   // 4. Verify Main Window graph blocks vs Big Widget graph blocks match 100%
   const mainWindowGraphBlocks = Array.from({ length: 24 }, (_, hour) => ({
@@ -116,20 +125,31 @@ async function runUnitTestA() {
     path.join(ROOT_DIR, 'android/app/src/main/java/ua/blackout/prewarning/widget/BlackoutGlanceWidget.kt'),
     'utf-8'
   );
-  // 1.4.0: both draw 48 half-hour cells indexed 0..47 (cell i = hour i/2, half i%2) with the same
-  // planned / emergency / overlap classification (spec/UI_DRUM.md section 1).
+  // Both draw 48 half-hour cells indexed 0..47 (cell i = hour i/2, half i%2) from the one classification
+  // in DrumCells.kt: planned / emergency / overlap / switching (spec/UI_DRUM.md section 1).
+  const drumCellsKt = fs.readFileSync(
+    path.join(ROOT_DIR, 'android/app/src/main/java/ua/blackout/prewarning/ui/components/DrumCells.kt'),
+    'utf-8'
+  );
   assert.ok(
-    timelineBarKt.includes('48 -> slots') &&
+    drumCellsKt.includes('48 -> slots') &&
+      drumCellsKt.includes('emergency = off && s.isEmergency') &&
+      drumCellsKt.includes('switching = s.isSwitching && !planned'),
+    'DrumCells.kt must classify 48 half-hour cells (planned, emergency, switching)'
+  );
+  assert.ok(
+    timelineBarKt.includes('DrumCells.of(slots)') &&
       timelineBarKt.includes('val left = (i / 2) * (hourW + gap) + (i % 2) * halfW') &&
-      timelineBarKt.includes('emergency = off && s.isEmergency'),
-    'TimelineBar.kt must draw 48 half-hour cells (cell i = hour i/2, half i%2)'
+      timelineBarKt.includes('cell.switching'),
+    'TimelineBar.kt must draw 48 half-hour cells (cell i = hour i/2, half i%2) from DrumCells'
   );
   assert.ok(
     glanceWidgetKt.includes('for (idx in 0 until 48)') &&
       glanceWidgetKt.includes('slots.getOrNull(idx)?.let { cellKind(it) }') &&
       glanceWidgetKt.includes('val hour = idx / 2') &&
-      glanceWidgetKt.includes('s.isEmergency && s.isPlanned -> 3'),
-    'BlackoutGlanceWidget.kt must draw the identical 48 half-hour cells'
+      glanceWidgetKt.includes('DrumCells.cell(s)') &&
+      glanceWidgetKt.includes('kind.switching'),
+    'BlackoutGlanceWidget.kt must draw the identical 48 half-hour cells from DrumCells'
   );
 
   console.log('Unit Test A PASSED: Main Window and Big Widget graphs match 100%.');
@@ -177,10 +197,10 @@ function runUnitTestB() {
     path.join(ROOT_DIR, 'src/components/SettingsView.tsx'),
     'utf-8'
   );
-  const step1 = '1. Відкрийте сторінку пошуку черги на сайті https://www.ztoe.com.ua/unhooking-search.php';
-  const step2 = '2. Оберіть свій РЕМ, населений пункт і вулицю.';
-  const step3 =
-    '3. У таблиці знайдіть свій будинок і подивіться стовпці «Черга» і «Підчерга». Наприклад, черга 5 і підчерга 2 - це 5.2.';
+  // The POE flow text approved by the owner on 2026-11-16 (docs/POLTAVA_PORT_PLAN.md section 9)
+  const step1 = '1. Відкрийте сторінку «Пошук відключення за адресою» на сайті https://www.poe.pl.ua/disconnection/poshuk-vidkliuchennia-za-osobovym-rakhunkom/';
+  const step2 = '2. Оберіть свою філію або дільницю, населений пункт, вулицю й будинок і натисніть «Знайти».';
+  const step3 = '3. У відповіді знайдіть запис «ГПВ (черга …)». Наприклад, «ГПВ (черга 5-2)» - це черга 5.2.';
   const step4 = '4. Виберіть це значення у полі «Черга» у вікні налаштувань (кнопка ⚙).';
 
   assert.ok(
@@ -190,13 +210,10 @@ function runUnitTestB() {
       appStringsKt.includes(step4),
     'AppStrings.kt must preserve exact 4-step queue help instructions'
   );
+  assert.deepEqual(queueHelpSteps('uk'), [step1, step2, step3, step4], 'i18n.ts must preserve exact 4-step queue help instructions');
   assert.ok(
-    settingsViewTsx.includes('1. Відкрийте сторінку пошуку черги на сайті') &&
-      settingsViewTsx.includes('https://www.ztoe.com.ua/unhooking-search.php') &&
-      settingsViewTsx.includes(step2) &&
-      settingsViewTsx.includes(step3) &&
-      settingsViewTsx.includes(step4),
-    'SettingsView.tsx must preserve exact 4-step queue help instructions'
+    settingsViewTsx.includes('queueHelpSteps(lang).map(') && settingsViewTsx.includes('QUEUE_HELP_URL'),
+    'SettingsView.tsx must render the exact 4-step queue help instructions of i18n.ts'
   );
 
   // 5. Verify Widget status labels ("СВІТЛО Є" / "СВІТЛА НЕМАЄ") and round Refresh button
@@ -470,12 +487,12 @@ async function runUnitTestC_CarriedOverChecks() {
 
   assert.ok(
     mainViewTsx.includes('Графіки відключень на сайті') &&
-      mainViewTsx.includes('https://www.ztoe.com.ua/unhooking-search.php') &&
+      mainViewTsx.includes('https://www.poe.pl.ua/disconnection/power-outages/') &&
       appStringsKt.includes('Графіки відключень на сайті') &&
-      appStringsKt.includes('https://www.ztoe.com.ua/unhooking-search.php') &&
+      appStringsKt.includes('https://www.poe.pl.ua/disconnection/power-outages/') &&
       mainScreenKt.includes('AppStrings.siteSchedulesLabel(lang)') &&
       mainScreenKt.includes('AppStrings.SITE_SCHEDULES_URL'),
-    'Main Application screen (Web and Android) must include "Графіки відключень на сайті" link pointing to https://www.ztoe.com.ua/unhooking-search.php after the Facebook link'
+    'Main Application screen (Web and Android) must include "Графіки відключень на сайті" link pointing to https://www.poe.pl.ua/disconnection/power-outages/ after the Facebook link'
   );
 
   // Verify About page links: "Світло в Полтаві на Github" (README.md) is 2nd link and Issues is 3rd link
@@ -822,7 +839,7 @@ async function runUnitTestE_AddressLookupAndUnsetQueue() {
       mainScreenKt.includes('SiteNoticeCard(') &&
       navScreenKt.includes('isQueueUnselected') &&
       navScreenKt.includes('pagerState.animateScrollToPage(0, animationSpec = PageGlide)'),
-    'MainScreen.kt and BlackoutAppNavigation.kt must keep the first-launch flow, day headers, site status and the ztoe notice card'
+    'MainScreen.kt and BlackoutAppNavigation.kt must keep the first-launch flow, day headers, site status and the site notice card'
   );
 
   // 10. Web parity of the same screens
@@ -884,6 +901,19 @@ function runUnitTestG_IosPort() {
     const dir = JSON.parse(canonical);
     assert.equal(dir.branches.length, 28, 'poe_directory.json must list the 28 POE branches');
     assert.ok(dir.settlements.length > 1500, 'poe_directory.json must list the settlements of the whole oblast');
+  }
+
+  // poe_queues.json (address and company -> queue from POE's hourly-schedule PDF, spec/POE_API.md 8.11):
+  // the root file is canonical; public/ and the Android assets hold byte-identical copies (iOS from I2).
+  {
+    const canonical = read('poe_queues.json');
+    for (const dir of ['public', 'android/app/src/main/assets']) {
+      assert.equal(read(`${dir}/poe_queues.json`), canonical, `${dir}/poe_queues.json must be identical to /poe_queues.json`);
+    }
+    const cat = JSON.parse(canonical);
+    assert.ok(cat.entries.length > 5000, 'poe_queues.json must list the address entries of the whole oblast');
+    assert.ok(cat.companies.length > 100, 'poe_queues.json must list the companies');
+    assert.ok(typeof cat.builtAt === 'string' && cat.builtAt.length > 0, 'poe_queues.json must carry builtAt');
   }
 
   // Invariants shared with Android and web.

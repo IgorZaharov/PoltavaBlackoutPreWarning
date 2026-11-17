@@ -70,7 +70,12 @@ import ua.blackout.prewarning.ui.theme.ZtType
 
 /** One row of a [SearchablePickerField]. [id] must be unique inside one list; duplicates are dropped. */
 @Immutable
-data class PickerItem(val id: String, val label: String)
+/**
+ * [search]: the text the picker search matches when it differs from [label] (a company's name and the words people
+ * search for); [context]: text searched only after every label match (a company's PDF row), a hit shows the piece
+ * that matched.
+ */
+data class PickerItem(val id: String, val label: String, val search: String? = null, val context: String? = null)
 
 /** Colours of the app's glass text fields: dark fill, hairline border, accent when focused, light icons and cursor. */
 @Composable
@@ -126,7 +131,8 @@ fun SearchablePickerField(
     loadFailed: Boolean = false,
     onRetry: (() -> Unit)? = null,
     kind: PickerSearch.Kind = PickerSearch.Kind.TEXT,
-    disabledHint: String? = null
+    disabledHint: String? = null,
+    contextLabel: String? = null
 ) {
     var open by remember { mutableStateOf(false) }
     val shape = ZtShapes.Control
@@ -187,6 +193,7 @@ fun SearchablePickerField(
             loadFailed = loadFailed,
             onRetry = onRetry,
             kind = kind,
+            contextLabel = contextLabel,
             onDismiss = { open = false },
             onSelect = {
                 open = false
@@ -206,14 +213,15 @@ private fun PickerDialog(
     loadFailed: Boolean,
     onRetry: (() -> Unit)?,
     kind: PickerSearch.Kind,
+    contextLabel: String?,
     onDismiss: () -> Unit,
     onSelect: (PickerItem) -> Unit
 ) {
     // duplicate ids would crash LazyColumn(key = id), so the list is made unique once
     val unique = remember(items) { items.distinctBy { it.id } }
-    val index = remember(unique, kind) { PickerSearch.Index(unique, kind) { it.label } }
+    val index = remember(unique, kind) { PickerSearch.Index(unique, kind, { it.context }) { it.search ?: it.label } }
     var query by remember { mutableStateOf("") }
-    val shown = remember(index, query) { index.search(query) }
+    val shown = remember(index, query) { index.searchHits(query) }
     val initialIndex = remember { unique.indexOfFirst { it.id == selectedId }.coerceAtLeast(0) }
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = initialIndex)
     val focusRequester = remember { FocusRequester() }
@@ -313,9 +321,10 @@ private fun PickerDialog(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(bottom = 16.dp)
                     ) {
-                        items(shown, key = { it.id }) { item ->
+                        items(shown, key = { it.item.id }) { (item, snippet) ->
                             PickerRow(
                                 text = item.label,
+                                detail = snippet?.let { if (contextLabel != null) "$contextLabel $it" else it },
                                 selected = item.id == selectedId,
                                 lang = lang,
                                 onClick = { onSelect(item) }
@@ -352,7 +361,7 @@ private fun PickerDialog(
 }
 
 @Composable
-private fun PickerRow(text: String, selected: Boolean, lang: String, onClick: () -> Unit) {
+private fun PickerRow(text: String, detail: String?, selected: Boolean, lang: String, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -362,12 +371,20 @@ private fun PickerRow(text: String, selected: Boolean, lang: String, onClick: ()
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = text,
-            style = ZtType.body,
-            color = Color.White,
-            modifier = Modifier.weight(1f).padding(end = 12.dp)
-        )
+        if (detail == null) {
+            Text(
+                text = text,
+                style = ZtType.body,
+                color = Color.White,
+                modifier = Modifier.weight(1f).padding(end = 12.dp)
+            )
+        } else {
+            // found by its context (a company's PDF row): the matched piece under the name
+            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                Text(text = text, style = ZtType.body, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(text = detail, style = ZtType.caption, color = ZtColors.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
         if (selected) {
             Icon(
                 imageVector = Icons.Default.Check,

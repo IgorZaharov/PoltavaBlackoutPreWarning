@@ -4,8 +4,9 @@
  *
  * Both read the same 48 BlackoutSlot cells (snapshot.slotsFor(date)), so the main timeline and the
  * widgets cannot disagree. Planned and repair outages are crimson, emergency outages are amber with
- * 45 degree stripes (a second cue besides colour), emergency over planned is crimson with amber stripes;
- * `unclearBase` paints cells without an outage grey (spec/UI_DRUM.md section 1).
+ * 45 degree stripes (a second cue besides colour), emergency over planned is crimson with amber stripes,
+ * POE's switching half-hour (power may still be off) is yellow over the whole cell; `unclearBase` paints
+ * cells without an outage grey (spec/UI_DRUM.md section 1). Classification mirrors DrumCells.kt.
  */
 import React, { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { BlackoutSlot } from '../types';
@@ -24,6 +25,7 @@ export const DRUM_COLORS = {
   on: ['#D8D6CC', '#FCFBF7', '#CCC9BE'],
   unclear: ['#7E8287', '#94989E', '#6E7277'],
   emergency: ['#FFB020', '#F28A1B', '#C96A0B'],
+  switching: ['#E3AE2E', '#F5C242', '#D9A62C'], // design-tokens.json drum.switchingGradient (POE gpv-s3)
   stripeDark: 'rgba(26,18,8,0.55)', // #1A1208 at 55 %
   stripeLight: 'rgba(255,176,32,0.85)', // #FFB020 at 85 %
   tick: '#1C1B18',
@@ -33,10 +35,12 @@ export const DRUM_COLORS = {
 
 const vGradient = (c: readonly string[]): string => `linear-gradient(to bottom, ${c[0]}, ${c[1]}, ${c[2]})`;
 
-/** One half-hour cell reduced to what is drawn (planned: crimson, emergency: amber stripes, both: crimson + stripes). */
+/** One half-hour cell reduced to what is drawn (planned: crimson, emergency: amber stripes, both: crimson + stripes, switching: yellow cell). */
 export interface DrumCell {
   planned: boolean;
   emergency: boolean;
+  /** POE switching half-hour: never together with `planned`. */
+  switching: boolean;
 }
 
 /** 48 cells from `slots`: 48 half-hour slots, or 24 hourly slots (legacy, each used twice). Anything else: null (grey bar). */
@@ -47,15 +51,21 @@ export function drumCells(slots: readonly BlackoutSlot[]): DrumCell[] | null {
   else return null;
   return src.map((s) => {
     const off = s.status === 'POWER_OFF';
-    return { planned: off && (Boolean(s.isPlanned) || !s.isEmergency), emergency: off && Boolean(s.isEmergency) };
+    const planned = off && (Boolean(s.isPlanned) || !s.isEmergency);
+    return { planned, emergency: off && Boolean(s.isEmergency), switching: Boolean(s.isSwitching) && !planned };
   });
 }
 
-/** The 48 states the main drum and the widgets both draw: "0" on, "1" planned, "2" emergency, "3" both. */
+/**
+ * The 48 states the main drum and the widgets both draw: "0" on, "1" planned, "2" emergency, "3" both,
+ * "4" switching, "5" switching with an emergency (DrumCells.signature on Android).
+ */
 export function drumSignature(slots: readonly BlackoutSlot[]): string {
   const cells = drumCells(slots);
   if (cells === null) return 'UNCLEAR';
-  return cells.map((c) => (c.planned && c.emergency ? '3' : c.emergency ? '2' : c.planned ? '1' : '0')).join('');
+  return cells
+    .map((c) => (c.planned && c.emergency ? '3' : c.planned ? '1' : c.switching && c.emergency ? '5' : c.switching ? '4' : c.emergency ? '2' : '0'))
+    .join('');
 }
 
 /** Reduced-motion preference (decorative motion is skipped when set). */
@@ -174,17 +184,30 @@ export const DrumChart: React.FC<DrumChartProps> = ({
                   ? vGradient(DRUM_COLORS.unclear)
                   : vGradient(DRUM_COLORS.on);
                 const style: React.CSSProperties = { left, width: w, top: 0, bottom: 0 };
+                // POE switching half-hour: the whole cell, plain yellow, no stripes (spec/UI_DRUM.md 1)
+                const layers: string[] = [];
+                const sizes: string[] = [];
+                const positions: string[] = [];
                 if (cell.emergency) {
                   // An emergency takes the bottom half only (spec/UI_DRUM.md 1): the top half keeps the planned
                   // state. The stripe layer is as wide as the whole drum and shifted by the cell offset, so the
                   // stripes of neighbouring emergency cells continue each other.
-                  style.backgroundImage = `${stripeBackground(false)}, ${vGradient(DRUM_COLORS.emergency)}, ${base}`;
-                  style.backgroundSize = `${width}px 50%, 100% 50%, 100% 100%`;
-                  style.backgroundPosition = `${-left}px 100%, 0 100%, 0 0`;
-                  style.backgroundRepeat = 'no-repeat, no-repeat, no-repeat';
-                } else {
-                  style.backgroundImage = base;
+                  layers.push(stripeBackground(false), vGradient(DRUM_COLORS.emergency));
+                  sizes.push(`${width}px 50%`, '100% 50%');
+                  positions.push(`${-left}px 100%`, '0 100%');
                 }
+                if (cell.switching) {
+                  layers.push(vGradient(DRUM_COLORS.switching));
+                  sizes.push('100% 100%');
+                  positions.push('0 0');
+                }
+                layers.push(base);
+                sizes.push('100% 100%');
+                positions.push('0 0');
+                style.backgroundImage = layers.join(', ');
+                style.backgroundSize = sizes.join(', ');
+                style.backgroundPosition = positions.join(', ');
+                style.backgroundRepeat = layers.map(() => 'no-repeat').join(', ');
                 return <div key={i} className="absolute" style={style} />;
               })}
             </div>
@@ -280,7 +303,14 @@ export const DrumBitmap: React.FC<DrumBitmapProps> = ({
   const labels: [number, string][] = [[0, '00'], [0.25, '06'], [0.5, '12'], [0.75, '18'], [1, '24']];
 
   const stops = (id: string, c: readonly string[]) => (
-    <linearGradient id={`${uid}${id}`} x1="0" y1={id === 'amber' ? trackTop + (trackBottom - trackTop) / 2 : trackTop} x2="0" y2={trackBottom} gradientUnits="userSpaceOnUse">
+    <linearGradient
+      id={`${uid}${id}`}
+      x1="0"
+      y1={id === 'amber' ? trackTop + (trackBottom - trackTop) / 2 : trackTop}
+      x2="0"
+      y2={trackBottom}
+      gradientUnits="userSpaceOnUse"
+    >
       <stop offset="0" stopColor={c[0]} />
       <stop offset="0.5" stopColor={c[1]} />
       <stop offset="1" stopColor={c[2]} />
@@ -296,6 +326,10 @@ export const DrumBitmap: React.FC<DrumBitmapProps> = ({
       const right = idx % 2 === 0 ? hLeft + halfWidth : hLeft + hourWidth;
       const fillId = cell.planned ? 'off' : 'on';
       cellEls.push(<rect key={`c${idx}`} x={left} y={trackTop} width={right - left} height={trackH} fill={`url(#${uid}${fillId})`} />);
+      if (cell.switching) {
+        // POE switching half-hour: the whole cell yellow, no stripes (spec/UI_DRUM.md 1)
+        cellEls.push(<rect key={`w${idx}`} x={left} y={trackTop} width={right - left} height={trackH} fill={`url(#${uid}switching)`} />);
+      }
       if (cell.emergency) {
         // The bottom half only (spec/UI_DRUM.md 1): the top half keeps the planned state
         const mid = trackTop + trackH / 2;
@@ -341,6 +375,7 @@ export const DrumBitmap: React.FC<DrumBitmapProps> = ({
         {stops('off', DRUM_COLORS.off)}
         {stops('on', DRUM_COLORS.on)}
         {stops('amber', DRUM_COLORS.emergency)}
+        {stops('switching', DRUM_COLORS.switching)}
         {stops('grey', DRUM_COLORS.unclear)}
       </defs>
       {/* 1. Vintage enamel faceplate with #7A7768 border */}

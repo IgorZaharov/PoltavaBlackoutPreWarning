@@ -71,6 +71,7 @@ import ua.blackout.prewarning.data.repository.ScheduleStatusInfo
 import ua.blackout.prewarning.ui.AppStrings
 import ua.blackout.prewarning.ui.components.spinWhile
 import ua.blackout.prewarning.ui.components.GlassCard
+import ua.blackout.prewarning.ui.components.NearbyOutagesCard
 import ua.blackout.prewarning.ui.components.OutageRowFormat
 import ua.blackout.prewarning.ui.components.SiteNoticeCard
 import ua.blackout.prewarning.ui.components.SiteStatusBanner
@@ -211,6 +212,9 @@ fun MainScreen(
     val featuredEmergency = remember(snapshot) { snapshot.featuredEmergency() }
     val siteBanner = remember(snapshot, lang) { SiteStatusModel.banner(snapshot, lang) }
     val siteNotice = remember(snapshot) { SiteStatusModel.notice(snapshot) }
+    val restoreWindow = remember(snapshot) { snapshot.restoreWindow() }
+    val nearby = snapshot.nearby?.takeIf { it.items.isNotEmpty() }
+    val gavMessage = snapshot.gavMessage
 
     val hasEmergencyOutage = featuredEmergency != null
     val hasCustomNoQueueStatus = !customQueueStatusText.isNullOrBlank() && !hasEmergencyOutage
@@ -236,7 +240,7 @@ fun MainScreen(
         }
     }
 
-    // The ztoe table of the shown day is not known: the drum is grey, known emergency/repair outages are drawn on top
+    // The POE table of the shown day is not known: the drum is grey, known emergency/repair outages are drawn on top
     val isTodayUnclear = !hasCustomNoQueueStatus && queue.isNotBlank() && !snapshot.plannedKnown
     val isTomorrowUnclear = !hasCustomNoQueueStatus && queue.isNotBlank() && !snapshot.tomorrowPublished
     val activeUnclear = if (isTomorrowSelected) isTomorrowUnclear else isTodayUnclear
@@ -294,6 +298,10 @@ fun MainScreen(
                             maxLines = 3,
                             overflow = TextOverflow.Ellipsis
                         )
+                        // POE's own line about the house: feeder and the schedules it belongs to
+                        if (!gavMessage.isNullOrBlank()) {
+                            GavMessageLine(text = gavMessage, lang = lang)
+                        }
                     }
                 }
 
@@ -327,7 +335,7 @@ fun MainScreen(
                 SiteStatusBanner(siteBanner)
             }
 
-            // 1c'. ztoe is up but publishes a notice instead of the table: quote it to the user
+            // 1c'. The site is up but publishes a notice instead of the table: quote it to the user
             if (siteNotice != null) {
                 SiteNoticeCard(text = siteNotice, lang = lang)
             }
@@ -346,16 +354,25 @@ fun MainScreen(
                 }
             }
 
-            // 1d. Custom ZTOE queue/house status message
+            // 1d. No-queue card: the house is in no queue of the hourly schedule (spec/SUBSCRIPTIONS.md, POE)
             if (!isQueueUnselected && !customQueueStatusText.isNullOrBlank()) {
                 GlassCard(modifier = Modifier.fillMaxWidth()) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(text = AppStrings.noQueueNotDisconnected(lang), style = ZtType.overline, color = ZtColors.ChipGreenText)
                         if (!formattedSelectedAddress.isNullOrBlank()) {
                             Text(text = formattedSelectedAddress, style = ZtType.caption, color = TextSecondary)
                         }
                         Text(text = customQueueStatusText, style = ZtType.subhead, color = Color.White)
+                        if (!gavMessage.isNullOrBlank() && queue.isBlank()) {
+                            GavMessageLine(text = gavMessage, lang = lang)
+                        }
                     }
                 }
+            }
+
+            // 1e. «Ремонти й пошкодження поруч», directly above the hero card (owner decision D9)
+            if (!isQueueUnselected && nearby != null) {
+                NearbyOutagesCard(nearby = nearby, lang = lang)
             }
 
             // 2. Hero outage status card
@@ -490,6 +507,12 @@ fun MainScreen(
                                 }
                             }
                         }
+
+                        // POE: power comes back inside the switching half-hour after the span (spec/OUTAGE_ENGINE.md 3.5)
+                        if (!isStatusUnclear && restoreWindow != null) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            RestoreWindowLine(from = restoreWindow.first, to = restoreWindow.second, lang = lang)
+                        }
                     }
                 }
             }
@@ -584,6 +607,12 @@ fun MainScreen(
                 }
             }
 
+            // 5b. Today's POE measures (ГАВ, ГОП, СГАВ ...) whatever the site state (spec/POE_API.md section 7),
+            // under the schedule, right before the links (owner, 2026-11-16)
+            if (!isQueueUnselected && !snapshot.measures.isNullOrBlank()) {
+                SiteNoticeCard(text = snapshot.measures, lang = lang, title = AppStrings.measuresTitle(lang))
+            }
+
             // 6. Emergency outages info link (Facebook)
             LinkCard(
                 title = AppStrings.emergencyOutagesLabel(lang),
@@ -606,7 +635,7 @@ fun MainScreen(
                 )
             }
 
-            // 7. Blackout schedules on the ZTOE website, at the very bottom after the Facebook link
+            // 7. Blackout schedules on the POE website, at the very bottom after the Facebook link
             LinkCard(
                 title = AppStrings.siteSchedulesLabel(lang),
                 url = AppStrings.SITE_SCHEDULES_URL,
@@ -689,6 +718,44 @@ fun MainScreen(
 // -------------------------------------------------------------------------------------------------
 // Pieces
 // -------------------------------------------------------------------------------------------------
+
+/** "Світло повернеться 19:00–19:30" with a yellow swatch: the same colour as the switching cells of the drum. */
+@Composable
+private fun RestoreWindowLine(from: java.time.LocalDateTime, to: java.time.LocalDateTime, lang: String) {
+    fun hm(t: java.time.LocalDateTime) = "%02d:%02d".format(t.hour, t.minute)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(width = 14.dp, height = 10.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(ZtColors.SwitchingMid)
+        )
+        Text(
+            text = AppStrings.restoreWindow(lang, hm(from), hm(to)),
+            style = ZtType.caption.copy(fontWeight = FontWeight.Bold),
+            color = ZtColors.SwitchingMid
+        )
+    }
+}
+
+/** POE's `gav_message` of the house (feeder, ГАВ / АЧР / ГПВ queues): an info line, never parsed. */
+@Composable
+private fun GavMessageLine(text: String, lang: String) {
+    Text(
+        text = text,
+        style = ZtType.caption,
+        color = ZtColors.TextTertiary,
+        maxLines = 4,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier
+            .padding(top = 2.dp)
+            .semantics { contentDescription = AppStrings.gavMessageA11y(lang) + ". " + text }
+    )
+}
 
 /** 58 x 34 pill switch for the notifications; the touch target is 48 dp tall without changing the look. */
 @Composable

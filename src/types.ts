@@ -26,7 +26,7 @@ export interface DaySchedule {
   dateStr: string; // "2026-10-30"
   dayLabel: string; // "Сьогодні (30 жовтня)" or "Завтра (31 жовтня)"
   queue: string; // "1.1"
-  city: string; // "Житомир (ZTOE)"
+  city: string; // "Полтава (POE)"
   slots: BlackoutSlot[]; // 48 half-hour slots (or 24 1-hour slots), or empty when unclear
   lastUpdated: string;
   sourceUrl: string;
@@ -58,8 +58,8 @@ export interface UserSettings {
   city: string;
   url: string;
   queue: string; // e.g. "1.1" or "" when not selected yet or when house has status message instead of queue
-  customQueueStatusText?: string; // e.g. "В цей час не вимикається, за винятком випадків аварійних відключень" from ZTOE lookup table
-  selectedAddress?: string; // e.g. "Житомирський РЕМ, м. Житомир,\nвул. Київська, буд. 104"
+  customQueueStatusText?: string; // the no-queue text (NO_QUEUE_TEXT) when POE puts the house in no queue
+  selectedAddress?: string; // e.g. "Полтавська об'єднана філія, місто Полтава,\nвул. Соборності, буд. 1"
   selectedAddressQuery?: SelectedAddressQuery;
   /** @deprecated retired in 1.4.0 (read but ignored); see OutageStateStore. */
   activeEmergencyOutage?: EmergencyOutageInfo | null;

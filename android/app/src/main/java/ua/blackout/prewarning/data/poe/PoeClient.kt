@@ -30,7 +30,8 @@ sealed interface AddressStatusFetch {
 }
 
 sealed interface RegistryFetch {
-    data class Confirmed(val rows: List<PoeMapper.RegistryRow>) : RegistryFetch
+    /** [raw] keeps each row's `out_text` so the rows can be stored and parsed again later. */
+    data class Confirmed(val rows: List<PoeMapper.RegistryRow>, val raw: List<String> = emptyList()) : RegistryFetch
     data class Unavailable(val reason: String) : RegistryFetch
 }
 
@@ -198,9 +199,8 @@ class PoeClient(
             is PoeHttpResult.Failed -> RegistryFetch.Unavailable(r.reason)
             is PoeHttpResult.Ok -> {
                 val arr = arrayOf(r.body) ?: return RegistryFetch.Unavailable("not_an_array")
-                RegistryFetch.Confirmed((0 until arr.length()).mapNotNull { i ->
-                    PoeMapper.parseRegistryRow(arr.optJSONObject(i)?.optString("out_text"))
-                })
+                val raw = (0 until arr.length()).mapNotNull { i -> arr.optJSONObject(i)?.optString("out_text")?.takeIf { it.isNotBlank() } }
+                RegistryFetch.Confirmed(raw.mapNotNull { PoeMapper.parseRegistryRow(it) }, raw)
             }
         }
     }

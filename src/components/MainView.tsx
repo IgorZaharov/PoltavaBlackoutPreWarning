@@ -18,7 +18,8 @@ import {
   Zap
 } from 'lucide-react';
 import { Language, BlackoutSlot, UserSettings } from '../types';
-import { siteNoticeA11y, siteNoticeTitle, translations } from '../services/i18n';
+import { restoreWindow as restoreWindowText, siteNoticeA11y, siteNoticeTitle, translations } from '../services/i18n';
+import { NearbyOutagesCard } from './NearbyOutagesCard';
 import type { OutageSnapshot } from '../services/outageRepository';
 import { formatLocalDate, hourOf, minuteOf, plusDays, type LocalDateTime, toLocalDate } from '../core/localTime';
 import { statusAt, type Outage } from '../core/outageModels';
@@ -208,12 +209,16 @@ export const MainView: React.FC<MainViewProps> = ({
   const statusInfo = useMemo(() => snapshot.scheduleStatus(), [snapshot]);
 
   const siteNotice = useMemo(() => siteNoticeOf(snapshot), [snapshot]);
+  const restoreWindow = useMemo(() => snapshot.restoreWindow(), [snapshot]);
+  const nearby = snapshot.nearby !== null && snapshot.nearby.items.length > 0 ? snapshot.nearby : null;
+  const gavMessage = snapshot.gavMessage;
+  const hmOf = (t: LocalDateTime) => `${String(hourOf(t)).padStart(2, '0')}:${String(minuteOf(t)).padStart(2, '0')}`;
   const hasEmergencyOutage = featured !== null;
   const hasCustomNoQueueStatus = customStatus !== null && !hasEmergencyOutage;
   const isQueueUnselected = !hasQueue && !hasCustomNoQueueStatus && !hasEmergencyOutage;
   const formattedSelectedAddress = formatAddressAfterCity(settings.selectedAddress);
 
-  // The ztoe table of the shown day is not known: the drum is grey, known emergency/repair outages are drawn on top
+  // The POE table of the shown day is not known: the drum is grey, known emergency/repair outages are drawn on top
   const isTodayUnclear = !hasCustomNoQueueStatus && hasQueue && !snapshot.plannedKnown;
   const isTomorrowUnclear = !hasCustomNoQueueStatus && hasQueue && !snapshot.tomorrowPublished;
   const activeUnclear = isTomorrowSelected ? isTomorrowUnclear : isTodayUnclear;
@@ -365,6 +370,12 @@ export const MainView: React.FC<MainViewProps> = ({
             <div className={`line-clamp-3 whitespace-pre-line text-[13px] font-medium leading-[19px] ${TEXT_SECONDARY}`}>
               {formattedSelectedAddress ?? t.mainUtilityName}
             </div>
+            {/* POE's own line about the house: feeder and the schedules it belongs to */}
+            {gavMessage && (
+              <div data-testid="main-gav-message" aria-label={`${t.gavMessageA11y}. ${gavMessage}`} className="mt-0.5 line-clamp-4 text-[13px] font-medium leading-[19px] text-[#BAE6FD]/60">
+                {gavMessage}
+              </div>
+            )}
           </div>
         )}
 
@@ -448,7 +459,7 @@ export const MainView: React.FC<MainViewProps> = ({
           </GlassCard>
         )}
 
-        {/* ztoe is up but publishes a notice instead of the table: quote it as is (shown even without a queue) */}
+        {/* The site is up but publishes a notice instead of the table: quote it as is (shown even without a queue) */}
         {siteNotice !== null && (
           <GlassCard data-testid="site-notice-card" role="note" aria-label={`${siteNoticeA11y(lang)}. ${siteNotice}`} className="flex items-start gap-3">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full" style={{ background: TONE_COLORS.AMBER.fill }}>
@@ -497,17 +508,26 @@ export const MainView: React.FC<MainViewProps> = ({
         )}
         {hasSwitcher && !isQueueUnselected && featured !== null && emergencyBanner(featured)}
 
-        {/* Custom ZTOE queue/house status message */}
+        {/* No-queue card: the house is in no queue of the hourly schedule (spec/SUBSCRIPTIONS.md, POE) */}
         {!isQueueUnselected && customStatus !== null && (
           <GlassCard data-testid="main-custom-queue-status-text" className="flex flex-col gap-1">
+            <div className="text-xs font-bold uppercase leading-[17px] tracking-[0.05em]" style={{ color: TONE_COLORS.GREEN.text }}>
+              {t.noQueueNotDisconnected}
+            </div>
             {formattedSelectedAddress && (
               <div data-testid="main-selected-address-text" className={`whitespace-pre-line text-[13px] font-medium leading-[19px] ${TEXT_SECONDARY}`}>
                 {formattedSelectedAddress}
               </div>
             )}
             <div className="whitespace-normal break-words text-base font-bold leading-[23px] text-white">{customStatus}</div>
+            {gavMessage && !hasQueue && (
+              <div className="mt-0.5 text-[13px] font-medium leading-[19px] text-[#BAE6FD]/60">{gavMessage}</div>
+            )}
           </GlassCard>
         )}
+
+        {/* «Ремонти й пошкодження поруч», directly above the hero card (owner decision D9) */}
+        {!isQueueUnselected && nearby !== null && <NearbyOutagesCard nearby={nearby} lang={lang} />}
 
         {/* Hero outage status card */}
         <GlassCard data-testid="main-counter-card" padding={18} className="transition-all">
@@ -563,11 +583,21 @@ export const MainView: React.FC<MainViewProps> = ({
                   </span>
                 </div>
               )}
+
+              {/* POE: power comes back inside the switching half-hour after the span (spec/OUTAGE_ENGINE.md 3.5) */}
+              {!isStatusUnclear && restoreWindow !== null && (
+                <div data-testid="restore-window" className="mt-2 flex items-center gap-2">
+                  <span aria-hidden="true" className="h-2.5 w-3.5 rounded-[2px]" style={{ background: '#F5C242' }} />
+                  <span className="text-[13px] font-bold leading-[19px]" style={{ color: '#F5C242' }}>
+                    {restoreWindowText(lang, hmOf(restoreWindow[0]), hmOf(restoreWindow[1]))}
+                  </span>
+                </div>
+              )}
             </>
           )}
         </GlassCard>
 
-        {/* Day selector: Tomorrow is always there; before ztoe publishes it, it shows the grey drum plus a notice */}
+        {/* Day selector: Tomorrow is always there; before POE publishes it, it shows the grey drum plus a notice */}
         <GlassCard control padding={4} data-testid="main-day-tabs">
           <div role="tablist" aria-label={`${t.today} / ${t.tomorrow}`} className="flex gap-1">
             <button
@@ -725,6 +755,28 @@ export const MainView: React.FC<MainViewProps> = ({
           )}
         </GlassCard>
 
+        {/* Today's POE measures (ГАВ, ГОП, СГАВ ...) whatever the site state (spec/POE_API.md section 7), right before the links (owner, 2026-11-16) */}
+        {!isQueueUnselected && snapshot.measures && (
+          <GlassCard data-testid="measures-card" role="note" aria-label={`${t.measuresTitle}. ${snapshot.measures}`} className="flex items-start gap-3">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full" style={{ background: TONE_COLORS.AMBER.fill }}>
+              <Info className="h-5 w-5" style={{ color: TONE_COLORS.AMBER.text }} aria-hidden="true" />
+            </span>
+            <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+              <div className="text-xs font-bold uppercase leading-[17px] tracking-[0.05em]" style={{ color: TONE_COLORS.AMBER.text }}>
+                {t.measuresTitle}
+              </div>
+              {snapshot.measures.split(/\r?\n/).map((line, i) => (
+                <div
+                  key={i}
+                  className={`break-words ${i === 0 ? 'text-base font-bold leading-[23px] text-white' : 'text-base font-medium leading-6 text-[#BAE6FD]/90'}`}
+                >
+                  {line}
+                </div>
+              ))}
+            </div>
+          </GlassCard>
+        )}
+
         {/* Emergency outages info link (Facebook): the URL wraps to two lines instead of a dead ellipsis */}
         <GlassCard padding={14}>
           <a
@@ -756,10 +808,10 @@ export const MainView: React.FC<MainViewProps> = ({
         {/* Blackout schedules on the ZTOE website, at the very bottom */}
         <GlassCard padding={14}>
           <a
-            href="https://www.ztoe.com.ua/unhooking-search.php"
+            href="https://www.poe.pl.ua/disconnection/power-outages/"
             target="_blank"
             rel="noopener noreferrer"
-            title="https://www.ztoe.com.ua/unhooking-search.php"
+            title="https://www.poe.pl.ua/disconnection/power-outages/"
             className="group flex min-h-12 items-center justify-between gap-2.5 overflow-hidden rounded-[14px] bg-white/[0.08] p-3 transition-colors hover:bg-white/[0.14]"
           >
             <div className="flex min-w-0 flex-1 items-center gap-2.5">
@@ -771,7 +823,7 @@ export const MainView: React.FC<MainViewProps> = ({
                   {t.siteSchedulesLabel}
                 </div>
                 <div className={`line-clamp-2 break-all font-mono text-[13px] font-normal leading-[19px] ${TEXT_TERTIARY}`}>
-                  https://www.ztoe.com.ua/unhooking-search.php
+                  https://www.poe.pl.ua/disconnection/power-outages/
                 </div>
               </div>
             </div>

@@ -128,6 +128,28 @@ function runsOf(cells: readonly BlackoutSlot[]): Run[] {
   return out;
 }
 
+/** A drawn switching cell (drumCells in DrumChart.tsx): switching and not planned off. */
+function isSwitchingCell(s: BlackoutSlot): boolean {
+  const off = s.status === 'POWER_OFF';
+  const planned = off && (Boolean(s.isPlanned) || !s.isEmergency);
+  return Boolean(s.isSwitching) && !planned;
+}
+
+function switchingRunsOf(cells: readonly BlackoutSlot[]): [number, number][] {
+  const out: [number, number][] = [];
+  let start = -1;
+  for (let i = 0; i < cells.length; i++) {
+    if (isSwitchingCell(cells[i])) {
+      if (start < 0) start = i;
+    } else if (start >= 0) {
+      out.push([start, i]);
+      start = -1;
+    }
+  }
+  if (start >= 0) out.push([start, cells.length]);
+  return out;
+}
+
 function cellTime(index: number): string {
   const minutes = index * 30;
   return minutes >= 1440 ? '24:00' : `${p2(Math.floor(minutes / 60))}:${p2(minutes % 60)}`;
@@ -153,5 +175,10 @@ export function drumSummary(lang: Lang, slots: readonly BlackoutSlot[], unclearB
   if (unclearBase) parts.push(t.outagesUnclear);
   if (found.length > 0) parts.push(drumPowerOffAt(lang, spans));
   else if (!unclearBase) parts.push(t.drumNoOutages);
+  // POE switching half-hours (power may still be off), as drawn: never on a planned cell
+  const switching = switchingRunsOf(cells);
+  if (switching.length > 0) {
+    parts.push(`${t.drumSwitchingMark}: ${switching.map(([a, b]) => `${cellTime(a)} – ${cellTime(b)}`).join(', ')}`);
+  }
   return `${head}: ${parts.join('; ')}`;
 }

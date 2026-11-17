@@ -54,7 +54,8 @@ import ua.blackout.prewarning.R
 import ua.blackout.prewarning.core.OutageEngine
 import ua.blackout.prewarning.data.KYIV_ZONE
 import ua.blackout.prewarning.data.model.BlackoutSlot
-import ua.blackout.prewarning.data.model.SlotStatus
+import ua.blackout.prewarning.ui.components.DrumCell
+import ua.blackout.prewarning.ui.components.DrumCells
 import ua.blackout.prewarning.data.model.UserSettings
 import ua.blackout.prewarning.data.repository.OutageRepository
 import ua.blackout.prewarning.data.repository.OutageSnapshot
@@ -184,13 +185,8 @@ open class BlackoutGlanceWidget(private val forceBigLayout: Boolean = false) : G
             )
         }
 
-        /** 0 = power on, 1 = planned off, 2 = emergency only, 3 = emergency overlapping planned. */
-        private fun cellKind(s: BlackoutSlot): Int = when {
-            s.isEmergency && s.isPlanned -> 3
-            s.isEmergency -> 2
-            s.status == SlotStatus.POWER_OFF -> 1
-            else -> 0
-        }
+        /** The drum cell of the main screen ([DrumCells.cell]), so the widget draws the identical 48 states. */
+        private fun cellKind(s: BlackoutSlot): DrumCell = DrumCells.cell(s)
 
         private const val STRIPE_PX = 8f
 
@@ -283,11 +279,7 @@ open class BlackoutGlanceWidget(private val forceBigLayout: Boolean = false) : G
             val slotSignature = if (slots.isEmpty()) {
                 "UNCLEAR"
             } else {
-                buildString(slots.size) {
-                    for (s in slots) {
-                        append(cellKind(s))
-                    }
-                }
+                DrumCells.signature(slots)
             }
             val bitmapKey = "${slotSignature}_${currentH}_${currentM}_${lang}_$height"
             val existingBmp = cachedChartBitmap
@@ -396,6 +388,12 @@ open class BlackoutGlanceWidget(private val forceBigLayout: Boolean = false) : G
                     floatArrayOf(0f, 0.5f, 1f),
                     Shader.TileMode.CLAMP
                 )
+                val switchingShader = LinearGradient(
+                    0f, trackTop, 0f, trackBottom,
+                    intArrayOf(0xFFE3AE2E.toInt(), 0xFFF5C242.toInt(), 0xFFD9A62C.toInt()),
+                    floatArrayOf(0f, 0.5f, 1f),
+                    Shader.TileMode.CLAMP
+                )
                 val stripePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                     style = Paint.Style.STROKE
                     strokeWidth = STRIPE_PX
@@ -404,19 +402,21 @@ open class BlackoutGlanceWidget(private val forceBigLayout: Boolean = false) : G
                 val stripeStep = STRIPE_PX * 2f * 1.4142135f
 
                 for (idx in 0 until 48) {
-                    val kind = slots.getOrNull(idx)?.let { cellKind(it) } ?: 0
+                    val kind = slots.getOrNull(idx)?.let { cellKind(it) } ?: DrumCell(planned = false, emergency = false)
                     val hour = idx / 2
                     val hLeft = trackLeft + hour * (hourWidth + sepPx)
                     val left = if (idx % 2 == 0) hLeft else hLeft + halfWidth
                     val right = if (idx % 2 == 0) hLeft + halfWidth else hLeft + hourWidth
 
-                    paint.shader = when (kind) {
-                        1, 3 -> offShader
-                        else -> onShader
-                    }
+                    paint.shader = if (kind.planned) offShader else onShader
                     canvas.drawRect(left, trackTop, right, trackBottom, paint)
 
-                    if (kind >= 2) {
+                    if (kind.switching) {
+                        // POE switching half-hour: the whole cell yellow, no stripes (spec/UI_DRUM.md 1)
+                        paint.shader = switchingShader
+                        canvas.drawRect(left, trackTop, right, trackBottom, paint)
+                    }
+                    if (kind.emergency) {
                         paint.shader = amberShader
                         canvas.drawRect(left, trackMid, right, trackBottom, paint)
                         stripePaint.color = 0x8C1A1208.toInt()

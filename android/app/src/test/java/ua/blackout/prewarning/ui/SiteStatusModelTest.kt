@@ -47,7 +47,7 @@ class SiteStatusModelTest {
         assertEquals(2, chips.size)
         assertEquals(StatusTone.GREEN, chips[0].tone)
         assertEquals(StatusIcon.OK, chips[0].icon)
-        assertEquals("Сайт ZTOE доступний, графік опубліковано", chips[0].text)
+        assertEquals("Сайт POE доступний, графік опубліковано", chips[0].text)
         assertEquals(StatusTone.GREEN, chips[1].tone)
         assertEquals("Графік на завтра: опубліковано", chips[1].text)
         assertNull(SiteStatusModel.banner(s, "uk"))
@@ -64,7 +64,7 @@ class SiteStatusModelTest {
         val banner = SiteStatusModel.banner(s, "uk")
         assertNotNull(banner)
         assertEquals(StatusTone.AMBER, banner!!.tone)
-        assertEquals("Сайт ZTOE доступний, але графіка немає", banner.title)
+        assertEquals("Сайт POE доступний, але графіка немає", banner.title)
         assertEquals(
             "Показано збережений графік (дані за 09:30)\nГрафік ще не опубліковано або сторінка змінилась.",
             banner.message
@@ -76,7 +76,7 @@ class SiteStatusModelTest {
         val red = SiteStatusModel.banner(snapshot(SiteState.SITE_UNREACHABLE), "en")!!
         assertEquals(StatusTone.RED, red.tone)
         assertEquals(StatusIcon.SERVER_DOWN, red.icon)
-        assertEquals("ZTOE site unreachable, your internet works", red.title)
+        assertEquals("POE site unreachable, your internet works", red.title)
 
         val grey = SiteStatusModel.banner(snapshot(SiteState.NO_INTERNET), "en")!!
         assertEquals(StatusTone.GREY, grey.tone)
@@ -96,7 +96,7 @@ class SiteStatusModelTest {
     fun siteNotCheckedYetShowsGreyChecking() {
         val chips = SiteStatusModel.chips(snapshot(null), "uk")
         assertEquals(StatusTone.GREY, chips[0].tone)
-        assertEquals("Перевірка сайту ZTOE…", chips[0].text)
+        assertEquals("Перевірка сайту POE…", chips[0].text)
         assertNull(SiteStatusModel.banner(snapshot(null), "uk"))
     }
 

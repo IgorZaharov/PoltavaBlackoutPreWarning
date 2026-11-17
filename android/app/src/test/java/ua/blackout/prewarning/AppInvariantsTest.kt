@@ -12,6 +12,7 @@ import ua.blackout.prewarning.data.model.SlotStatus
 import ua.blackout.prewarning.data.model.UserSettings
 import ua.blackout.prewarning.data.repository.DonationsRepository
 import ua.blackout.prewarning.ui.AppStrings
+import ua.blackout.prewarning.ui.components.DrumCells
 import ua.blackout.prewarning.ui.theme.TimeOfDayPalette
 import java.io.File
 import java.time.LocalDate
@@ -73,6 +74,18 @@ class AppInvariantsTest {
         assertEquals("Discrepancy between the main window graph and the big widget graph for queue $queue", mainWindowBlocks, bigWidgetBlocks)
         // the switching half-hour is never drawn as off
         assertFalse(slots.any { it.isSwitching && it.status == SlotStatus.POWER_OFF })
+        // Tri-state drum (P4): main drum and widget bitmap both draw DrumCells; the switching cells show as "4"
+        val signature = DrumCells.signature(slots)
+        assertEquals(48, signature.length)
+        assertTrue("switching half-hour of queue $queue is drawn: $signature", '4' in signature)
+        slots.forEachIndexed { i, s ->
+            val expected = when {
+                s.status == SlotStatus.POWER_OFF -> '1'
+                s.isSwitching -> '4'
+                else -> '0'
+            }
+            assertEquals("cell $i of queue $queue", expected, signature[i])
+        }
     }
 
     @Test
@@ -84,12 +97,10 @@ class AppInvariantsTest {
         assertEquals("Світло в Полтаві", AppStrings.aboutTitle("uk"))
         val steps = AppStrings.queueHelpSteps("uk")
         assertEquals(4, steps.size)
-        assertEquals("1. Відкрийте сторінку пошуку черги на сайті https://www.ztoe.com.ua/unhooking-search.php", steps[0])
-        assertEquals("2. Оберіть свій РЕМ, населений пункт і вулицю.", steps[1])
-        assertEquals(
-            "3. У таблиці знайдіть свій будинок і подивіться стовпці «Черга» і «Підчерга». Наприклад, черга 5 і підчерга 2 - це 5.2.",
-            steps[2]
-        )
+        // The POE flow text approved by the owner on 2026-11-16 (docs/POLTAVA_PORT_PLAN.md section 9)
+        assertEquals("1. Відкрийте сторінку «Пошук відключення за адресою» на сайті https://www.poe.pl.ua/disconnection/poshuk-vidkliuchennia-za-osobovym-rakhunkom/", steps[0])
+        assertEquals("2. Оберіть свою філію або дільницю, населений пункт, вулицю й будинок і натисніть «Знайти».", steps[1])
+        assertEquals("3. У відповіді знайдіть запис «ГПВ (черга …)». Наприклад, «ГПВ (черга 5-2)» - це черга 5.2.", steps[2])
         assertEquals("4. Виберіть це значення у полі «Черга» у вікні налаштувань (кнопка ⚙).", steps[3])
         assertEquals("Зрозуміло", AppStrings.queueHelpGotIt("uk"))
         assertEquals("Немає доступу до Інтернету", AppStrings.errorNoInternet("uk"))
@@ -148,10 +159,10 @@ class AppInvariantsTest {
 
     @Test
     fun testUnitD_AboutLinksAndUnclearState() {
-        // ZTOE schedules link, About GitHub README link, Unclear schedule state & uk / en localization
+        // POE schedules link, About GitHub README link, Unclear schedule state & uk / en localization
         // (kept from the removed roulette test; the roulette is not part of «Світло в Полтаві», D5)
         assertEquals("Графіки відключень на сайті", AppStrings.siteSchedulesLabel("uk"))
-        assertEquals("https://www.ztoe.com.ua/unhooking-search.php", AppStrings.SITE_SCHEDULES_URL)
+        assertEquals("https://www.poe.pl.ua/disconnection/power-outages/", AppStrings.SITE_SCHEDULES_URL)
         assertEquals("Світло в Полтаві на Github", AppStrings.desktopApp("uk"))
         assertEquals("Світло в Полтаві на Github", AppStrings.desktopApp("en"))
         assertEquals("https://github.com/IgorZaharov/PoltavaBlackoutPreWarning/blob/main/README.md", AppStrings.ABOUT_GITHUB_README_URL)

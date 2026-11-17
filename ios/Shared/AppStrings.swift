@@ -29,16 +29,16 @@ public enum AppStrings {
     public static func queueHelpSteps(_ lang: String) -> [String] {
         if lang == "uk" {
             return [
-                "1. Відкрийте сторінку пошуку черги на сайті https://www.ztoe.com.ua/unhooking-search.php",
-                "2. Оберіть свій РЕМ, населений пункт і вулицю.",
-                "3. У таблиці знайдіть свій будинок і подивіться стовпці «Черга» і «Підчерга». Наприклад, черга 5 і підчерга 2 - це 5.2.",
+                "1. Відкрийте сторінку «Пошук відключення за адресою» на сайті https://www.poe.pl.ua/disconnection/poshuk-vidkliuchennia-za-osobovym-rakhunkom/",
+                "2. Оберіть свою філію або дільницю, населений пункт, вулицю й будинок і натисніть «Знайти».",
+                "3. У відповіді знайдіть запис «ГПВ (черга …)». Наприклад, «ГПВ (черга 5-2)» - це черга 5.2.",
                 "4. Виберіть це значення у полі «Черга» у вікні налаштувань (кнопка ⚙).",
             ]
         }
         return [
-            "1. Open the queue lookup page on https://www.ztoe.com.ua/unhooking-search.php",
-            "2. Select your distribution district (РЕМ), settlement, and street.",
-            "3. In the table, find your building and check the «Queue» and «Subqueue» columns. For example, queue 5 and subqueue 2 is 5.2.",
+            "1. Open the «Пошук відключення за адресою» (search by address) page on https://www.poe.pl.ua/disconnection/poshuk-vidkliuchennia-za-osobovym-rakhunkom/",
+            "2. Select your branch or district, settlement, street and building, then press «Знайти» (Find).",
+            "3. In the answer, find the entry «ГПВ (черга …)». For example, «ГПВ (черга 5-2)» is queue 5.2.",
             "4. Select this value in the «Queue» field in the Settings window (⚙ button).",
         ]
     }
@@ -151,7 +151,7 @@ public enum AppStrings {
     public static func emergencyOutagesLabel(_ lang: String) -> String { lang == "uk" ? "Інформація про аварійні відключення:" : "Emergency outages info:" }
     public static let EMERGENCY_OUTAGES_URL = "https://www.facebook.com/atpoltavaoblenergo"
     public static func siteSchedulesLabel(_ lang: String) -> String { "Графіки відключень на сайті" }
-    public static let SITE_SCHEDULES_URL = "https://www.ztoe.com.ua/unhooking-search.php"
+    public static let SITE_SCHEDULES_URL = "https://www.poe.pl.ua/disconnection/power-outages/"
     public static func settingsTitle(_ lang: String) -> String { lang == "uk" ? "Налаштування" : "Settings" }
     public static func queueTitle(_ lang: String) -> String { lang == "uk" ? "ЧЕРГА ВІДКЛЮЧЕННЯ" : "OUTAGE QUEUE" }
     public static func queueDesc(_ lang: String) -> String { lang == "uk" ? "Оберіть підчергу за вашою адресою" : "Select sub-queue for your address" }
@@ -178,22 +178,22 @@ public enum AppStrings {
     public static func queueHelpManualSearchTitle(_ lang: String) -> String { lang == "uk" ? "Пошук вручну" : "Manual search" }
     public static func queueHelpGotIt(_ lang: String) -> String { lang == "uk" ? "Зрозуміло" : "Got it" }
     public static func aboutTitle(_ lang: String) -> String { "Світло в Полтаві" }
-    public static func aboutSubtitle(_ lang: String) -> String { lang == "uk" ? "Завчасне інформування про відключення світла в Житомирі та області" : "Advance blackout alerts for Zhytomyr and region" }
+    public static func aboutSubtitle(_ lang: String) -> String { lang == "uk" ? "Завчасне інформування про відключення світла в Полтаві та області" : "Advance blackout alerts for Poltava and region" }
     public static func aboutDescTitle(_ lang: String) -> String { lang == "uk" ? "ОПИС ЗАСТОСУНКУ" : "APP DESCRIPTION" }
-    public static func aboutDescText(_ lang: String) -> String { lang == "uk" ? "Автоматичний моніторинг графіків відключень електроенергії з офіційного сайту АТ «Житомиробленерго» (ztoe.com.ua). Застосунок своєчасно попереджає про початок відключення за вибраний інтервал часу та об'єднує послідовні години без світла в одне сповіщення." : "Automatic monitoring of blackout schedules from ztoe.com.ua. Alerts in advance before outages and merges consecutive slots into single notification." }
+    public static func aboutDescText(_ lang: String) -> String { lang == "uk" ? "Автоматичний моніторинг графіків погодинних відключень електроенергії з офіційного сайту АТ «Полтаваобленерго» (poe.pl.ua). Застосунок своєчасно попереджає про початок відключення за вибраний інтервал часу, об'єднує послідовні години без світла в одне сповіщення та стежить за аварійними відключеннями за вашою адресою." : "Automatic monitoring of hourly blackout schedules from poe.pl.ua. Alerts in advance before outages, merges consecutive slots into a single notification and watches emergency outages at your address." }
     public static func aboutLinksTitle(_ lang: String) -> String { lang == "uk" ? "ПОСИЛАННЯ ТА РОЗРОБКА" : "LINKS & DEVELOPMENT" }
     public static func aboutDonationsTitle(_ lang: String) -> String { "Charity / Благодійність і Пожертви" }
     public static func devProfile(_ lang: String) -> String { lang == "uk" ? "Профіль розробника" : "Developer profile" }
     public static func repoIssues(_ lang: String) -> String { lang == "uk" ? "Повідомити про проблему (Issues)" : "Report an issue (Issues)" }
     public static func desktopApp(_ lang: String) -> String { "Світло в Полтаві на Github" }
     public static let ABOUT_GITHUB_README_URL = "https://github.com/IgorZaharov/PoltavaBlackoutPreWarning/blob/main/README.md"
-    public static func disclaimerText(_ lang: String) -> String { lang == "uk" ? "Дані про графіки завантажуються безпосередньо з сайту ztoe.com.ua. Застосунок не є офіційним сервісом АТ «Житомиробленерго» та не несе відповідальності за раптові зміни або аварійні відключення з боку НЕК «Укренерго»." : "Data loaded directly from ztoe.com.ua. App is not an official service of JSC Zhytomyroblenergo and is not responsible for sudden emergency cuts." }
+    public static func disclaimerText(_ lang: String) -> String { lang == "uk" ? "Дані про графіки та відключення завантажуються безпосередньо з сайту poe.pl.ua. Застосунок не є офіційним сервісом АТ «Полтаваобленерго» та не несе відповідальності за раптові зміни або аварійні відключення з боку НЕК «Укренерго»." : "Data loaded directly from poe.pl.ua. App is not an official service of JSC Poltavaoblenergo and is not responsible for sudden emergency cuts." }
     private static let NBSP = "\u{00A0}"
-    public static func siteStateWithTable(_ lang: String) -> String { lang == "uk" ? "Сайт ZTOE доступний, графік опубліковано" : "ZTOE site online, schedule published" }
-    public static func siteStateNoTable(_ lang: String) -> String { lang == "uk" ? "Сайт ZTOE доступний, але графіка немає" : "ZTOE site online, but no schedule table" }
-    public static func siteStateUnreachable(_ lang: String) -> String { lang == "uk" ? "Сайт ZTOE недоступний, інтернет є" : "ZTOE site unreachable, your internet works" }
+    public static func siteStateWithTable(_ lang: String) -> String { lang == "uk" ? "Сайт POE доступний, графік опубліковано" : "POE site online, schedule published" }
+    public static func siteStateNoTable(_ lang: String) -> String { lang == "uk" ? "Сайт POE доступний, але графіка немає" : "POE site online, but no schedule table" }
+    public static func siteStateUnreachable(_ lang: String) -> String { lang == "uk" ? "Сайт POE недоступний, інтернет є" : "POE site unreachable, your internet works" }
     public static func siteStateNoInternet(_ lang: String) -> String { lang == "uk" ? "Немає інтернету" : "No internet connection" }
-    public static func siteStateChecking(_ lang: String) -> String { lang == "uk" ? "Перевірка сайту ZTOE…" : "Checking the ZTOE site…" }
+    public static func siteStateChecking(_ lang: String) -> String { lang == "uk" ? "Перевірка сайту POE…" : "Checking the POE site…" }
     public static func siteStateHintNoTable(_ lang: String) -> String { lang == "uk" ? "Графік ще не опубліковано або сторінка змінилась." : "The schedule is not published yet or the page has changed." }
     public static func siteStateHintUnreachable(_ lang: String) -> String { lang == "uk" ? "Застосунок повторить спробу сам." : "The app will retry on its own." }
     public static func siteStateHintNoInternet(_ lang: String) -> String { lang == "uk" ? "Перевірте з'єднання з Інтернетом." : "Check your internet connection." }
@@ -201,8 +201,9 @@ public enum AppStrings {
     public static func tomorrowPublished(_ lang: String) -> String { lang == "uk" ? "Графік на завтра: опубліковано" : "Tomorrow's schedule: published" }
     public static func tomorrowNotPublishedShort(_ lang: String) -> String { lang == "uk" ? "Графік на завтра: ще немає" : "Tomorrow's schedule: not yet" }
     public static func tomorrowNotPublished(_ lang: String) -> String { lang == "uk" ? "Графік на завтра ще не опубліковано на сайті" : "Tomorrow's schedule is not published on the site yet" }
-    public static func siteNoticeTitle(_ lang: String) -> String { lang == "uk" ? "Повідомлення з сайту ztoe.com.ua" : "Notice from ztoe.com.ua" }
-    public static func siteNoticeA11y(_ lang: String) -> String { lang == "uk" ? "Повідомлення Житомиробленерго" : "Zhytomyroblenergo notice" }
+    public static func siteNoticeTitle(_ lang: String) -> String { lang == "uk" ? "Повідомлення з сайту poe.pl.ua" : "Notice from poe.pl.ua" }
+    public static func siteNoticeA11y(_ lang: String) -> String { lang == "uk" ? "Повідомлення Полтаваобленерго" : "Poltavaoblenergo notice" }
+    public static func measuresTitle(_ lang: String) -> String { lang == "uk" ? "Сьогодні діють заходи Полтаваобленерго" : "Poltavaoblenergo measures in force today" }
     public static func poweronUnavailable(_ lang: String) -> String { lang == "uk" ? "Аварійні відключення: дані недоступні" : "Emergency outages: data unavailable" }
     public static func kindPlanned(_ lang: String) -> String { lang == "uk" ? "Планове" : "Planned" }
     public static func kindRepair(_ lang: String) -> String { lang == "uk" ? "Планові роботи" : "Planned works" }
@@ -223,7 +224,7 @@ public enum AppStrings {
     public static func emergencyEndBody(_ lang: String, _ start: String) -> String { lang == "uk" ? "Електропостачання за вашою адресою відновлено (початок був: \(start))." : "Power supply at your address has been restored (started: \(start))." }
     public static func emergencyEarlyEndTitle(_ lang: String) -> String { lang == "uk" ? "Аварійне відключення скасовано" : "Emergency outage cancelled" }
     public static func emergencyEarlyEndBody(_ lang: String, _ eta: String) -> String { lang == "uk" ? "Відключення зникло зі списку до \(eta): світло, імовірно, вже є." : "The outage left the list before \(eta): power is probably back." }
-    public static func mainUtilityName() -> String { "Житомиробленерго (ZTOE)" }
+    public static func mainUtilityName() -> String { "Полтаваобленерго (POE)" }
     public static func mainLangAuto(_ lang: String) -> String { lang == "uk" ? "Авто" : "Auto" }
     public static func switchOn(_ lang: String) -> String { lang == "uk" ? "Увімкнено" : "On" }
     public static func switchOff(_ lang: String) -> String { lang == "uk" ? "Вимкнено" : "Off" }
@@ -233,6 +234,21 @@ public enum AppStrings {
     public static func drumNoOutages(_ lang: String) -> String { lang == "uk" ? "відключень немає" : "no outages" }
     public static func drumPowerOffAt(_ lang: String, _ spans: String) -> String { lang == "uk" ? "без світла: \(spans)" : "no power: \(spans)" }
     public static func drumEmergencyMark(_ lang: String) -> String { lang == "uk" ? "аварійне" : "emergency" }
+    public static func drumSwitchingMark(_ lang: String) -> String { lang == "uk" ? "перемикання" : "switching" }
+    public static func restoreWindow(_ lang: String, _ from: String, _ to: String) -> String { lang == "uk" ? "Світло повернеться \(from)–\(to)" : "Power returns \(from)–\(to)" }
+    public static func gavMessageA11y(_ lang: String) -> String { lang == "uk" ? "Дані Полтаваобленерго про будинок" : "Poltavaoblenergo data for the house" }
+    public static func nearbyTitle(_ lang: String) -> String { lang == "uk" ? "Ремонти й пошкодження поруч" : "Repairs and faults nearby" }
+    public static func nearbyHint(_ lang: String) -> String { lang == "uk" ? "З реєстру відключень Полтаваобленерго; списки будинків можуть бути неповними" : "From the Poltavaoblenergo outage registry; house lists may be incomplete" }
+    public static func nearbyKindEmergency(_ lang: String) -> String { lang == "uk" ? "пошкодження" : "fault" }
+    public static func nearbyKindRepair(_ lang: String) -> String { lang == "uk" ? "планова" : "planned" }
+    public static func nearbyNow(_ lang: String) -> String { lang == "uk" ? "зараз" : "now" }
+    public static func nearbyAt(_ lang: String, _ hhmm: String) -> String { lang == "uk" ? "о \(hhmm)" : "at \(hhmm)" }
+    public static func nearbyYourHouse(_ lang: String) -> String { lang == "uk" ? "Ваш будинок у списку" : "Your house is listed" }
+    public static func nearbyYourStreet(_ lang: String) -> String { lang == "uk" ? "Ваша вулиця у списку" : "Your street is listed" }
+    public static func nearbyWholeStreet(_ lang: String) -> String { lang == "uk" ? "уся вулиця" : "whole street" }
+    public static func nearbyStreets(_ lang: String, _ n: Int) -> String { lang == "uk" ? "Вулиць: \(n)" : "Streets: \(n)" }
+    public static func nearbyExpand(_ lang: String) -> String { lang == "uk" ? "Показати вулиці" : "Show streets" }
+    public static func nearbyCollapse(_ lang: String) -> String { lang == "uk" ? "Сховати вулиці" : "Hide streets" }
     public static func tabSelected(_ lang: String) -> String { lang == "uk" ? "Обрано" : "Selected" }
     public static func widgetNoOutages(_ lang: String) -> String { lang == "uk" ? "Відключень немає" : "No outages" }
     public static func widgetNoMoreOutages(_ lang: String) -> String { lang == "uk" ? "Сьогодні більше немає" : "None more today" }
@@ -247,11 +263,11 @@ public enum AppStrings {
     public static func pickerSelected(_ lang: String) -> String { lang == "uk" ? "Обрано" : "Selected" }
     public static func pickerChooseFirst(_ lang: String) -> String { lang == "uk" ? "Спочатку оберіть попереднє поле" : "Choose the previous field first" }
     public static func addrFindTitle(_ lang: String) -> String { lang == "uk" ? "Пошук черги за адресою" : "Find Queue by Address" }
-    public static func addrRemLabel(_ lang: String) -> String { lang == "uk" ? "РЕМ" : "District (РЕМ)" }
+    public static func addrRemLabel(_ lang: String) -> String { lang == "uk" ? "Філія / дільниця" : "Branch / district" }
     public static func addrCityLabel(_ lang: String) -> String { lang == "uk" ? "Населений пункт" : "City / Settlement" }
     public static func addrStreetLabel(_ lang: String) -> String { lang == "uk" ? "Вулиця" : "Street" }
     public static func addrHouseLabel(_ lang: String) -> String { lang == "uk" ? "Будинок" : "House Number" }
-    public static func addrRemPlaceholder(_ lang: String) -> String { lang == "uk" ? "Оберіть РЕМ" : "Select district" }
+    public static func addrRemPlaceholder(_ lang: String) -> String { lang == "uk" ? "Оберіть філію або дільницю" : "Select branch or district" }
     public static func addrCityPlaceholder(_ lang: String) -> String { lang == "uk" ? "Оберіть населений пункт" : "Select settlement" }
     public static func addrStreetPlaceholder(_ lang: String) -> String { lang == "uk" ? "Оберіть вулицю" : "Select street" }
     public static func addrHousePlaceholder(_ lang: String) -> String { lang == "uk" ? "Оберіть будинок" : "Select house" }
@@ -260,6 +276,31 @@ public enum AppStrings {
     public static func addrCheckFailed(_ lang: String) -> String { lang == "uk" ? "Не вдалося перевірити адресу на сайті. Показано збережені дані." : "Could not check the address on the site. Showing saved data." }
     public static func addrConfirm(_ lang: String) -> String { lang == "uk" ? "Підтвердити вибір" : "Confirm selection" }
     public static func addrSaved(_ lang: String) -> String { lang == "uk" ? "Адресу збережено" : "Address saved" }
+    public static func addrCityAnyBranchHint(_ lang: String) -> String { lang == "uk" ? "Можна шукати по всій області: філію буде вибрано сама" : "You can search the whole oblast: the branch is filled in for you" }
+    public static func addrMissingTitle(_ lang: String) -> String { lang == "uk" ? "Немає вашої адреси?" : "Address missing?" }
+    public static func refreshSettlements(_ lang: String) -> String { lang == "uk" ? "Оновити населені пункти філії" : "Refresh this branch's settlements" }
+    public static func refreshStreets(_ lang: String) -> String { lang == "uk" ? "Оновити вулиці цього населеного пункту" : "Refresh this settlement's streets" }
+    public static func refreshDirectory(_ lang: String) -> String { lang == "uk" ? "Оновити довідник повністю" : "Update the whole directory" }
+    public static func refreshListDone(_ lang: String) -> String { lang == "uk" ? "Список оновлено" : "List updated" }
+    public static func refreshListFailed(_ lang: String) -> String { lang == "uk" ? "Не вдалося оновити список" : "Could not update the list" }
+    public static func directoryUpToDate(_ lang: String) -> String { lang == "uk" ? "Довідник уже найновіший" : "The directory is already up to date" }
+    public static func directoryUpdated(_ lang: String) -> String { lang == "uk" ? "Довідник оновлено" : "Directory updated" }
+    public static func severalConnections(_ lang: String) -> String { lang == "uk" ? "За цією адресою кілька підключень, тому сайт Полтаваобленерго не називає чергу." : "This address has several connections, so the Poltavaoblenergo site does not name the queue." }
+    public static func catalogueHintsTitle(_ lang: String) -> String { lang == "uk" ? "За графіком погодинних відключень (ГПВ) Полтаваобленерго:" : "From Poltavaoblenergo's hourly outage schedule (ГПВ):" }
+    public static func chooseQueueTitle(_ lang: String) -> String { lang == "uk" ? "Оберіть свою чергу:" : "Choose your queue:" }
+    public static func hintHouse(_ lang: String) -> String { lang == "uk" ? "будинок у списку" : "house listed" }
+    public static func hintRange(_ lang: String) -> String { lang == "uk" ? "номер у діапазоні" : "number in a range" }
+    public static func hintStreet(_ lang: String) -> String { lang == "uk" ? "уся вулиця" : "whole street" }
+    public static func hintSettlement(_ lang: String) -> String { lang == "uk" ? "увесь населений пункт" : "whole settlement" }
+    public static func companyTitle(_ lang: String) -> String { lang == "uk" ? "Пошук за підприємством" : "Search by workplace" }
+    public static func companyLabel(_ lang: String) -> String { lang == "uk" ? "Підприємство" : "Company" }
+    public static func companyPlaceholder(_ lang: String) -> String { lang == "uk" ? "Оберіть підприємство" : "Choose a company" }
+    public static func companyHint(_ lang: String) -> String { lang == "uk" ? "Черга підприємства з графіка ГПВ. Аварійні відключення відстежуються лише за адресою." : "The company's queue from the ГПВ schedule. Emergency outages are tracked for addresses only." }
+    public static func companyRowMatch(_ lang: String) -> String { lang == "uk" ? "у рядку графіка:" : "in the schedule row:" }
+    public static func noStreetsHint(_ lang: String) -> String { lang == "uk" ? "У довіднику Полтаваобленерго немає вулиць цього населеного пункту." : "Poltavaoblenergo's directory lists no streets for this settlement." }
+    public static func noHousesHint(_ lang: String) -> String { lang == "uk" ? "Полтаваобленерго не називає номерів будинків на цій вулиці." : "Poltavaoblenergo lists no house numbers for this street." }
+    public static func placeQueueHint(_ lang: String) -> String { lang == "uk" ? "Черга з графіка ГПВ для всього населеного пункту чи вулиці. Аварійні відключення відстежуються лише за адресою з номером будинку." : "The queue from the ГПВ schedule for the whole settlement or street. Emergency outages are tracked only for an address with a house number." }
+    public static func addCompanyQueue(_ lang: String, _ queue: String) -> String { lang == "uk" ? "Додати чергу \(queue)" : "Add queue \(queue)" }
     public static func noQueueNotDisconnected(_ lang: String) -> String { lang == "uk" ? "Черга відсутня (не вимикається)" : "No queue (not disconnected)" }
     public static func testAlertSent(_ lang: String) -> String { lang == "uk" ? "Тестове сповіщення надіслано" : "Test alert dispatched" }
     public static func settingsReset(_ lang: String) -> String { lang == "uk" ? "Налаштування скинуто" : "Settings reset" }

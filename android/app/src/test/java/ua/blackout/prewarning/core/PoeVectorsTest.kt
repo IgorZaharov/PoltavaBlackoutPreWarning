@@ -56,11 +56,47 @@ class PoeVectorsTest {
     }
 
     @Test
+    fun queueCatalogueVectors() {
+        val v = load("queue_catalogue.json")
+        val entries = v.getJSONArray("entries").objects().map { e ->
+            val ranges = e.getJSONArray("ranges")
+            QueueCatalogue.Entry(
+                queue = e.getString("q"),
+                branch = e.optStr("branch"),
+                row = e.getInt("row"),
+                settlement = e.optStr("settlement"),
+                street = e.optStr("street"),
+                houses = e.getJSONArray("houses").strings(),
+                ranges = (0 until ranges.length()).map { i -> ranges.getJSONArray(i).let { it.getInt(0)..it.getInt(1) } },
+                whole = e.optStr("whole")
+            )
+        }
+        val cases = v.getJSONArray("cases").objects()
+        assertEquals(14, cases.size)
+        for (c in cases) {
+            val got = JSONArray(
+                QueueCatalogue.lookup(entries, c.getString("settlement"), c.getJSONArray("branches").strings(), c.getString("street"), c.getString("house")).map {
+                    JSONObject().put("queue", it.queue).put("kind", it.kind.name).put("branch", it.branch ?: JSONObject.NULL).put("row", it.row).put("exact", it.exact)
+                }
+            )
+            assertEquals("queue_catalogue: ${c.getString("name")}", canon(c.getJSONArray("expect")), canon(got))
+        }
+        val confident = v.getJSONArray("confident").objects()
+        assertEquals(6, confident.size)
+        for (c in confident) {
+            val hints = c.getJSONArray("hints").objects().map {
+                QueueCatalogue.Hint(it.getString("queue"), QueueCatalogue.Kind.valueOf(it.getString("kind")), it.optStr("branch"), it.getInt("row"), it.getBoolean("exact"))
+            }
+            assertEquals("queue_catalogue confident: ${c.getString("name")}", c.optStr("expect"), QueueCatalogue.confident(hints))
+        }
+    }
+
+    @Test
     fun poeApiVectors() {
         val v = load("poe_api.json")
         mapOf(
             "times" to 10, "eta" to 7, "plannedList" to 5, "queue" to 8,
-            "addressStatus" to 11, "registryReason" to 6, "registryRows" to 6, "registryMatch" to 9
+            "addressStatus" to 12, "registryReason" to 6, "registryRows" to 6, "registryMatch" to 9, "nearby" to 6
         ).forEach { (key, min) -> assertTrue("poe_api.json: $key must hold at least $min cases", v.getJSONArray(key).length() >= min) }
 
         for (t in v.getJSONArray("times").objects()) {
@@ -87,6 +123,7 @@ class PoeVectorsTest {
             assertEquals("$name: queue", e.optStr("queue"), st.queue)
             assertEquals("$name: unparsed", e.getBoolean("unparsed"), st.unparsed)
             assertEquals("$name: scheduleMirror", e.getBoolean("scheduleMirror"), st.scheduleMirror)
+            assertEquals("$name: severalConnections", e.getBoolean("severalConnections"), st.severalConnections)
             if (e.isNull("emergency")) {
                 assertNull("$name: emergency", st.emergency)
             } else {
@@ -132,6 +169,23 @@ class PoeVectorsTest {
                 c.getString("out"),
                 PoeMapper.registryMatch(row!!.places, c.getString("settlement"), c.getString("street"), c.getString("house")).name
             )
+        }
+        for (c in v.getJSONArray("nearby").objects()) {
+            val name = c.getString("name")
+            val rowsJson = c.getJSONArray("rows")
+            val rows = (0 until rowsJson.length()).map { assertNotNull("$name: row", PoeMapper.parseRegistryRow(rowsJson.getString(it))); PoeMapper.parseRegistryRow(rowsJson.getString(it))!! }
+            val got = JSONArray(PoeMapper.nearbyOutages(rows, c.getString("settlement"), c.getString("street"), c.getString("house"), LocalDateTime.parse(c.getString("now"))).map { n ->
+                JSONObject()
+                    .put("id", n.id)
+                    .put("kind", n.kind.name)
+                    .put("start", n.start.toString())
+                    .put("end", n.end?.toString() ?: JSONObject.NULL)
+                    .put("reason", n.reason)
+                    .put("status", n.status.name)
+                    .put("streets", JSONArray(n.streets.map { s -> JSONObject().put("name", s.name).put("houses", JSONArray(s.houses)).put("mine", s.mine) }))
+                    .put("match", n.match.name)
+            })
+            assertEquals("nearby: $name", canon(c.getJSONArray("expect")), canon(got))
         }
     }
 

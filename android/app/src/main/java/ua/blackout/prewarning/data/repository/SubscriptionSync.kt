@@ -71,12 +71,14 @@ class SubscriptionSync(context: Context) {
         return change { Subscriptions.add(it, item) }
     }
 
-    fun addQueueOnly(queue: String): StoreResult {
+    /** A queue without an address; [label] names it (a workplace found in the company search). */
+    fun addQueueOnly(queue: String, label: String? = null): StoreResult {
         ensureReady()
         val item = Subscription(
             id = repo.newItemId(),
             queue = queue,
             queueSource = QueueSource.MANUAL,
+            label = label?.trim()?.take(Subscriptions.MAX_LABEL_LENGTH).orEmpty(),
             createdAtMs = System.currentTimeMillis()
         )
         return change { Subscriptions.add(it, item) }

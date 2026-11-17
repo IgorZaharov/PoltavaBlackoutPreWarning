@@ -22,7 +22,9 @@ data class ScheduleSyncResult(
     val status: FetchStatus,
     val siteState: SiteState,
     /** Active measures (ГАВ, СГАВ, ГОП ...) as one notice text, or null. */
-    val notice: String?
+    val notice: String?,
+    /** E2 answered (so a null [notice] means "no measures today", not "unknown"). */
+    val measuresKnown: Boolean = false
 )
 
 /**
@@ -51,7 +53,9 @@ object PoeScheduleSync {
         val schedule = ScheduleRepository(context)
         val todayFetch = client.schedule(today)
         val tomorrowFetch = client.schedule(today.plusDays(1))
-        val notice = (client.measures(today) as? MeasuresFetch.Ok)?.let { noticeOf(it.measures) }
+        val measures = client.measures(today) as? MeasuresFetch.Ok
+        val notice = measures?.let { noticeOf(it.measures) }
+        val known = measures != null
 
         return when (todayFetch) {
             is ScheduleFetch.Ok -> {
@@ -65,19 +69,19 @@ object PoeScheduleSync {
                             ?.mapValues { it.value!! }
                     }
                     schedule.saveAllCellsBatch(table.queues, tomorrow)
-                    ScheduleSyncResult(FetchStatus.SUCCESS, SiteState.AVAILABLE_WITH_TABLE, notice)
+                    ScheduleSyncResult(FetchStatus.SUCCESS, SiteState.AVAILABLE_WITH_TABLE, notice, known)
                 } else {
-                    ScheduleSyncResult(FetchStatus.NO_QUEUES_FOUND, SiteState.AVAILABLE_NO_TABLE, notice)
+                    ScheduleSyncResult(FetchStatus.NO_QUEUES_FOUND, SiteState.AVAILABLE_NO_TABLE, notice, known)
                 }
             }
             is ScheduleFetch.Unavailable -> {
                 val networkFailure = todayFetch.reason == "network" || todayFetch.reason.startsWith("http_")
                 if (networkFailure) {
                     val state = SiteStateResolver.resolve(FetchFailure.OTHER, hasTodayTable = false, networkValidated = NetworkProbe.isValidated(context))
-                    ScheduleSyncResult(if (state == SiteState.NO_INTERNET) FetchStatus.NO_INTERNET else FetchStatus.NO_QUEUES_FOUND, state, notice)
+                    ScheduleSyncResult(if (state == SiteState.NO_INTERNET) FetchStatus.NO_INTERNET else FetchStatus.NO_QUEUES_FOUND, state, notice, known)
                 } else {
                     // POE answered, but not with a table we can read (error body, other date, changed layout)
-                    ScheduleSyncResult(FetchStatus.NO_QUEUES_FOUND, SiteState.AVAILABLE_NO_TABLE, notice)
+                    ScheduleSyncResult(FetchStatus.NO_QUEUES_FOUND, SiteState.AVAILABLE_NO_TABLE, notice, known)
                 }
             }
         }

@@ -8,9 +8,13 @@ import ua.blackout.prewarning.core.LedgerEntry
 import ua.blackout.prewarning.core.Outage
 import ua.blackout.prewarning.core.OutageKind
 import ua.blackout.prewarning.core.SiteState
+import java.time.LocalDate
 import java.time.LocalDateTime
 
-/** When the ztoe site was last checked and what was found. */
+/** Raw rows (`out_text`) of one branch registry (E5) for one day, for the nearby outages card. */
+data class RegistryCache(val date: LocalDate, val rows: List<String>, val fetchedMs: Long, val lastOk: Boolean)
+
+/** When the POE site was last checked and what was found. */
 data class SiteSnapshot(
     val state: SiteState,
     val checkedAtMs: Long,
@@ -151,6 +155,60 @@ class OutageStateStore(context: Context) {
         val editor = prefs.edit().putBoolean("poweron_ok_$addressKey", ok).putLong("poweron_checked_ms_$addressKey", nowMs)
         if (ok) editor.putLong("poweron_last_ok_ms_$addressKey", nowMs)
         editor.apply()
+    }
+
+    // --- POE extras: measures (E2), the info line of a house (E4 gav_message), branch registry (E5) --
+
+    /** Today's active measures as notice lines (ГАВ, ГОП ...), or null; a failed fetch keeps the last answer. */
+    fun measures(today: LocalDate): String? =
+        prefs.getString("poe_measures", null)?.takeIf { it.isNotBlank() && prefs.getString("poe_measures_date", null) == today.toString() }
+
+    fun saveMeasures(date: LocalDate, text: String?) {
+        val editor = prefs.edit().putString("poe_measures_date", date.toString())
+        if (text.isNullOrBlank()) editor.remove("poe_measures") else editor.putString("poe_measures", text)
+        editor.apply()
+    }
+
+    /** POE's info line of one house (`gav_message`: feeder and the schedules it belongs to). */
+    fun gavMessage(addressKey: String): String? = prefs.getString("gav_$addressKey", null)?.takeIf { it.isNotBlank() }
+
+    fun saveGavMessage(addressKey: String, text: String?) {
+        if (text.isNullOrBlank()) prefs.edit().remove("gav_$addressKey").apply()
+        else prefs.edit().putString("gav_$addressKey", text).apply()
+    }
+
+    fun registry(registryId: Int): RegistryCache? {
+        val raw = prefs.getString("registry_$registryId", null) ?: return null
+        return try {
+            val o = JSONObject(raw)
+            val arr = o.getJSONArray("rows")
+            RegistryCache(
+                date = LocalDate.parse(o.getString("date")),
+                rows = (0 until arr.length()).map { arr.getString(it) },
+                fetchedMs = o.optLong("fetchedMs", 0L),
+                lastOk = o.optBoolean("lastOk", true)
+            )
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /** `date|fetchedMs|lastOk` of a stored registry, read without parsing its rows (the main screen asks every second). */
+    fun registryMeta(registryId: Int): String? = prefs.getString("registry_meta_$registryId", null)
+
+    /** A confirmed answer replaces the rows; a failure keeps them and only marks the last attempt. */
+    fun saveRegistry(registryId: Int, date: LocalDate, rows: List<String>?, nowMs: Long) {
+        val key = "registry_$registryId"
+        val o = if (rows != null) {
+            JSONObject().put("date", date.toString()).put("rows", JSONArray(rows)).put("fetchedMs", nowMs).put("lastOk", true)
+        } else {
+            val prev = registry(registryId) ?: return
+            JSONObject().put("date", prev.date.toString()).put("rows", JSONArray(prev.rows)).put("fetchedMs", prev.fetchedMs).put("lastOk", false)
+        }
+        prefs.edit()
+            .putString(key, o.toString())
+            .putString("registry_meta_$registryId", "${o.getString("date")}|${o.getLong("fetchedMs")}|${o.getBoolean("lastOk")}")
+            .apply()
     }
 
     /** Forgets everything (used by "reset to defaults"). */
