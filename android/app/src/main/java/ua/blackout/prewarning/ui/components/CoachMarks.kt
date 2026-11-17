@@ -7,6 +7,11 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -28,6 +33,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -47,6 +54,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
@@ -63,6 +72,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 import ua.blackout.prewarning.ui.AppStrings
 import ua.blackout.prewarning.ui.theme.ZtColors
 import ua.blackout.prewarning.ui.theme.ZtMinTouch
@@ -72,13 +82,23 @@ import ua.blackout.prewarning.ui.theme.ZtType
  * Spotlight overlay of the first-run tour (spec/ONBOARDING.md), mirrored by src/components/CoachTour.tsx.
  *
  * Controls mark themselves with [coachTarget]; [CoachOverlay] dims its window except the lit targets, points
- * an arrow with a tip at a target (outside it) and rings the control to use next. The dim layer has no
- * pointer input, so every touch reaches the controls underneath; only the tips' buttons take touches.
+ * an arrow with a tip at a target (outside it) and rings the control to use next, after scrolling the target
+ * into view. The dim layer has no pointer input, so touches on the lit controls reach them; a window that
+ * wants "a tap outside goes on" puts [coachOutsideTaps] on its root, which takes every touch outside the lit
+ * controls and the tips while an overlay is shown.
  * A dialog is its own window, so the address lookup dialog has its own [CoachTargets] and overlay.
  */
 class CoachTargets {
     /** Target bounds in the coordinates of their window's root. */
     val rects = mutableStateMapOf<String, Rect>()
+
+    /** Scrolls a target into view (the tour shows a tip at it). */
+    @OptIn(ExperimentalFoundationApi::class)
+    internal val requesters = mutableMapOf<String, BringIntoViewRequester>()
+
+    /** While an overlay is shown: the lit holes and the tips, in root coordinates. Touches there go through. */
+    internal var passThrough by mutableStateOf<List<Rect>?>(null)
+    internal val tipRects = mutableStateMapOf<Int, Rect>()
 
     /** The smallest rectangle around all the [keys] that are on screen; null when none is. */
     fun union(keys: List<String>): Rect? {
@@ -91,12 +111,47 @@ class CoachTargets {
 val LocalCoachTargets = staticCompositionLocalOf<CoachTargets?> { null }
 
 /** Registers this element as tour target [key] (no effect outside a [LocalCoachTargets] provider). */
+@OptIn(ExperimentalFoundationApi::class)
 fun Modifier.coachTarget(key: String): Modifier = composed {
     val targets = LocalCoachTargets.current ?: return@composed this
-    DisposableEffect(targets, key) { onDispose { targets.rects.remove(key) } }
-    onGloballyPositioned { coordinates ->
+    val requester = remember { BringIntoViewRequester() }
+    DisposableEffect(targets, key) {
+        targets.requesters[key] = requester
+        onDispose {
+            targets.rects.remove(key)
+            if (targets.requesters[key] === requester) targets.requesters.remove(key)
+        }
+    }
+    bringIntoViewRequester(requester).onGloballyPositioned { coordinates ->
         val p = coordinates.positionInRoot()
         targets.rects[key] = Rect(p, androidx.compose.ui.geometry.Size(coordinates.size.width.toFloat(), coordinates.size.height.toFloat()))
+    }
+}
+
+/**
+ * On a window's root: while an overlay of [targets] is shown and [onOutside] is set, a tap outside the lit
+ * controls and the tips is taken (it reaches nothing underneath, not even a scroll) and calls [onOutside].
+ */
+fun Modifier.coachOutsideTaps(targets: CoachTargets, onOutside: (() -> Unit)?): Modifier = composed {
+    var origin by remember { mutableStateOf(Offset.Zero) }
+    val current = androidx.compose.runtime.rememberUpdatedState(onOutside)
+    onGloballyPositioned { origin = it.positionInRoot() }.pointerInput(targets) {
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            val action = current.value ?: return@awaitEachGesture
+            val open = targets.passThrough ?: return@awaitEachGesture
+            val p = down.position + origin
+            if (open.any { it.contains(p) }) return@awaitEachGesture
+            down.consume()
+            var tapped = true
+            while (true) {
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                event.changes.forEach { it.consume() }
+                if (event.changes.none { it.pressed }) break
+                if (event.changes.any { (it.position - down.position).getDistance() > viewConfiguration.touchSlop }) tapped = false
+            }
+            if (tapped) action()
+        }
     }
 }
 
@@ -124,6 +179,7 @@ private val DimColor = Color(0xC705080F)
  * Dims the window except the [holes] (each the union of its keys) and draws the [tips]. Draws nothing until
  * a tip's anchor is on screen.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun CoachOverlay(
     targets: CoachTargets,
@@ -139,6 +195,26 @@ fun CoachOverlay(
     var origin by remember { mutableStateOf(Offset.Zero) }
     val local = { r: Rect -> r.translate(-origin.x, -origin.y) }
     val shown = tips.mapNotNull { tip -> targets.union(tip.anchor)?.let { tip to local(it) } }
+    // the first tip's controls are scrolled into view (Settings is a long page)
+    val scrollKeys = tips.firstOrNull()?.anchor.orEmpty()
+    LaunchedEffect(scrollKeys) {
+        delay(300)
+        scrollKeys.forEach { key -> targets.requesters[key]?.bringIntoView() }
+    }
+    val holePadPx = with(LocalDensity.current) { HolePad.toPx() }
+    SideEffect {
+        targets.passThrough = if (shown.isEmpty()) {
+            null
+        } else {
+            holes.mapNotNull { targets.union(it)?.inflate(holePadPx) } + targets.tipRects.values
+        }
+    }
+    DisposableEffect(targets) {
+        onDispose {
+            targets.passThrough = null
+            targets.tipRects.clear()
+        }
+    }
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
@@ -159,8 +235,9 @@ fun CoachOverlay(
         }
         val width = with(density) { constraints.maxWidth.toDp() }
         val height = with(density) { constraints.maxHeight.toDp() }
-        shown.forEach { (tip, anchor) ->
+        shown.forEachIndexed { index, (tip, anchor) ->
             TipMark(
+                onBounds = { targets.tipRects[index] = it },
                 tip = tip,
                 anchor = anchor,
                 ring = tip.ring?.let { targets.rects[it] }?.let(local),
@@ -177,6 +254,7 @@ fun CoachOverlay(
 
 @Composable
 private fun TipMark(
+    onBounds: (Rect) -> Unit,
     tip: CoachTip,
     anchor: Rect,
     ring: Rect?,
@@ -234,6 +312,7 @@ private fun TipMark(
             }
             .width(bubbleWidth.dp)
             .onSizeChanged { bubbleHeight = it.height }
+            .onGloballyPositioned { onBounds(it.boundsInRoot()) }
             .background(ZtColors.CardSolid, RoundedCornerShape(16.dp))
             .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(16.dp))
             .padding(horizontal = 16.dp, vertical = 12.dp)

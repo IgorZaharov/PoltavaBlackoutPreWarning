@@ -45,6 +45,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.SideEffect
 import kotlinx.coroutines.withContext
 import ua.blackout.prewarning.core.SiteState
 import ua.blackout.prewarning.data.poe.PoeAddressLookup
@@ -73,6 +74,8 @@ import ua.blackout.prewarning.ui.components.TourInput
 import ua.blackout.prewarning.ui.components.TourPage
 import ua.blackout.prewarning.ui.components.TourStep
 import ua.blackout.prewarning.ui.components.coachTarget
+import ua.blackout.prewarning.ui.components.coachOutsideTaps
+import ua.blackout.prewarning.ui.components.TourTap
 import androidx.compose.runtime.CompositionLocalProvider
 import ua.blackout.prewarning.ui.components.PageGlide
 import ua.blackout.prewarning.ui.components.ambientBreath
@@ -157,6 +160,8 @@ fun BlackoutAppNavigation(
     var tourActive by remember { mutableStateOf(false) }
     var tourReachedRename by remember { mutableStateOf(false) }
     var tourRenameDone by remember { mutableStateOf(false) }
+    /** What a tap outside the lit controls does on the current tip (null: nothing is shown here). */
+    var tourOutsideTap by remember { mutableStateOf<(() -> Unit)?>(null) }
     fun endTour() {
         onboarding.setDone(true)
         tourActive = false
@@ -507,6 +512,7 @@ fun BlackoutAppNavigation(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .coachOutsideTaps(coachTargets, tourOutsideTap)
             .background(bgColors.primary)
             .drawBehind {
                 val w = size.width.coerceAtLeast(1f)
@@ -982,6 +988,14 @@ fun BlackoutAppNavigation(
                 )
             )
             LaunchedEffect(step) { if (step == TourStep.RENAME) tourReachedRename = true }
+            // a tap outside the lit controls goes on to the next tip, switching to the main screen for ABOUT
+            val outside: (() -> Unit)? = remember(step) { when (OnboardingTour.outsideTap(step)) {
+                TourTap.RENAME_DONE -> { { tourRenameDone = true } }
+                TourTap.GO_HOME -> { { coroutineScope.launch { pagerState.animateScrollToPage(0, animationSpec = PageGlide) } } }
+                TourTap.FINISH -> { { endTour() } }
+                TourTap.NOTHING -> null
+            } }
+            SideEffect { tourOutsideTap = outside }
             LaunchedEffect(tourPage, tourReachedRename) {
                 if (OnboardingTour.finishedBy(tourPage, tourReachedRename)) endTour()
             }
@@ -1017,6 +1031,8 @@ fun BlackoutAppNavigation(
                 )
                 else -> Unit
             }
+        } else {
+            SideEffect { tourOutsideTap = null }
         }
     }
     }

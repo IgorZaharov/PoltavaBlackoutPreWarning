@@ -8,6 +8,7 @@ import ua.blackout.prewarning.ui.components.OnboardingTour
 import ua.blackout.prewarning.ui.components.TourInput
 import ua.blackout.prewarning.ui.components.TourPage
 import ua.blackout.prewarning.ui.components.TourStep
+import ua.blackout.prewarning.ui.components.TourTap
 
 /** First-run tour steps (spec/ONBOARDING.md); the same cases run in tests/onboarding.test.ts. */
 class OnboardingTourTest {
@@ -66,5 +67,15 @@ class OnboardingTourTest {
         assertTrue(OnboardingTour.finishedBy(TourPage.ABOUT, true))
         assertFalse(OnboardingTour.finishedBy(TourPage.ABOUT, false))
         assertFalse(OnboardingTour.finishedBy(TourPage.SCHEDULE, true))
+    }
+
+    @Test
+    fun outsideTapGoesToTheNextTip() {
+        assertEquals(TourTap.NOTHING, OnboardingTour.outsideTap(TourStep.PICK))
+        assertEquals(TourTap.NOTHING, OnboardingTour.outsideTap(TourStep.APPLY))
+        assertEquals(TourTap.RENAME_DONE, OnboardingTour.outsideTap(TourStep.RENAME))
+        assertEquals(TourTap.GO_HOME, OnboardingTour.outsideTap(TourStep.ALERTS))
+        assertEquals(TourTap.FINISH, OnboardingTour.outsideTap(TourStep.ABOUT))
+        assertEquals(TourTap.NOTHING, OnboardingTour.outsideTap(TourStep.NONE))
     }
 }

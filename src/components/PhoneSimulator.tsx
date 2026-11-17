@@ -493,6 +493,7 @@ export const PhoneSimulator: React.FC<PhoneSimulatorProps> = ({
           onRenameDone={finishRename}
           onSkip={endTour}
           onDone={endTour}
+          onGoHome={() => setActiveTab('schedule')}
         />
 
         {/* Android Gesture Bar */}

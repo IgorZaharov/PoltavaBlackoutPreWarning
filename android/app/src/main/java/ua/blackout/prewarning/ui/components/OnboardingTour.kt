@@ -15,6 +15,9 @@ import android.content.Context
  */
 enum class TourStep { NONE, PICK, APPLY, RENAME, ALERTS, ABOUT }
 
+/** What a tap on the dimmed area (outside the lit controls and the tips) does. */
+enum class TourTap { NOTHING, RENAME_DONE, GO_HOME, FINISH }
+
 enum class TourPage { SCHEDULE, SETTINGS, ABOUT, OTHER }
 
 data class TourInput(
@@ -43,6 +46,17 @@ object OnboardingTour {
         i.page == TourPage.SETTINGS -> if (i.renameDone) TourStep.ALERTS else TourStep.RENAME
         i.page == TourPage.SCHEDULE && i.reachedRename -> TourStep.ABOUT
         else -> TourStep.NONE
+    }
+
+    /**
+     * A tap outside the lit controls goes on to the next tip: RENAME -> ALERTS, ALERTS -> the main screen
+     * (ABOUT), ABOUT -> the end. PICK and APPLY wait for the address, so the tap does nothing there.
+     */
+    fun outsideTap(step: TourStep): TourTap = when (step) {
+        TourStep.RENAME -> TourTap.RENAME_DONE
+        TourStep.ALERTS -> TourTap.GO_HOME
+        TourStep.ABOUT -> TourTap.FINISH
+        else -> TourTap.NOTHING
     }
 
     /** Opening About after the RENAME step finishes the tour (the donations are there). */

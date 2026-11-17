@@ -8,8 +8,9 @@ Writes:
   docs/screenshots/app-icon.png                                  README header
 
 The black outside the rounded square becomes transparent; the orange glow around the gold rim is kept
-as partial transparency. In the adaptive foreground the logo is 56 dp wide, so the whole rounded square
-(gold corners included) stays inside the 72 dp circle that launchers show.
+as partial transparency. In the adaptive foreground the gold rounded square is about 72 dp wide (owner, 2026-11-17),
+just inside the 72 dp area that launchers show, so it fills the home-screen icon; the adaptive background
+is the logo's own maroon (`ic_launcher_background`), so no dark ring shows around it.
 
 Run: python -X utf8 scripts/build_app_icons.py [repository root]   (needs Pillow)
 """
@@ -21,6 +22,7 @@ from PIL import Image, ImageChops, ImageDraw, ImageFilter
 ROOT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(__file__), '..')
 SRC = os.path.join(ROOT, 'public', 'logo.png')
 RES = os.path.join(ROOT, 'android', 'app', 'src', 'main', 'res')
+MAROON = (48, 0, 11, 255)  # the logo's inner edge colour, also values/colors.xml ic_launcher_background
 DENSITIES = {'mdpi': 1.0, 'hdpi': 1.5, 'xhdpi': 2.0, 'xxhdpi': 3.0, 'xxxhdpi': 4.0}
 
 
@@ -80,9 +82,9 @@ def main() -> None:
     logo = transparent_logo()
     for name, f in DENSITIES.items():
         d = os.path.join(RES, f'mipmap-{name}')
-        save(fit(logo, round(108 * f), 56 / 108), os.path.join(d, 'ic_launcher_foreground.png'))
+        save(fit(logo, round(108 * f), 77 / 108), os.path.join(d, 'ic_launcher_foreground.png'))
         save(fit(logo, round(48 * f), 0.96), os.path.join(d, 'ic_launcher.png'))
-        save(fit(logo, round(48 * f), 0.74, background=(10, 5, 6, 255), circle=True), os.path.join(d, 'ic_launcher_round.png'))
+        save(fit(logo, round(48 * f), 0.74, background=MAROON, circle=True), os.path.join(d, 'ic_launcher_round.png'))
     save(fit(logo, 256, 1.0), os.path.join(RES, 'drawable-nodpi', 'app_logo.png'))
     save(fit(logo, 64, 1.0), os.path.join(ROOT, 'public', 'favicon.png'))
     save(fit(logo, 180, 0.9, background=(10, 5, 6, 255)), os.path.join(ROOT, 'public', 'apple-touch-icon.png'))

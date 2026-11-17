@@ -2,7 +2,7 @@
  * First-run tour steps (spec/ONBOARDING.md); the same cases run in android/.../ui/OnboardingTourTest.kt.
  */
 import assert from 'node:assert/strict';
-import { tourFinishedBy, tourStep, type TourInput } from '../src/services/onboarding';
+import { tourFinishedBy, tourOutsideTap, tourStep, type TourInput } from '../src/services/onboarding';
 
 const base: TourInput = {
   active: true,
@@ -44,6 +44,14 @@ const cases: [string, () => void][] = [
     assert.equal(tourFinishedBy('about', true), true);
     assert.equal(tourFinishedBy('about', false), false);
     assert.equal(tourFinishedBy('schedule', true), false);
+  }],
+  ['outsideTapGoesToTheNextTip', () => {
+    assert.equal(tourOutsideTap('PICK'), 'NOTHING');
+    assert.equal(tourOutsideTap('APPLY'), 'NOTHING');
+    assert.equal(tourOutsideTap('RENAME'), 'RENAME_DONE');
+    assert.equal(tourOutsideTap('ALERTS'), 'GO_HOME');
+    assert.equal(tourOutsideTap('ABOUT'), 'FINISH');
+    assert.equal(tourOutsideTap('NONE'), 'NOTHING');
   }],
 ];
 

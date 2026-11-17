@@ -906,6 +906,7 @@ private fun MyAddressesCard(
                     onSetPlanned = { onSetPlanned(item.id, it) },
                     onSetEmergency = { onSetEmergency(item.id, it) },
                     dragHandle = handle,
+                    tourTargets = index == 0,
                     modifier = Modifier
                         .onSizeChanged { heights[item.id] = it.height }
                         .zIndex(if (isDragging) 1f else 0f)

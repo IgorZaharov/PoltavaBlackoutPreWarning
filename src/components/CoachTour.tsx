@@ -1,9 +1,9 @@
 /**
  * Spotlight overlay of the first-run tour (spec/ONBOARDING.md), mirrored by CoachOverlay in
  * android/.../ui/components/CoachMarks.kt. It dims the phone screen except the lit controls, and points an
- * arrow with a tip at the lit part, outside it, and rings the control to use next. The dim layer lets every
- * touch through, so the user works with the lit controls directly; only the tips («Пропустити підказки»,
- * «Зрозуміло») take touches.
+ * arrow with a tip at the lit part, outside it, and rings the control to use next, scrolled into view. Touches
+ * on the lit controls and the tips go through; from RENAME on, a tap anywhere else is taken and goes on to
+ * the next tip (tourOutsideTap): RENAME -> ALERTS, ALERTS -> the main screen (ABOUT), ABOUT -> the end.
  *
  * The step comes from tourStep() with what the screen shows: the controls are found by their test ids and
  * data-tour attributes and measured every frame, so the holes follow scrolling and layout changes.
@@ -11,7 +11,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp } from 'lucide-react';
 import { translations } from '../services/i18n';
-import { tourStep, type TourPage, type TourStep } from '../services/onboarding';
+import { tourOutsideTap, tourStep, type TourPage, type TourStep } from '../services/onboarding';
 
 interface CoachTourProps {
   active: boolean;
@@ -24,6 +24,8 @@ interface CoachTourProps {
   onRenameDone: () => void;
   onSkip: () => void;
   onDone: () => void;
+  /** Switches to the main screen (a tap outside the ALERTS tip). */
+  onGoHome: () => void;
 }
 
 interface Box {
@@ -83,6 +85,7 @@ export const CoachTour: React.FC<CoachTourProps> = ({
   onRenameDone,
   onSkip,
   onDone,
+  onGoHome,
 }) => {
   const t = translations[lang];
   const rootRef = useRef<HTMLDivElement>(null);
@@ -90,6 +93,47 @@ export const CoachTour: React.FC<CoachTourProps> = ({
   const lastKey = useRef('');
   const lastAnchor = useRef<Element | null>(null);
   const renameDialogSeen = useRef(false);
+  const viewRef = useRef<View | null>(null);
+  viewRef.current = view;
+  const actions = useRef({ onRenameDone, onGoHome, onDone });
+  actions.current = { onRenameDone, onGoHome, onDone };
+
+  // a tap outside the lit controls and the tips goes on to the next tip (capture phase, so nothing under it reacts)
+  useEffect(() => {
+    const screen = rootRef.current?.parentElement;
+    if (!active || !screen) return;
+    const outside = (e: MouseEvent | PointerEvent): boolean => {
+      const v = viewRef.current;
+      if (!v || tourOutsideTap(v.step) === 'NOTHING') return false;
+      if ((e.target as Element | null)?.closest('[data-testid="coach-tip"]')) return false;
+      const sr = screen.getBoundingClientRect();
+      const scale = screen.offsetWidth > 0 ? sr.width / screen.offsetWidth : 1;
+      const x = (e.clientX - sr.left) / scale;
+      const y = (e.clientY - sr.top) / scale;
+      return !v.holes.some((b) => x >= b.x - HOLE_PAD && x <= b.x + b.w + HOLE_PAD && y >= b.y - HOLE_PAD && y <= b.y + b.h + HOLE_PAD);
+    };
+    const block = (e: PointerEvent) => {
+      if (outside(e)) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    const click = (e: MouseEvent) => {
+      if (!outside(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const tap = tourOutsideTap(viewRef.current!.step);
+      if (tap === 'RENAME_DONE') actions.current.onRenameDone();
+      else if (tap === 'GO_HOME') actions.current.onGoHome();
+      else if (tap === 'FINISH') actions.current.onDone();
+    };
+    screen.addEventListener('pointerdown', block, true);
+    screen.addEventListener('click', click, true);
+    return () => {
+      screen.removeEventListener('pointerdown', block, true);
+      screen.removeEventListener('click', click, true);
+    };
+  }, [active]);
 
   useEffect(() => {
     if (!active) {
@@ -151,7 +195,8 @@ export const CoachTour: React.FC<CoachTourProps> = ({
         const outside = r !== null && r.h < screen.offsetHeight * 0.55;
         if (a) tips = [{ anchor: outside && r ? r : a, text: t.tourApply, ring: a, skip: true }];
       } else if (step === 'RENAME') {
-        const rename = box(q('[data-tour="rename"]'));
+        anchorEl = q('[data-tour="rename"]');
+        const rename = box(anchorEl);
         if (rename) {
           holes = [rename];
           tips = [{ anchor: rename, text: t.tourRename, next: true, skip: true }];
@@ -176,7 +221,7 @@ export const CoachTour: React.FC<CoachTourProps> = ({
       if (step === 'RENAME' && !reachedRename) onReachRename();
       // bring the control to use next into view once, when it changes
       // (after the card has settled: the result card grows while the queue is checked)
-      if ((step === 'PICK' || step === 'APPLY' || step === 'ALERTS') && anchorEl && anchorEl !== lastAnchor.current) {
+      if ((step === 'PICK' || step === 'APPLY' || step === 'RENAME' || step === 'ALERTS') && anchorEl && anchorEl !== lastAnchor.current) {
         lastAnchor.current = anchorEl;
         const el = anchorEl;
         window.setTimeout(() => {

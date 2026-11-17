@@ -40,6 +40,20 @@ export function tourStep(i: TourInput): TourStep {
   return 'NONE';
 }
 
+/** What a tap on the dimmed area (outside the lit controls and the tips) does. */
+export type TourTap = 'NOTHING' | 'RENAME_DONE' | 'GO_HOME' | 'FINISH';
+
+/**
+ * A tap outside the lit controls goes on to the next tip: RENAME -> ALERTS, ALERTS -> the main screen
+ * (ABOUT), ABOUT -> the end. PICK and APPLY wait for the address, so the tap does nothing there.
+ */
+export function tourOutsideTap(step: TourStep): TourTap {
+  if (step === 'RENAME') return 'RENAME_DONE';
+  if (step === 'ALERTS') return 'GO_HOME';
+  if (step === 'ABOUT') return 'FINISH';
+  return 'NOTHING';
+}
+
 /** Opening About after the RENAME step finishes the tour (the donations are there). */
 export const tourFinishedBy = (page: TourPage, reachedRename: boolean): boolean => page === 'about' && reachedRename;
 
