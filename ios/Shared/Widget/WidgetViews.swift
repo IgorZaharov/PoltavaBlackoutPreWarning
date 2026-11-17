@@ -135,7 +135,7 @@ public struct WidgetDrum: View {
 
     private var ticks: some View {
         HStack(spacing: 0) {
-            ForEach(DrumGeometry.tickHours(every: 6), id: \.self) { h in
+            ForEach(DrumGeometry.tickHours(every: 3), id: \.self) { h in
                 if h != 0 { Spacer(minLength: 0) }
                 Text(verbatim: h < 10 ? "0\(h)" : "\(h)")
                     .font(.system(size: 9, weight: .bold, design: .monospaced))

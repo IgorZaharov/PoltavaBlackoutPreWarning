@@ -303,7 +303,8 @@ export const DrumBitmap: React.FC<DrumBitmapProps> = ({
   const needleTop = contourTop - 8;
   const needleBottom = height - 36; // just above the hour labels (baseline height - 16)
   const fontSize = 21 + (height - 132) * 0.1;
-  const labels: [number, string][] = [[0, '00'], [0.25, '06'], [0.5, '12'], [0.75, '18'], [1, '24']];
+  // every 3 hours: 00, 03, 06 ... 21, 24 (owner, 2026-11-17)
+  const labels: [number, string][] = [0, 3, 6, 9, 12, 15, 18, 21, 24].map((h) => [h / 24, String(h).padStart(2, '0')]);
 
   const stops = (id: string, c: readonly string[]) => (
     <linearGradient
@@ -409,7 +410,7 @@ export const DrumBitmap: React.FC<DrumBitmapProps> = ({
       {/* 5. Bright yellow current-time needle with a black outline (5 px of the 720 px bitmap = 2 dp), down to the labels */}
       <rect x={needleX - 8} y={needleTop - 5} width={16} height={needleBottom - needleTop + 10} rx={8} fill={DRUM_COLORS.needleOutline} />
       <rect x={needleX - 3} y={needleTop} width={6} height={needleBottom - needleTop} rx={3} fill={DRUM_COLORS.needle} />
-      {/* 6. Stamped hour markers 00, 06, 12, 18, 24 */}
+      {/* 6. Stamped hour markers every 3 hours: 00, 03 ... 21, 24 */}
       {labels.map(([pos, text]) => (
         <text
           key={text}

@@ -52,6 +52,8 @@ Implementation note (not in the plan): anchor the stripe phase to the drum, not 
 
 Ticks: 13 markers for the hours `00, 02, 04, ... 22, 24` laid out with space-between and 2 horizontal padding. Each marker is a 1.5 x 5 bar `#1C1B18` above a label of two digits (`String.format("%02d")`), monospace, bold, `#1C1B18`, 1 top padding. Code size is 10 sp; the 1.4.0 type scale (`design-tokens.json`) raises the floor to 12 sp (role `overline`) and the plan thins the labels to every 4 hours when the font scale is above 1.3.
 
+Widget drums (Android bitmap, web `DrumBitmap`, iOS `WidgetViews.swift`): labels every 3 hours, `00, 03, 06 ... 21, 24` (owner, 2026-11-17; before: every 6 hours), `00` flush with the left end of the track, `24` with the right end, the others centred on their hour.
+
 Needle (**Today only**, never on Tomorrow):
 
 | Property | Value |

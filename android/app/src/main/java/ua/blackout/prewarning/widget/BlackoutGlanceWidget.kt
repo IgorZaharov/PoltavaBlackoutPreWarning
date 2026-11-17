@@ -468,19 +468,13 @@ open class BlackoutGlanceWidget(private val forceBigLayout: Boolean = false) : G
                 3f, 3f, paint
             )
 
-            // 6. Stamped black (#1C1B18) hour markers: 00, 06, 12, 18, 24
+            // 6. Stamped black (#1C1B18) hour markers every 3 hours: 00, 03, 06 ... 21, 24 (owner, 2026-11-17)
             val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = 0xFF1C1B18.toInt()
                 typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
                 textSize = 21f + (height - 132) * 0.1f
             }
-            val labels = listOf(
-                0f to "00",
-                0.25f to "06",
-                0.50f to "12",
-                0.75f to "18",
-                1.0f to "24"
-            )
+            val labels = (0..24 step 3).map { h -> h / 24f to h.toString().padStart(2, '0') }
             val textY = height - 16f
             labels.forEach { (pos, label) ->
                 val tw = textPaint.measureText(label)
