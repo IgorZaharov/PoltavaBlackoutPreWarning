@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, AlertTriangle, Bell, ExternalLink, Globe, HelpCircle, Loader2, Pencil, Plus, RotateCcw, Send, Sliders, Star, Trash2, Vibrate, Volume2, X, Zap, RefreshCw, GripVertical, Clock } from 'lucide-react';
-import { Language, UserSettings } from '../types';
+import { Language, SelectedAddressQuery, UserSettings } from '../types';
 import { QUEUES, DEFAULT_POE_URL, verifyPoeSite } from '../services/poeScheduleSync';
 import {
   checkAddress,
@@ -210,6 +210,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [showQueueHelp, setShowQueueHelp] = useState(Boolean(autoOpenQueueHelp));
   const [removeCandidate, setRemoveCandidate] = useState<Subscription | null>(null);
   const [renameCandidate, setRenameCandidate] = useState<Subscription | null>(null);
+  /** The item whose address the lookup edits (opened from the card's edit dialog, owner 2026-11-18). */
+  const [editAddressCandidate, setEditAddressCandidate] = useState<Subscription | null>(null);
   const [renameText, setRenameText] = useState('');
   const [verification, setVerification] = useState<{ isChecking: boolean; status: RefreshStatus }>({ isChecking: true, status: 'SUCCESS' });
 
@@ -796,6 +798,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         <AddressLookupDialog
           settings={settings}
           lang={lang}
+          // a new address starts empty (only the city is filled in), not from the last added (owner, 2026-11-18)
+          saved={null}
           onDismiss={() => setShowQueueHelp(false)}
           onApply={(next, toast) => {
             const wasEmpty = store.items.length === 0;
@@ -810,6 +814,36 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             setShowQueueHelp(false);
             if (applySync(sync.addQueueOnly(settings, queue, label))) showToast(t.addressAdded);
           }}
+        />
+        </ModalPortal>
+      )}
+
+      {editAddressCandidate && (
+        <ModalPortal>
+        <AddressLookupDialog
+          settings={settings}
+          lang={lang}
+          // the item's own address; a queue-only item starts empty like a new address
+          saved={
+            editAddressCandidate.address
+              ? {
+                  remId: editAddressCandidate.address.remSlug,
+                  settlementId: editAddressCandidate.address.settlementId,
+                  streetId: editAddressCandidate.address.streetId,
+                  house: editAddressCandidate.address.house,
+                }
+              : null
+          }
+          onDismiss={() => setEditAddressCandidate(null)}
+          onApply={(next) => {
+            const id = editAddressCandidate.id;
+            setEditAddressCandidate(null);
+            if (!next.selectedAddressQuery) return;
+            const synced = sync.editAddress(settings, id, next.queue, next.customQueueStatusText, next.selectedAddress ?? '', next.selectedAddressQuery);
+            if (applySync(synced)) showToast(t.addressChanged);
+          }}
+          // no company search or whole-place queue here: those add a queue-only entry, an edit needs a house
+          onAddCompany={null}
         />
         </ModalPortal>
       )}
@@ -854,6 +888,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 className="min-h-14 w-full rounded-2xl border border-white/20 bg-white/[0.08] px-4 py-2 text-base font-medium text-white placeholder:text-white/40 focus:border-[#FF5E3A] focus:outline-none"
               />
               <p className={`text-[13px] leading-[19px] ${TEXT_TERTIARY}`}>{t.renameHint}</p>
+              {/* the address itself can be changed too (owner, 2026-11-18): opens the lookup on this item */}
+              <button
+                type="button"
+                data-testid="edit-address-button"
+                onClick={() => {
+                  setEditAddressCandidate(renameCandidate);
+                  setRenameCandidate(null);
+                }}
+                className="flex min-h-12 w-full cursor-pointer items-center gap-2.5 rounded-2xl border border-white/20 bg-white/10 px-3.5 py-2.5 text-sm font-semibold text-white hover:bg-white/20"
+              >
+                <Pencil className="h-5 w-5" aria-hidden="true" />
+                {t.editAddress}
+              </button>
               <div className="flex gap-2">
                 <ActionButton text={t.cancel} onClick={() => setRenameCandidate(null)} />
                 <ActionButton
@@ -885,16 +932,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 interface AddressLookupDialogProps {
   settings: UserSettings;
   lang: 'uk' | 'en';
+  /** Where the cascade starts: an item's address when editing it, null for a new address (Poltava city). */
+  saved: SelectedAddressQuery | null;
   onDismiss: () => void;
   onApply: (next: UserSettings, toast: string) => void;
-  /** A workplace from the company search: its queue as a queue-only entry named after the company. */
-  onAddCompany: (queue: string, label: string) => void;
+  /**
+   * A workplace from the company search or a place without houses: its queue as a queue-only entry named after
+   * it; null hides both (editing an address).
+   */
+  onAddCompany: ((queue: string, label: string) => void) | null;
 }
 
-const AddressLookupDialog: React.FC<AddressLookupDialogProps> = ({ settings, lang, onDismiss, onApply, onAddCompany }) => {
+const AddressLookupDialog: React.FC<AddressLookupDialogProps> = ({ settings, lang, saved, onDismiss, onApply, onAddCompany }) => {
   const t = translations[lang];
   const siteUrl = settings.url;
-  const saved = settings.selectedAddressQuery;
 
   // The cascade starts from the saved address, or from Poltava city (Полтавська об'єднана філія) on a first
   // launch. After that a branch never picks a city for the user: choosing another branch clears city, street and house.
@@ -1321,7 +1372,7 @@ const AddressLookupDialog: React.FC<AddressLookupDialogProps> = ({ settings, lan
             }}
           />
 
-          {placeMode !== null && (
+          {placeMode !== null && onAddCompany !== null && (
             <div
               data-testid="place-queue-result"
               className="mt-1.5 flex flex-col gap-2.5 rounded-2xl border-2 border-white/25 bg-[#141A29]/85 p-4 shadow-[0_12px_40px_rgba(0,0,0,0.45)] backdrop-blur-2xl"
@@ -1360,7 +1411,7 @@ const AddressLookupDialog: React.FC<AddressLookupDialogProps> = ({ settings, lan
                 filled={placeQueue !== null}
                 testId="place-add"
                 onClick={() => {
-                  if (placeQueue !== null) onAddCompany(placeQueue, placeLabel);
+                  if (placeQueue !== null) onAddCompany?.(placeQueue, placeLabel);
                 }}
               />
             </div>
@@ -1454,7 +1505,7 @@ const AddressLookupDialog: React.FC<AddressLookupDialogProps> = ({ settings, lan
         </div>
 
         {/* 1a) Search by workplace: companies named in POE's hourly-schedule PDF (spec/POE_API.md 8.11) */}
-        {companies.length > 0 && (
+        {companies.length > 0 && onAddCompany !== null && (
           <div
             data-testid="company-search-section"
             className="flex w-full flex-col gap-3 rounded-3xl border-2 border-white/25 bg-white/[0.05] p-5"
@@ -1493,7 +1544,7 @@ const AddressLookupDialog: React.FC<AddressLookupDialogProps> = ({ settings, lan
                   filled={companyQueue !== null}
                   testId="company-add"
                   onClick={() => {
-                    if (companyQueue !== null) onAddCompany(companyQueue, currentCompany.label);
+                    if (companyQueue !== null) onAddCompany?.(companyQueue, currentCompany.label);
                   }}
                 />
               </>

@@ -211,6 +211,14 @@ fun SettingsScreen(
     onSetPlanned: (id: String, on: Boolean) -> Unit = { _, _ -> },
     onSetEmergency: (id: String, on: Boolean) -> Unit = { _, _ -> },
     onRenameSubscription: (id: String, label: String) -> Unit = { _, _ -> },
+    /** The address of an existing item was edited (spec/SUBSCRIPTIONS.md section 4, `setAddress`). */
+    onEditAddress: (
+        id: String,
+        queue: String,
+        statusText: String?,
+        addressLabel: String,
+        query: SelectedAddressQuery
+    ) -> Unit = { _, _, _, _, _ -> },
     /** Moves an address to a new list position (spec/SUBSCRIPTIONS.md section 4, `move`). */
     onMoveSubscription: (id: String, toIndex: Int) -> Unit = { _, _ -> },
     onToggleMaster: (Boolean) -> Unit = {},
@@ -241,6 +249,8 @@ fun SettingsScreen(
     var showResetConfirmDialog by remember { mutableStateOf(false) }
     var removeCandidate by remember { mutableStateOf<Subscription?>(null) }
     var renameCandidate by remember { mutableStateOf<Subscription?>(null) }
+    /** The item whose address the lookup edits (opened from the card's edit dialog). */
+    var editAddressCandidate by remember { mutableStateOf<Subscription?>(null) }
     var renameWasOpen by remember { mutableStateOf(false) }
     LaunchedEffect(renameCandidate) {
         if (renameCandidate != null) {
@@ -646,7 +656,8 @@ fun SettingsScreen(
         AddressLookupDialog(
             siteUrl = siteUrl,
             lang = lang,
-            saved = selectedAddressQuery,
+            // a new address starts empty (only the city is filled in), not from the last added (owner, 2026-11-18)
+            saved = null,
             onDismiss = { showQueueHelpDialog = false },
             onApply = { queue, statusText, addressLabel, query ->
                 onAddAddress(queue, statusText, addressLabel, query)
@@ -659,6 +670,23 @@ fun SettingsScreen(
             onShowAppBanner = onShowAppBanner,
             tourActive = tourActive,
             onTourSkip = onTourSkip
+        )
+    }
+
+    editAddressCandidate?.let { item ->
+        AddressLookupDialog(
+            siteUrl = siteUrl,
+            lang = lang,
+            // the item's own address; a queue-only item starts empty like a new address
+            saved = item.address?.let { a -> SelectedAddressQuery(a.remSlug, a.settlementId, a.streetId, a.house) },
+            onDismiss = { editAddressCandidate = null },
+            onApply = { queue, statusText, addressLabel, query ->
+                onEditAddress(item.id, queue, statusText, addressLabel, query)
+                editAddressCandidate = null
+            },
+            // no company search or whole-place queue here: those add a queue-only entry, an edit needs a house
+            onAddCompany = null,
+            onShowAppBanner = onShowAppBanner
         )
     }
 
@@ -711,6 +739,25 @@ fun SettingsScreen(
                         colors = glassFieldColors()
                     )
                     Text(AppStrings.renameHint(lang), style = ZtType.caption, color = ZtColors.TextTertiary)
+                    // the address itself can be changed too (owner, 2026-11-18): opens the lookup on this item
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = ZtMinTouch)
+                            .clip(ZtShapes.Control)
+                            .background(Color(0x1AFFFFFF))
+                            .border(1.dp, ZtColors.InputBorder, ZtShapes.Control)
+                            .clickable(role = Role.Button) {
+                                editAddressCandidate = item
+                                renameCandidate = null
+                            }
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(Icons.Default.Edit, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                        Text(AppStrings.editAddress(lang), style = ZtType.label, color = Color.White)
+                    }
                 }
             },
             confirmButton = {
@@ -1288,7 +1335,8 @@ private fun AddressLookupDialog(
     saved: SelectedAddressQuery?,
     onDismiss: () -> Unit,
     onApply: (queue: String, statusText: String?, addressLabel: String, query: SelectedAddressQuery) -> Unit,
-    onAddCompany: (queue: String, label: String) -> Unit = { _, _ -> },
+    /** Adds a queue-only entry (company search, a place without houses); null hides both (editing an address). */
+    onAddCompany: ((queue: String, label: String) -> Unit)? = null,
     onShowAppBanner: (String) -> Unit,
     tourActive: Boolean = false,
     onTourSkip: () -> Unit = {}
@@ -1759,7 +1807,7 @@ private fun AddressLookupDialog(
 
                         // A settlement without streets, or a street POE lists no houses for (spec/POE_API.md 8.11):
                         // the catalogue's queue for the whole place, added as a queue-only entry named after it
-                        if (placeMode != null) {
+                        if (placeMode != null && onAddCompany != null) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -2011,7 +2059,7 @@ private fun AddressLookupDialog(
                 }
 
                 // 1a) Search by workplace: companies named in POE's hourly-schedule PDF (spec/POE_API.md 8.11)
-                if (companies.isNotEmpty()) {
+                if (companies.isNotEmpty() && onAddCompany != null) {
                     val companyItems = remember(companies) {
                         companies.map { c ->
                             PickerItem(c.id, listOfNotNull(c.name, c.town, c.queues.joinToString(", ")).joinToString(" · "), c.search, c.context)

@@ -1146,7 +1146,14 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
+import android.os.Build
+import android.widget.RemoteViews
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -1166,7 +1173,9 @@ import androidx.glance.action.ActionParameters
 import androidx.glance.action.actionParametersOf
 import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
+import androidx.glance.appwidget.AndroidRemoteViews
 import androidx.glance.appwidget.CircularProgressIndicator
+import androidx.glance.appwidget.LocalAppWidgetOptions
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.SizeMode
@@ -1209,13 +1218,17 @@ open class BlackoutGlanceWidget(private val forceBigLayout: Boolean = false) : G
 
     override val stateDefinition: GlanceStateDefinition<*> = PreferencesGlanceStateDefinition
 
-    override val sizeMode = SizeMode.Responsive(
+    private val responsive = SizeMode.Responsive(
         setOf(
             DpSize(120.dp, 60.dp),   // 2x1 Small
             DpSize(250.dp, 110.dp),  // 4x2 Big
             DpSize(250.dp, 160.dp)   // 3x2 Big
         )
     )
+
+    /** One RemoteViews while an address stack can show, so its cards (a partial update) reach it (AddressStack.active). */
+    override val sizeMode: SizeMode
+        get() = if (AddressStack.active()) SizeMode.Single else responsive
 
     companion object {
         val KEY_NOTIFICATIONS_ENABLED = booleanPreferencesKey("glance_notifications_enabled")
@@ -1352,6 +1365,7 @@ open class BlackoutGlanceWidget(private val forceBigLayout: Boolean = false) : G
          */
         suspend fun syncAllWidgets(context: Context, refreshing: Boolean? = null) {
             val appCtx = context.applicationContext
+            AddressStack.remember(appCtx)
             val manager = GlanceAppWidgetManager(appCtx)
             val smallIds = manager.getGlanceIds(BlackoutGlanceWidget::class.java)
             val bigIds = manager.getGlanceIds(BlackoutBigGlanceWidget::class.java)
@@ -1418,6 +1432,7 @@ open class BlackoutGlanceWidget(private val forceBigLayout: Boolean = false) : G
          * and caches it by (slotStatuses, currentH, currentM) to avoid redundant Bitmap allocations
          * and Canvas redraws within the same minute (e.g., when toggling the alert bell icon).
          */
+        @Synchronized
         fun renderAnalogCounterBitmap(
             slots: List<BlackoutSlot>,
             currentH: Int,
@@ -1606,19 +1621,13 @@ open class BlackoutGlanceWidget(private val forceBigLayout: Boolean = false) : G
                 3f, 3f, paint
             )
 
-            // 6. Stamped black (#1C1B18) hour markers: 00, 06, 12, 18, 24
+            // 6. Stamped black (#1C1B18) hour markers every 3 hours: 00, 03, 06 ... 21, 24 (owner, 2026-11-17)
             val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = 0xFF1C1B18.toInt()
                 typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
                 textSize = 21f + (height - 132) * 0.1f
             }
-            val labels = listOf(
-                0f to "00",
-                0.25f to "06",
-                0.50f to "12",
-                0.75f to "18",
-                1.0f to "24"
-            )
+            val labels = (0..24 step 3).map { h -> h / 24f to h.toString().padStart(2, '0') }
             val textY = height - 16f
             labels.forEach { (pos, label) ->
                 val tw = textPaint.measureText(label)
@@ -1658,361 +1667,339 @@ open class BlackoutGlanceWidget(private val forceBigLayout: Boolean = false) : G
             val isRefreshing = refreshingSince > 0L && System.currentTimeMillis() - refreshingSince < REFRESH_BUSY_MAX_MS
             val source = widgetSource(appContext, appWidgetId)
             val model = buildWidgetModel(source.settings, source.snapshot, source.label)
-            val openApp = openAppAction(source.itemId)
-
-            val resolvedLang = model.lang
             // the bell shows and toggles the master switch for all addresses (owner decision 4)
             val notificationsEnabled = SubscriptionSync(appContext).master()
-            val isUnclear = model.isUnclear
-            val isBlackoutNow = model.isOffNow
-            val countdownText = model.countdown
-            val nextSlotTime = model.period
-            val nextBlackoutText = model.nextOutage
-            val slots = model.slots
-            val queueHeaderText = model.queueHeader
-            val addressLabel = model.addressLabel
-            val staleCaption = model.staleCaption
 
             val size = LocalSize.current
             val isBigWidget = forceBigLayout || size.height >= 110.dp || size.width >= 220.dp
-
-            val statusText = when {
-                isUnclear -> AppStrings.powerUnclear(resolvedLang)
-                isBlackoutNow -> "СВІТЛА НЕМАЄ"
-                else -> "СВІТЛО Є"
+            // the app widget id of an address stack (spec/SUBSCRIPTIONS.md 10), null when this widget shows one address
+            val stackWidgetId = appWidgetId?.takeIf { AddressStack.supported && WidgetBindings.stackIds(appContext, it).size >= 2 }
+            val options = LocalAppWidgetOptions.current
+            val kind = if (forceBigLayout) AddressStack.Kind.BIG else AddressStack.Kind.SMALL
+            // the cards are composed off the composition and land a moment later; until then the widget is as before
+            val cards by produceState<List<Pair<String, RemoteViews>>?>(null, stackWidgetId, refreshTick, options, notificationsEnabled) {
+                value = stackWidgetId?.let {
+                    try {
+                        AddressStack.buildCards(appContext, it, kind, options)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        android.util.Log.w("AddressStack", "cards not built: widget $it", e)
+                        null
+                    }
+                }
             }
-            val statusColor = when {
-                isUnclear -> Color(0xFF9CA3AF)
-                isBlackoutNow -> Color(0xFFFF5E3A)
-                else -> Color(0xFF34D399)
-            }
+            val ready = cards
 
-            GlanceTheme {
-                Box(
-                    modifier = GlanceModifier
-                        .fillMaxSize()
-                        .cornerRadius(20.dp)
-                        .background(ColorProvider(Color(0xCC141A29)))
-                        .padding(12.dp)
+            if (stackWidgetId != null && !ready.isNullOrEmpty() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                // Address stack (spec/SUBSCRIPTIONS.md 10): one card over the whole widget, and above it the buttons in
+                // the corner the card leaves empty; the cards follow this frame as a partial update (see AddressStack)
+                val widget = AddressStack.widgetSize(options, kind)
+                LaunchedEffect(ready) {
+                    kotlinx.coroutines.delay(AddressStack.PUSH_DELAY_MS)
+                    AddressStack.pushCards(appContext, stackWidgetId, ready, widget)
+                }
+                Box(modifier = GlanceModifier.fillMaxSize()) {
+                    AndroidRemoteViews(
+                        remoteViews = AddressStack.frame(appContext),
+                        modifier = GlanceModifier.fillMaxSize()
+                    )
+                    StackButtons(isBigWidget, notificationsEnabled, isRefreshing)
+                }
+            } else {
+                WidgetBody(model, isBigWidget, notificationsEnabled, isRefreshing, openAppAction(source.itemId))
+            }
+        }
+    }
+}
+
+private fun GlanceModifier.clickableIf(action: Action?): GlanceModifier = if (action != null) clickable(action) else this
+
+/** The 2x1 and 4x2 widget content of one address ([BlackoutGlanceWidget]). */
+@Composable
+internal fun WidgetBody(
+    model: BlackoutGlanceWidget.Companion.WidgetModel,
+    isBigWidget: Boolean,
+    notificationsEnabled: Boolean,
+    isRefreshing: Boolean,
+    openApp: Action?
+) {
+    fun ink(c: Color): ColorProvider = ColorProvider(c)
+    val open = openApp
+
+    val resolvedLang = model.lang
+    val isUnclear = model.isUnclear
+    val isBlackoutNow = model.isOffNow
+    val statusText = when {
+        isUnclear -> AppStrings.powerUnclear(resolvedLang)
+        isBlackoutNow -> "СВІТЛА НЕМАЄ"
+        else -> "СВІТЛО Є"
+    }
+    val statusColor = when {
+        isUnclear -> Color(0xFF9CA3AF)
+        isBlackoutNow -> Color(0xFFFF5E3A)
+        else -> Color(0xFF34D399)
+    }
+
+    GlanceTheme {
+        Box(
+            modifier = GlanceModifier
+                .fillMaxSize()
+                .cornerRadius(20.dp)
+                .background(ink(Color(0xCC141A29)))
+                .padding(12.dp)
+        ) {
+            if (isBigWidget) {
+                // ----------------- 3x2 BIG WIDGET -----------------
+                Column(
+                    modifier = GlanceModifier.fillMaxSize(),
+                    verticalAlignment = Alignment.Vertical.CenterVertically
                 ) {
-                    if (isBigWidget) {
-                        val chartBitmap = renderAnalogCounterBitmap(slots, model.nowHour, model.nowMinute, resolvedLang)
-
-                        // ----------------- 3x2 BIG WIDGET -----------------
-                        Column(
-                            modifier = GlanceModifier.fillMaxSize(),
-                            verticalAlignment = Alignment.Vertical.CenterVertically
-                        ) {
-                            // Top Row: Queue + Status + Round Refresh Button + Round Notification Toggle Button
-                            Row(
-                                modifier = GlanceModifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.Vertical.CenterVertically
-                            ) {
-                                Column(
-                                    modifier = GlanceModifier
-                                        .defaultWeight()
-                                        .clickable(openApp)
-                                ) {
-                                    Row(verticalAlignment = Alignment.Vertical.CenterVertically) {
-                                        Text(
-                                            text = queueHeaderText,
-                                            style = TextStyle(
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 16.sp,
-                                                color = ColorProvider(Color.White)
-                                            ),
-                                            maxLines = 1
-                                        )
-                                        if (addressLabel != null) {
-                                            Spacer(modifier = GlanceModifier.width(6.dp))
-                                            Text(
-                                                text = addressLabel,
-                                                style = TextStyle(fontSize = 11.sp, color = ColorProvider(Color(0xB3BAE6FD))),
-                                                maxLines = 1
-                                            )
-                                        }
-                                    }
-                                    Row(verticalAlignment = Alignment.Vertical.CenterVertically) {
-                                        Text(
-                                            text = statusText,
-                                            style = TextStyle(
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 11.sp,
-                                                color = ColorProvider(statusColor)
-                                            )
-                                        )
-                                        if (staleCaption != null) {
-                                            Spacer(modifier = GlanceModifier.width(6.dp))
-                                            Text(
-                                                text = staleCaption,
-                                                style = TextStyle(
-                                                    fontSize = 9.sp,
-                                                    color = ColorProvider(Color(0xFFFFB020))
-                                                ),
-                                                maxLines = 1
-                                            )
-                                        }
-                                    }
-                                }
-
-                                // Round Refresh Button (same style as Notification toggle)
-                                Box(
-                                    modifier = GlanceModifier
-                                        .size(36.dp)
-                                        .cornerRadius(18.dp)
-                                        .background(ColorProvider(Color(0x26FFFFFF)))
-                                        .clickable(actionRunCallback<RefreshWidgetActionCallback>()),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    if (isRefreshing) {
-                                        // Glance cannot rotate an image; the platform progress ring animates on its own
-                                        CircularProgressIndicator(
-                                            color = ColorProvider(Color.White),
-                                            modifier = GlanceModifier.size(18.dp)
-                                        )
-                                    } else {
-                                        Image(
-                                            provider = ImageProvider(R.drawable.ic_refresh),
-                                            contentDescription = "Оновити дані",
-                                            colorFilter = ColorFilter.tint(ColorProvider(Color.White)),
-                                            modifier = GlanceModifier.size(18.dp)
-                                        )
-                                    }
-                                }
-
-                                Spacer(modifier = GlanceModifier.width(8.dp))
-
-                                // Round Notification Toggle Button
-                                Box(
-                                    modifier = GlanceModifier
-                                        .size(36.dp)
-                                        .cornerRadius(18.dp)
-                                        .background(ColorProvider(if (notificationsEnabled) Color.White else Color(0x26FFFFFF)))
-                                        .clickable(actionRunCallback<ToggleAlertsActionCallback>()),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Image(
-                                        provider = ImageProvider(
-                                            if (notificationsEnabled) R.drawable.ic_notification else R.drawable.ic_notification_off
-                                        ),
-                                        contentDescription = "Toggle alerts",
-                                        colorFilter = ColorFilter.tint(
-                                            ColorProvider(if (notificationsEnabled) Color(0xFFFF5E3A) else Color.White)
-                                        ),
-                                        modifier = GlanceModifier.size(20.dp)
-                                    )
-                                }
-                            }
-
-                            Spacer(modifier = GlanceModifier.height(6.dp))
-
-                            // Countdown Card Row (clickable to open app)
-                            Row(
-                                modifier = GlanceModifier
-                                    .fillMaxWidth()
-                                    .cornerRadius(12.dp)
-                                    .background(ColorProvider(Color(0x33000000)))
-                                    .padding(horizontal = 10.dp, vertical = 6.dp)
-                                    .clickable(openApp),
-                                verticalAlignment = Alignment.Vertical.CenterVertically
-                            ) {
-                                Column(modifier = GlanceModifier.defaultWeight()) {
+                    // Top Row: Queue + Status + Round Refresh Button + Round Notification Toggle Button
+                    Row(
+                        modifier = GlanceModifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.Vertical.CenterVertically
+                    ) {
+                        Column(modifier = GlanceModifier.defaultWeight().clickableIf(open)) {
+                            Row(verticalAlignment = Alignment.Vertical.CenterVertically) {
+                                Text(
+                                    text = model.queueHeader,
+                                    style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 16.sp, color = ink(Color.White)),
+                                    maxLines = 1
+                                )
+                                if (model.addressLabel != null) {
+                                    Spacer(modifier = GlanceModifier.width(6.dp))
                                     Text(
-                                        text = if (isBlackoutNow) "До увімкнення:" else "До відключення:",
-                                        style = TextStyle(fontSize = 10.sp, color = ColorProvider(Color(0xB3BAE6FD)))
-                                    )
-                                    Text(
-                                        text = countdownText,
-                                        style = TextStyle(
-                                            fontSize = 20.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = ColorProvider(Color.White)
-                                        ),
+                                        text = model.addressLabel,
+                                        style = TextStyle(fontSize = 11.sp, color = ink(Color(0xB3BAE6FD))),
                                         maxLines = 1
                                     )
                                 }
-                                Column(horizontalAlignment = Alignment.Horizontal.End) {
-                                    Text(
-                                        text = "Період",
-                                        style = TextStyle(fontSize = 10.sp, color = ColorProvider(Color(0xB3BAE6FD)))
-                                    )
-                                    Text(
-                                        text = nextSlotTime,
-                                        style = TextStyle(
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = ColorProvider(Color.White)
-                                        )
-                                    )
-                                }
                             }
-
-                            Spacer(modifier = GlanceModifier.height(6.dp))
-
-                            // 24-Hour Analog Electricity Counter (САЗУ-ИТ) Chart rendered via Bitmap
-                            Image(
-                                provider = ImageProvider(chartBitmap),
-                                contentDescription = "24-годинний графік відключень",
-                                contentScale = ContentScale.FillBounds,
-                                modifier = GlanceModifier
-                                    .fillMaxWidth()
-                                    .height(52.dp)
-                                    .clickable(openApp)
-                            )
-
-                            // Upcoming Outage Interval ("Наступне відключення")
-                            Spacer(modifier = GlanceModifier.height(4.dp))
-                            Row(
-                                modifier = GlanceModifier
-                                    .fillMaxWidth()
-                                    .cornerRadius(8.dp)
-                                    .background(ColorProvider(Color(0x26000000)))
-                                    .padding(horizontal = 8.dp, vertical = 3.dp)
-                                    .clickable(openApp),
-                                verticalAlignment = Alignment.Vertical.CenterVertically
-                            ) {
-                                Text(
-                                    text = nextBlackoutText,
-                                    style = TextStyle(
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = ColorProvider(Color.White)
-                                    )
-                                )
-                                Spacer(modifier = GlanceModifier.defaultWeight())
-                                Text(
-                                    text = "Наступне відключення",
-                                    style = TextStyle(
-                                        fontSize = 10.sp,
-                                        color = ColorProvider(Color(0xFFFF5E3A))
-                                    )
-                                )
-                            }
-                        }
-                    } else {
-                        // ----------------- 2x1 SMALL WIDGET -----------------
-                        Column(
-                            modifier = GlanceModifier.fillMaxSize(),
-                            verticalAlignment = Alignment.Vertical.CenterVertically
-                        ) {
-                            // Top Row: Queue + Status
-                            Row(
-                                modifier = GlanceModifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.Vertical.CenterVertically
-                            ) {
-                                Text(
-                                    text = queueHeaderText,
-                                    style = TextStyle(
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 14.sp,
-                                        color = ColorProvider(Color.White)
-                                    ),
-                                    maxLines = 1,
-                                    modifier = GlanceModifier.clickable(openApp)
-                                )
-                                if (addressLabel != null) {
-                                    Spacer(modifier = GlanceModifier.width(6.dp))
-                                    Text(
-                                        text = addressLabel,
-                                        style = TextStyle(fontSize = 10.sp, color = ColorProvider(Color(0xB3BAE6FD))),
-                                        maxLines = 1,
-                                        modifier = GlanceModifier.defaultWeight().clickable(openApp)
-                                    )
-                                    Spacer(modifier = GlanceModifier.width(6.dp))
-                                } else {
-                                    Spacer(modifier = GlanceModifier.defaultWeight())
-                                }
+                            Row(verticalAlignment = Alignment.Vertical.CenterVertically) {
                                 Text(
                                     text = statusText,
-                                    style = TextStyle(
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 10.sp,
-                                        color = ColorProvider(statusColor)
-                                    ),
-                                    modifier = GlanceModifier.clickable(openApp)
+                                    style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 11.sp, color = ink(statusColor))
                                 )
-                            }
-
-                            Spacer(modifier = GlanceModifier.height(4.dp))
-
-                            // Bottom Row: Countdown + Round Refresh Button + Round Notification Toggle Button
-                            Row(
-                                modifier = GlanceModifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.Vertical.CenterVertically
-                            ) {
-                                Column(
-                                    modifier = GlanceModifier
-                                        .defaultWeight()
-                                        .clickable(openApp)
-                                ) {
+                                if (model.staleCaption != null) {
+                                    Spacer(modifier = GlanceModifier.width(6.dp))
                                     Text(
-                                        text = if (isBlackoutNow) "До увімкнення:" else "До відключення:",
-                                        style = TextStyle(fontSize = 10.sp, color = ColorProvider(Color(0xB3BAE6FD)))
-                                    )
-                                    Text(
-                                        text = countdownText,
-                                        style = TextStyle(
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = ColorProvider(Color.White)
-                                        ),
+                                        text = model.staleCaption,
+                                        style = TextStyle(fontSize = 9.sp, color = ink(Color(0xFFFFB020))),
                                         maxLines = 1
-                                    )
-                                }
-
-                                // Round Refresh Button (same style as Notification toggle)
-                                Box(
-                                    modifier = GlanceModifier
-                                        .size(34.dp)
-                                        .cornerRadius(17.dp)
-                                        .background(ColorProvider(Color(0x26FFFFFF)))
-                                        .clickable(actionRunCallback<RefreshWidgetActionCallback>()),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    if (isRefreshing) {
-                                        // Glance cannot rotate an image; the platform progress ring animates on its own
-                                        CircularProgressIndicator(
-                                            color = ColorProvider(Color.White),
-                                            modifier = GlanceModifier.size(16.dp)
-                                        )
-                                    } else {
-                                        Image(
-                                            provider = ImageProvider(R.drawable.ic_refresh),
-                                            contentDescription = "Оновити дані",
-                                            colorFilter = ColorFilter.tint(ColorProvider(Color.White)),
-                                            modifier = GlanceModifier.size(16.dp)
-                                        )
-                                    }
-                                }
-
-                                Spacer(modifier = GlanceModifier.width(6.dp))
-
-                                // Round Notification Toggle Button
-                                Box(
-                                    modifier = GlanceModifier
-                                        .size(34.dp)
-                                        .cornerRadius(17.dp)
-                                        .background(ColorProvider(if (notificationsEnabled) Color.White else Color(0x26FFFFFF)))
-                                        .clickable(actionRunCallback<ToggleAlertsActionCallback>()),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Image(
-                                        provider = ImageProvider(
-                                            if (notificationsEnabled) R.drawable.ic_notification else R.drawable.ic_notification_off
-                                        ),
-                                        contentDescription = "Toggle alerts",
-                                        colorFilter = ColorFilter.tint(
-                                            ColorProvider(if (notificationsEnabled) Color(0xFFFF5E3A) else Color.White)
-                                        ),
-                                        modifier = GlanceModifier.size(18.dp)
                                     )
                                 }
                             }
                         }
+                        RefreshButton(36.dp, 18.dp, isRefreshing)
+                        Spacer(modifier = GlanceModifier.width(8.dp))
+                        BellButton(36.dp, 20.dp, notificationsEnabled)
+                    }
+
+                    Spacer(modifier = GlanceModifier.height(6.dp))
+
+                    // Countdown Card Row (clickable to open app)
+                    Row(
+                        modifier = GlanceModifier
+                            .fillMaxWidth()
+                            .cornerRadius(12.dp)
+                            .background(ink(Color(0x33000000)))
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                            .clickableIf(open),
+                        verticalAlignment = Alignment.Vertical.CenterVertically
+                    ) {
+                        Column(modifier = GlanceModifier.defaultWeight()) {
+                            Text(
+                                text = if (isBlackoutNow) "До увімкнення:" else "До відключення:",
+                                style = TextStyle(fontSize = 10.sp, color = ink(Color(0xB3BAE6FD)))
+                            )
+                            Text(
+                                text = model.countdown,
+                                style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Bold, color = ink(Color.White)),
+                                maxLines = 1
+                            )
+                        }
+                        Column(horizontalAlignment = Alignment.Horizontal.End) {
+                            Text(
+                                text = "Період",
+                                style = TextStyle(fontSize = 10.sp, color = ink(Color(0xB3BAE6FD)))
+                            )
+                            Text(
+                                text = model.period,
+                                style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ink(Color.White))
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = GlanceModifier.height(6.dp))
+
+                    // 24-Hour Analog Electricity Counter (САЗУ-ИТ) Chart rendered via Bitmap
+                    val chartBitmap = BlackoutGlanceWidget.renderAnalogCounterBitmap(
+                        model.slots, model.nowHour, model.nowMinute, resolvedLang
+                    )
+                    Image(
+                        provider = ImageProvider(chartBitmap),
+                        contentDescription = "24-годинний графік відключень",
+                        contentScale = ContentScale.FillBounds,
+                        modifier = GlanceModifier.fillMaxWidth().height(52.dp).clickableIf(open)
+                    )
+
+                    // Upcoming Outage Interval ("Наступне відключення")
+                    Spacer(modifier = GlanceModifier.height(4.dp))
+                    Row(
+                        modifier = GlanceModifier
+                            .fillMaxWidth()
+                            .cornerRadius(8.dp)
+                            .background(ink(Color(0x26000000)))
+                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                            .clickableIf(open),
+                        verticalAlignment = Alignment.Vertical.CenterVertically
+                    ) {
+                        Text(
+                            text = model.nextOutage,
+                            style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold, color = ink(Color.White))
+                        )
+                        Spacer(modifier = GlanceModifier.defaultWeight())
+                        Text(
+                            text = "Наступне відключення",
+                            style = TextStyle(fontSize = 10.sp, color = ink(Color(0xFFFF5E3A)))
+                        )
+                    }
+                }
+            } else {
+                // ----------------- 2x1 SMALL WIDGET -----------------
+                Column(
+                    modifier = GlanceModifier.fillMaxSize(),
+                    verticalAlignment = Alignment.Vertical.CenterVertically
+                ) {
+                    // Top Row: Queue + Status
+                    Row(
+                        modifier = GlanceModifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.Vertical.CenterVertically
+                    ) {
+                        Text(
+                            text = model.queueHeader,
+                            style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 14.sp, color = ink(Color.White)),
+                            maxLines = 1,
+                            modifier = GlanceModifier.clickableIf(open)
+                        )
+                        if (model.addressLabel != null) {
+                            Spacer(modifier = GlanceModifier.width(6.dp))
+                            Text(
+                                text = model.addressLabel,
+                                style = TextStyle(fontSize = 10.sp, color = ink(Color(0xB3BAE6FD))),
+                                maxLines = 1,
+                                modifier = GlanceModifier.defaultWeight().clickableIf(open)
+                            )
+                            Spacer(modifier = GlanceModifier.width(6.dp))
+                        } else {
+                            Spacer(modifier = GlanceModifier.defaultWeight())
+                        }
+                        Text(
+                            text = statusText,
+                            style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 10.sp, color = ink(statusColor)),
+                            modifier = GlanceModifier.clickableIf(open)
+                        )
+                    }
+
+                    Spacer(modifier = GlanceModifier.height(4.dp))
+
+                    // Bottom Row: Countdown + Round Refresh Button + Round Notification Toggle Button
+                    Row(
+                        modifier = GlanceModifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.Vertical.CenterVertically
+                    ) {
+                        Column(modifier = GlanceModifier.defaultWeight().clickableIf(open)) {
+                            Text(
+                                text = if (isBlackoutNow) "До увімкнення:" else "До відключення:",
+                                style = TextStyle(fontSize = 10.sp, color = ink(Color(0xB3BAE6FD)))
+                            )
+                            Text(
+                                text = model.countdown,
+                                style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold, color = ink(Color.White)),
+                                maxLines = 1
+                            )
+                        }
+                        RefreshButton(34.dp, 16.dp, isRefreshing)
+                        Spacer(modifier = GlanceModifier.width(6.dp))
+                        BellButton(34.dp, 18.dp, notificationsEnabled)
                     }
                 }
             }
         }
+    }
+}
+
+/**
+ * The refresh and bell buttons of an address stack, above the front card (see [AddressStack]): in the corner each
+ * card leaves empty, 12 dp from it; top right on the 4x2 card, bottom right on the 2x1 card.
+ */
+@Composable
+internal fun StackButtons(isBigWidget: Boolean, notificationsEnabled: Boolean, isRefreshing: Boolean) {
+    Box(
+        modifier = GlanceModifier.fillMaxSize().padding(12.dp),
+        contentAlignment = if (isBigWidget) Alignment.TopEnd else Alignment.BottomEnd
+    ) {
+        Row(verticalAlignment = Alignment.Vertical.CenterVertically) {
+            if (isBigWidget) {
+                RefreshButton(36.dp, 18.dp, isRefreshing)
+                Spacer(modifier = GlanceModifier.width(8.dp))
+                BellButton(36.dp, 20.dp, notificationsEnabled)
+            } else {
+                RefreshButton(34.dp, 16.dp, isRefreshing)
+                Spacer(modifier = GlanceModifier.width(6.dp))
+                BellButton(34.dp, 18.dp, notificationsEnabled)
+            }
+        }
+    }
+}
+
+/** Round refresh button (same style as the notification toggle). */
+@Composable
+private fun RefreshButton(boxSize: Dp, iconSize: Dp, isRefreshing: Boolean) {
+    Box(
+        modifier = GlanceModifier
+            .size(boxSize)
+            .cornerRadius(boxSize / 2)
+            .background(ColorProvider(Color(0x26FFFFFF)))
+            .clickable(actionRunCallback<RefreshWidgetActionCallback>()),
+        contentAlignment = Alignment.Center
+    ) {
+        if (isRefreshing) {
+            // Glance cannot rotate an image; the platform progress ring animates on its own
+            CircularProgressIndicator(color = ColorProvider(Color.White), modifier = GlanceModifier.size(iconSize))
+        } else {
+            Image(
+                provider = ImageProvider(R.drawable.ic_refresh),
+                contentDescription = "Оновити дані",
+                colorFilter = ColorFilter.tint(ColorProvider(Color.White)),
+                modifier = GlanceModifier.size(iconSize)
+            )
+        }
+    }
+}
+
+/** Round notification toggle (the master switch for all addresses, owner decision 4). */
+@Composable
+private fun BellButton(boxSize: Dp, iconSize: Dp, notificationsEnabled: Boolean) {
+    Box(
+        modifier = GlanceModifier
+            .size(boxSize)
+            .cornerRadius(boxSize / 2)
+            .background(ColorProvider(if (notificationsEnabled) Color.White else Color(0x26FFFFFF)))
+            .clickable(actionRunCallback<ToggleAlertsActionCallback>()),
+        contentAlignment = Alignment.Center
+    ) {
+        Image(
+            provider = ImageProvider(
+                if (notificationsEnabled) R.drawable.ic_notification else R.drawable.ic_notification_off
+            ),
+            contentDescription = "Toggle alerts",
+            colorFilter = ColorFilter.tint(
+                ColorProvider(if (notificationsEnabled) Color(0xFFFF5E3A) else Color.White)
+            ),
+            modifier = GlanceModifier.size(iconSize)
+        )
     }
 }
 
@@ -2035,12 +2022,16 @@ class BlackoutStripGlanceWidget : GlanceAppWidget() {
 
     override val stateDefinition: GlanceStateDefinition<*> = PreferencesGlanceStateDefinition
 
-    override val sizeMode = SizeMode.Responsive(
+    private val responsive = SizeMode.Responsive(
         setOf(
             DpSize(250.dp, 40.dp),              // drum only
             DpSize(250.dp, INFO_MIN_HEIGHT)     // info line + drum
         )
     )
+
+    /** One RemoteViews while an address stack can show, so its cards (a partial update) reach it (AddressStack.active). */
+    override val sizeMode: SizeMode
+        get() = if (AddressStack.active()) SizeMode.Single else responsive
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val appContext = context.applicationContext
@@ -2057,107 +2048,135 @@ class BlackoutStripGlanceWidget : GlanceAppWidget() {
             val prefs = currentState<Preferences>()
             @Suppress("UNUSED_VARIABLE")
             val refreshTick = prefs[BlackoutGlanceWidget.KEY_REFRESH_TICK] ?: 0L
-            val source = widgetSource(appContext, appWidgetId)
-            val model = BlackoutGlanceWidget.buildWidgetModel(source.settings, source.snapshot, source.label)
-            val openApp = openAppAction(source.itemId)
-            // Same bitmap as the big widget's drum (720 x 132), drawn at the same 52 dp height
-            val chartBitmap = BlackoutGlanceWidget.renderAnalogCounterBitmap(
-                model.slots, model.nowHour, model.nowMinute, model.lang
-            )
-            val statusText = when {
-                model.isUnclear -> AppStrings.powerUnclear(model.lang)
-                model.isOffNow -> "СВІТЛА НЕМАЄ"
-                else -> "СВІТЛО Є"
+            // the app widget id of an address stack (spec/SUBSCRIPTIONS.md 10), null when this widget shows one address
+            val stackWidgetId = appWidgetId?.takeIf { AddressStack.supported && WidgetBindings.stackIds(appContext, it).size >= 2 }
+            val options = LocalAppWidgetOptions.current
+            val cards by produceState<List<Pair<String, RemoteViews>>?>(null, stackWidgetId, refreshTick, options) {
+                value = stackWidgetId?.let { AddressStack.buildCards(appContext, it, AddressStack.Kind.STRIP, options) }
             }
-            val statusColor = when {
-                model.isUnclear -> Color(0xFF9CA3AF)
-                model.isOffNow -> Color(0xFFFF5E3A)
-                else -> Color(0xFF34D399)
-            }
-            val description = if (model.isUnclear) {
-                AppStrings.outagesUnclear(model.lang)
-            } else {
-                "\${model.queueHeader}. \${if (model.isOffNow) "СВІТЛА НЕМАЄ" else "СВІТЛО Є"}"
-            }
-            val showInfo = LocalSize.current.height >= INFO_MIN_HEIGHT
-
-            GlanceTheme {
-                Column(
-                    modifier = GlanceModifier
-                        .fillMaxSize()
-                        .cornerRadius(20.dp)
-                        .background(ColorProvider(Color(0xCC141A29)))
-                        .padding(6.dp)
-                        .clickable(openApp),
-                    verticalAlignment = Alignment.Vertical.CenterVertically
-                ) {
-                    if (showInfo) {
-                        Row(
-                            modifier = GlanceModifier.fillMaxWidth().padding(horizontal = 6.dp),
-                            verticalAlignment = Alignment.Vertical.CenterVertically
-                        ) {
-                            Text(
-                                text = model.queueHeader,
-                                style = TextStyle(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp,
-                                    color = ColorProvider(Color.White)
-                                ),
-                                maxLines = 1
-                            )
-                            Spacer(modifier = GlanceModifier.width(6.dp))
-                            if (model.addressLabel != null) {
-                                Text(
-                                    text = model.addressLabel,
-                                    style = TextStyle(fontSize = 10.sp, color = ColorProvider(Color(0xB3BAE6FD))),
-                                    maxLines = 1,
-                                    modifier = GlanceModifier.defaultWeight()
-                                )
-                                Spacer(modifier = GlanceModifier.width(6.dp))
-                            }
-                            Text(
-                                text = statusText,
-                                style = TextStyle(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 10.sp,
-                                    color = ColorProvider(statusColor)
-                                ),
-                                maxLines = 1,
-                                modifier = if (model.addressLabel == null) GlanceModifier.defaultWeight() else GlanceModifier
-                            )
-                            if (model.addressLabel != null && !model.isUnclear) Spacer(modifier = GlanceModifier.width(6.dp))
-                            if (!model.isUnclear) {
-                                Text(
-                                    text = model.countdown,
-                                    style = TextStyle(
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 12.sp,
-                                        color = ColorProvider(Color.White)
-                                    ),
-                                    maxLines = 1
-                                )
-                            }
-                        }
-                        Spacer(modifier = GlanceModifier.height(4.dp))
-                    }
-                    Image(
-                        provider = ImageProvider(chartBitmap),
-                        contentDescription = description,
-                        contentScale = ContentScale.FillBounds,
-                        modifier = GlanceModifier
-                            .fillMaxWidth()
-                            .height(DRUM_HEIGHT)
-                    )
+            val ready = cards
+            if (stackWidgetId != null && !ready.isNullOrEmpty() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                // Address stack (spec/SUBSCRIPTIONS.md 10): this widget has no buttons, so the cards are all of it;
+                // they follow this frame as a partial update (see AddressStack)
+                LaunchedEffect(ready) {
+                    kotlinx.coroutines.delay(AddressStack.PUSH_DELAY_MS)
+                    AddressStack.pushCards(appContext, stackWidgetId, ready, AddressStack.widgetSize(options, AddressStack.Kind.STRIP))
                 }
+                AndroidRemoteViews(
+                    remoteViews = AddressStack.frame(appContext),
+                    modifier = GlanceModifier.fillMaxSize()
+                )
+            } else {
+                val source = widgetSource(appContext, appWidgetId)
+                val model = BlackoutGlanceWidget.buildWidgetModel(source.settings, source.snapshot, source.label)
+                StripBody(model, openAppAction(source.itemId), showInfo = LocalSize.current.height >= INFO_MIN_HEIGHT)
             }
         }
     }
 
-    private companion object {
+    companion object {
         /** Drum height of the big widget, so both widgets show the drum at the same size. */
-        val DRUM_HEIGHT = 52.dp
+        internal val DRUM_HEIGHT = 52.dp
         /** Smallest widget height with room for the info line: 52 drum + 12 padding + 4 gap + 16 line. */
-        val INFO_MIN_HEIGHT = 84.dp
+        internal val INFO_MIN_HEIGHT = 84.dp
+    }
+}
+
+/** The «Графік» widget content of one address: the info line (when there is room) and the drum. */
+@Composable
+internal fun StripBody(
+    model: BlackoutGlanceWidget.Companion.WidgetModel,
+    openApp: Action?,
+    showInfo: Boolean
+) {
+    // Same bitmap as the big widget's drum (720 x 132), drawn at the same 52 dp height
+    val chartBitmap = BlackoutGlanceWidget.renderAnalogCounterBitmap(
+        model.slots, model.nowHour, model.nowMinute, model.lang
+    )
+    val statusText = when {
+        model.isUnclear -> AppStrings.powerUnclear(model.lang)
+        model.isOffNow -> "СВІТЛА НЕМАЄ"
+        else -> "СВІТЛО Є"
+    }
+    val statusColor = when {
+        model.isUnclear -> Color(0xFF9CA3AF)
+        model.isOffNow -> Color(0xFFFF5E3A)
+        else -> Color(0xFF34D399)
+    }
+    val description = if (model.isUnclear) {
+        AppStrings.outagesUnclear(model.lang)
+    } else {
+        "\${model.queueHeader}. \${if (model.isOffNow) "СВІТЛА НЕМАЄ" else "СВІТЛО Є"}"
+    }
+
+    GlanceTheme {
+        Column(
+            modifier = GlanceModifier
+                .fillMaxSize()
+                .cornerRadius(20.dp)
+                .background(ColorProvider(Color(0xCC141A29)))
+                .padding(6.dp)
+                .clickableIf(openApp),
+            verticalAlignment = Alignment.Vertical.CenterVertically
+        ) {
+            if (showInfo) {
+                Row(
+                    modifier = GlanceModifier.fillMaxWidth().padding(horizontal = 6.dp),
+                    verticalAlignment = Alignment.Vertical.CenterVertically
+                ) {
+                    Text(
+                        text = model.queueHeader,
+                        style = TextStyle(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = ColorProvider(Color.White)
+                        ),
+                        maxLines = 1
+                    )
+                    Spacer(modifier = GlanceModifier.width(6.dp))
+                    if (model.addressLabel != null) {
+                        Text(
+                            text = model.addressLabel,
+                            style = TextStyle(fontSize = 10.sp, color = ColorProvider(Color(0xB3BAE6FD))),
+                            maxLines = 1,
+                            modifier = GlanceModifier.defaultWeight()
+                        )
+                        Spacer(modifier = GlanceModifier.width(6.dp))
+                    }
+                    Text(
+                        text = statusText,
+                        style = TextStyle(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 10.sp,
+                            color = ColorProvider(statusColor)
+                        ),
+                        maxLines = 1,
+                        modifier = if (model.addressLabel == null) GlanceModifier.defaultWeight() else GlanceModifier
+                    )
+                    if (model.addressLabel != null && !model.isUnclear) Spacer(modifier = GlanceModifier.width(6.dp))
+                    if (!model.isUnclear) {
+                        Text(
+                            text = model.countdown,
+                            style = TextStyle(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = ColorProvider(Color.White)
+                            ),
+                            maxLines = 1
+                        )
+                    }
+                }
+                Spacer(modifier = GlanceModifier.height(4.dp))
+            }
+            Image(
+                provider = ImageProvider(chartBitmap),
+                contentDescription = description,
+                contentScale = ContentScale.FillBounds,
+                modifier = GlanceModifier
+                    .fillMaxWidth()
+                    .height(BlackoutStripGlanceWidget.DRUM_HEIGHT)
+            )
+        }
     }
 }
 
@@ -2242,6 +2261,12 @@ import ua.blackout.prewarning.notification.AlarmScheduler
 
 open class BlackoutWidgetReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = BlackoutGlanceWidget()
+
+    override fun onReceive(context: Context, intent: android.content.Intent) {
+        // Glance asks the widgets for their size mode without a context (AddressStack.active)
+        AddressStack.remember(context)
+        super.onReceive(context, intent)
+    }
 
     override fun onEnabled(context: Context) {
         super.onEnabled(context)
@@ -2441,11 +2466,16 @@ import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -2614,6 +2644,7 @@ private fun StatusDot(color: Color, pulsing: Boolean) {
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
     queue: String = "",
@@ -2654,8 +2685,8 @@ fun MainScreen(
     val tomorrowDate = todayDate.plusDays(1)
     val now = snapshot.now
 
-    // Another address starts on Today (spec/SUBSCRIPTIONS.md 9)
-    var selectedDayTab by rememberSaveable(shownAddressId) { mutableStateOf(TAB_TODAY) }
+    // Today / Tomorrow stays when another address is shown (spec/SUBSCRIPTIONS.md 9, owner 2026-11-18)
+    var selectedDayTab by rememberSaveable { mutableStateOf(TAB_TODAY) }
     val isTomorrowSelected = selectedDayTab == TAB_TOMORROW
     val activeDate = if (isTomorrowSelected) tomorrowDate else todayDate
 
@@ -2709,7 +2740,34 @@ fun MainScreen(
         clock.format(DateTimeFormatter.ofPattern("HH:mm"))
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    // Pull the page down to refresh, as in a browser (owner, 2026-11-18). The spinner shows only for a pull: the
+    // quiet refresh on entering the page also sets isRefreshing. Without a queue the page does not scroll, so it
+    // can not be pulled either.
+    val pullState = rememberPullToRefreshState()
+    var pulled by remember { mutableStateOf(false) }
+    LaunchedEffect(isRefreshing) { if (!isRefreshing) pulled = false }
+    LaunchedEffect(pulled) {
+        // a pull whose refresh never started (one was already running and ended) must not spin forever
+        if (pulled) { delay(1_500); if (!isRefreshing) pulled = false }
+    }
+    PullToRefreshBox(
+        isRefreshing = pulled,
+        onRefresh = {
+            pulled = true
+            if (!isRefreshing) onRefresh()
+        },
+        modifier = Modifier.fillMaxSize(),
+        state = pullState,
+        indicator = {
+            PullToRefreshDefaults.Indicator(
+                state = pullState,
+                isRefreshing = pulled,
+                modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding(),
+                containerColor = ZtColors.CardSolid,
+                color = ZtColors.Accent
+            )
+        }
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -3913,6 +3971,14 @@ fun SettingsScreen(
     onSetPlanned: (id: String, on: Boolean) -> Unit = { _, _ -> },
     onSetEmergency: (id: String, on: Boolean) -> Unit = { _, _ -> },
     onRenameSubscription: (id: String, label: String) -> Unit = { _, _ -> },
+    /** The address of an existing item was edited (spec/SUBSCRIPTIONS.md section 4, \`setAddress\`). */
+    onEditAddress: (
+        id: String,
+        queue: String,
+        statusText: String?,
+        addressLabel: String,
+        query: SelectedAddressQuery
+    ) -> Unit = { _, _, _, _, _ -> },
     /** Moves an address to a new list position (spec/SUBSCRIPTIONS.md section 4, \`move\`). */
     onMoveSubscription: (id: String, toIndex: Int) -> Unit = { _, _ -> },
     onToggleMaster: (Boolean) -> Unit = {},
@@ -3943,6 +4009,8 @@ fun SettingsScreen(
     var showResetConfirmDialog by remember { mutableStateOf(false) }
     var removeCandidate by remember { mutableStateOf<Subscription?>(null) }
     var renameCandidate by remember { mutableStateOf<Subscription?>(null) }
+    /** The item whose address the lookup edits (opened from the card's edit dialog). */
+    var editAddressCandidate by remember { mutableStateOf<Subscription?>(null) }
     var renameWasOpen by remember { mutableStateOf(false) }
     LaunchedEffect(renameCandidate) {
         if (renameCandidate != null) {
@@ -4348,7 +4416,8 @@ fun SettingsScreen(
         AddressLookupDialog(
             siteUrl = siteUrl,
             lang = lang,
-            saved = selectedAddressQuery,
+            // a new address starts empty (only the city is filled in), not from the last added (owner, 2026-11-18)
+            saved = null,
             onDismiss = { showQueueHelpDialog = false },
             onApply = { queue, statusText, addressLabel, query ->
                 onAddAddress(queue, statusText, addressLabel, query)
@@ -4361,6 +4430,23 @@ fun SettingsScreen(
             onShowAppBanner = onShowAppBanner,
             tourActive = tourActive,
             onTourSkip = onTourSkip
+        )
+    }
+
+    editAddressCandidate?.let { item ->
+        AddressLookupDialog(
+            siteUrl = siteUrl,
+            lang = lang,
+            // the item's own address; a queue-only item starts empty like a new address
+            saved = item.address?.let { a -> SelectedAddressQuery(a.remSlug, a.settlementId, a.streetId, a.house) },
+            onDismiss = { editAddressCandidate = null },
+            onApply = { queue, statusText, addressLabel, query ->
+                onEditAddress(item.id, queue, statusText, addressLabel, query)
+                editAddressCandidate = null
+            },
+            // no company search or whole-place queue here: those add a queue-only entry, an edit needs a house
+            onAddCompany = null,
+            onShowAppBanner = onShowAppBanner
         )
     }
 
@@ -4413,6 +4499,25 @@ fun SettingsScreen(
                         colors = glassFieldColors()
                     )
                     Text(AppStrings.renameHint(lang), style = ZtType.caption, color = ZtColors.TextTertiary)
+                    // the address itself can be changed too (owner, 2026-11-18): opens the lookup on this item
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = ZtMinTouch)
+                            .clip(ZtShapes.Control)
+                            .background(Color(0x1AFFFFFF))
+                            .border(1.dp, ZtColors.InputBorder, ZtShapes.Control)
+                            .clickable(role = Role.Button) {
+                                editAddressCandidate = item
+                                renameCandidate = null
+                            }
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(Icons.Default.Edit, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                        Text(AppStrings.editAddress(lang), style = ZtType.label, color = Color.White)
+                    }
                 }
             },
             confirmButton = {
@@ -4608,6 +4713,7 @@ private fun MyAddressesCard(
                     onSetPlanned = { onSetPlanned(item.id, it) },
                     onSetEmergency = { onSetEmergency(item.id, it) },
                     dragHandle = handle,
+                    tourTargets = index == 0,
                     modifier = Modifier
                         .onSizeChanged { heights[item.id] = it.height }
                         .zIndex(if (isDragging) 1f else 0f)
@@ -4989,7 +5095,8 @@ private fun AddressLookupDialog(
     saved: SelectedAddressQuery?,
     onDismiss: () -> Unit,
     onApply: (queue: String, statusText: String?, addressLabel: String, query: SelectedAddressQuery) -> Unit,
-    onAddCompany: (queue: String, label: String) -> Unit = { _, _ -> },
+    /** Adds a queue-only entry (company search, a place without houses); null hides both (editing an address). */
+    onAddCompany: ((queue: String, label: String) -> Unit)? = null,
     onShowAppBanner: (String) -> Unit,
     tourActive: Boolean = false,
     onTourSkip: () -> Unit = {}
@@ -5460,7 +5567,7 @@ private fun AddressLookupDialog(
 
                         // A settlement without streets, or a street POE lists no houses for (spec/POE_API.md 8.11):
                         // the catalogue's queue for the whole place, added as a queue-only entry named after it
-                        if (placeMode != null) {
+                        if (placeMode != null && onAddCompany != null) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -5712,7 +5819,7 @@ private fun AddressLookupDialog(
                 }
 
                 // 1a) Search by workplace: companies named in POE's hourly-schedule PDF (spec/POE_API.md 8.11)
-                if (companies.isNotEmpty()) {
+                if (companies.isNotEmpty() && onAddCompany != null) {
                     val companyItems = remember(companies) {
                         companies.map { c ->
                             PickerItem(c.id, listOfNotNull(c.name, c.town, c.queues.joinToString(", ")).joinToString(" · "), c.search, c.context)
@@ -6637,6 +6744,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -6648,6 +6758,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.SideEffect
 import kotlinx.coroutines.withContext
 import ua.blackout.prewarning.core.SiteState
 import ua.blackout.prewarning.data.poe.PoeAddressLookup
@@ -6676,6 +6787,8 @@ import ua.blackout.prewarning.ui.components.TourInput
 import ua.blackout.prewarning.ui.components.TourPage
 import ua.blackout.prewarning.ui.components.TourStep
 import ua.blackout.prewarning.ui.components.coachTarget
+import ua.blackout.prewarning.ui.components.coachOutsideTaps
+import ua.blackout.prewarning.ui.components.TourTap
 import androidx.compose.runtime.CompositionLocalProvider
 import ua.blackout.prewarning.ui.components.PageGlide
 import ua.blackout.prewarning.ui.components.ambientBreath
@@ -6760,6 +6873,8 @@ fun BlackoutAppNavigation(
     var tourActive by remember { mutableStateOf(false) }
     var tourReachedRename by remember { mutableStateOf(false) }
     var tourRenameDone by remember { mutableStateOf(false) }
+    /** What a tap outside the lit controls does on the current tip (null: nothing is shown here). */
+    var tourOutsideTap by remember { mutableStateOf<(() -> Unit)?>(null) }
     fun endTour() {
         onboarding.setDone(true)
         tourActive = false
@@ -6852,7 +6967,9 @@ fun BlackoutAppNavigation(
         anyPlannedActive && !ExactAlarmGate.canScheduleExact(appContext)
     }
 
-    val isMainScreenVisible = pagerState.currentPage == 0
+    // settledPage, not currentPage: currentPage flips half way through a swipe, and the work that hangs on it
+    // (countdown on/off, snapshot, the Settings site check, recomposing both pages) made the swipe stutter
+    val isMainScreenVisible = pagerState.settledPage == 0
     val isCountdownScreenActive = isMainScreenVisible && !isQueueUnselected
     var hasCompletedInitialScheduleFetch by remember { mutableStateOf(false) }
 
@@ -6913,7 +7030,9 @@ fun BlackoutAppNavigation(
     LaunchedEffect(isMainScreenVisible) {
         if (isMainScreenVisible) {
             currentTime = LocalTime.now(KYIV_ZONE)
-            recomputeSnapshot()
+            val settings = currentSettings
+            val key = addressKey
+            snapshot = withContext(Dispatchers.Default) { shownSnapshot(settings, LocalDateTime.now(KYIV_ZONE), key) }
             if (hasCompletedInitialScheduleFetch) {
                 runRefresh(force = false, resolveAddress = true)
             }
@@ -6925,8 +7044,10 @@ fun BlackoutAppNavigation(
         if (!isCountdownScreenActive) {
             val nowDt = LocalDateTime.now(KYIV_ZONE)
             currentTime = nowDt.toLocalTime()
-            snapshot = shownSnapshot(currentSettings, nowDt, addressKey)
-            statusInfo = snapshot.scheduleStatus()
+            // off the main thread: stores are read and the engine runs, which must not cost a frame of a swipe
+            val fresh = withContext(Dispatchers.Default) { shownSnapshot(currentSettings, nowDt, addressKey) }
+            snapshot = fresh
+            statusInfo = fresh.scheduleStatus()
             return@LaunchedEffect
         }
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
@@ -6939,7 +7060,7 @@ fun BlackoutAppNavigation(
             while (true) {
                 val nowDt = LocalDateTime.now(KYIV_ZONE)
                 currentTime = nowDt.toLocalTime()
-                val fresh = shownSnapshot(currentSettings, nowDt, addressKey)
+                val fresh = withContext(Dispatchers.Default) { shownSnapshot(currentSettings, nowDt, addressKey) }
                 snapshot = fresh
                 val updatedStatus = fresh.scheduleStatus()
                 statusInfo = updatedStatus
@@ -7110,6 +7231,7 @@ fun BlackoutAppNavigation(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .coachOutsideTaps(coachTargets, tourOutsideTap)
             .background(bgColors.primary)
             .drawBehind {
                 val w = size.width.coerceAtLeast(1f)
@@ -7208,6 +7330,8 @@ fun BlackoutAppNavigation(
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer {
+                    // alpha per draw call instead of an offscreen copy of the whole page every frame
+                    compositingStrategy = CompositingStrategy.ModulateAlpha
                     val away = kotlin.math.abs((pagerState.currentPage - page) + pagerState.currentPageOffsetFraction).coerceIn(0f, 1f)
                     alpha = 1f - 0.35f * away
                     if (!reduceMotion) {
@@ -7320,6 +7444,10 @@ fun BlackoutAppNavigation(
                         onSetPlanned = { id, on -> onStoreResult(subscriptionSync.change { Subscriptions.setPlanned(it, id, on) }) },
                         onSetEmergency = { id, on -> onStoreResult(subscriptionSync.change { Subscriptions.setEmergency(it, id, on) }) },
                         onRenameSubscription = { id, label -> onStoreResult(subscriptionSync.change { Subscriptions.rename(it, id, label) }) },
+                        onEditAddress = { id, resolvedQueue, statusText, addressLabel, query ->
+                            val ok = onStoreResult(subscriptionSync.editAddress(id, resolvedQueue, statusText, addressLabel, query))
+                            if (ok) showAppBanner(AppStrings.addressChanged(resolvedLang))
+                        },
                         onMoveSubscription = { id, to -> onStoreResult(subscriptionSync.change { Subscriptions.move(it, id, to) }) },
                         onSiteUrlChanged = { newUrl ->
                             siteUrl = newUrl
@@ -7423,7 +7551,7 @@ fun BlackoutAppNavigation(
                                 }
                             }
                         },
-                        isVisible = pagerState.currentPage == 1
+                        isVisible = pagerState.settledPage == 1
                     )
                 }
                 2 -> {
@@ -7498,67 +7626,10 @@ fun BlackoutAppNavigation(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Schedule Tab
-                        val isSchedule = pagerState.currentPage == 0
-                        Box(
-                            modifier = Modifier
-                                .coachTarget("dock-home")
-                                .size(44.dp)
-                                .clip(CircleShape)
-                                .background(if (isSchedule) Color.White else Color.Transparent)
-                                .clickable(enabled = !isQueueUnselected) {
-                                    onDockTap(0)
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Default.Home,
-                                contentDescription = "Графік",
-                                tint = if (isSchedule) Color.Black else Color(0xB3BAE6FD),
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-
-                        // Settings Tab
-                        val isSettings = pagerState.currentPage == 1
-                        Box(
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(CircleShape)
-                                .background(if (isSettings) Color.White else Color.Transparent)
-                                .clickable(enabled = !isQueueUnselected) {
-                                    onDockTap(1)
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Default.Settings,
-                                contentDescription = "Налаштування",
-                                tint = if (isSettings) Color.Black else Color(0xB3BAE6FD),
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-
-                        // About Tab
-                        val isAbout = pagerState.currentPage == 2
-                        Box(
-                            modifier = Modifier
-                                .coachTarget("dock-about")
-                                .size(44.dp)
-                                .clip(CircleShape)
-                                .background(if (isAbout) Color.White else Color.Transparent)
-                                .clickable(enabled = !isQueueUnselected) {
-                                    onDockTap(2)
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Default.Info,
-                                contentDescription = "Про додаток",
-                                tint = if (isAbout) Color.Black else Color(0xB3BAE6FD),
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
+                        // Each tab reads the pager itself, so the live page highlight recomposes only the tab
+                        DockTab(pagerState, 0, Icons.Default.Home, "Графік", !isQueueUnselected, Modifier.coachTarget("dock-home")) { onDockTap(0) }
+                        DockTab(pagerState, 1, Icons.Default.Settings, "Налаштування", !isQueueUnselected) { onDockTap(1) }
+                        DockTab(pagerState, 2, Icons.Default.Info, "Про додаток", !isQueueUnselected, Modifier.coachTarget("dock-about")) { onDockTap(2) }
                     }
                 }
             }
@@ -7567,7 +7638,7 @@ fun BlackoutAppNavigation(
         // First-run tour on the main window: RENAME, ALERTS (Settings) and ABOUT (main screen); the lookup
         // dialog draws PICK and APPLY in its own window
         if (tourActive) {
-            val tourPage = when (pagerState.currentPage) {
+            val tourPage = when (pagerState.settledPage) {
                 0 -> TourPage.SCHEDULE
                 1 -> TourPage.SETTINGS
                 2 -> TourPage.ABOUT
@@ -7585,6 +7656,14 @@ fun BlackoutAppNavigation(
                 )
             )
             LaunchedEffect(step) { if (step == TourStep.RENAME) tourReachedRename = true }
+            // a tap outside the lit controls goes on to the next tip, switching to the main screen for ABOUT
+            val outside: (() -> Unit)? = remember(step) { when (OnboardingTour.outsideTap(step)) {
+                TourTap.RENAME_DONE -> { { tourRenameDone = true } }
+                TourTap.GO_HOME -> { { coroutineScope.launch { pagerState.animateScrollToPage(0, animationSpec = PageGlide) } } }
+                TourTap.FINISH -> { { endTour() } }
+                TourTap.NOTHING -> null
+            } }
+            SideEffect { tourOutsideTap = outside }
             LaunchedEffect(tourPage, tourReachedRename) {
                 if (OnboardingTour.finishedBy(tourPage, tourReachedRename)) endTour()
             }
@@ -7620,8 +7699,39 @@ fun BlackoutAppNavigation(
                 )
                 else -> Unit
             }
+        } else {
+            SideEffect { tourOutsideTap = null }
         }
     }
+    }
+}
+
+/** One dock button; reads [PagerState.currentPage] here so a swipe recomposes only this button. */
+@Composable
+private fun DockTab(
+    pagerState: PagerState,
+    page: Int,
+    icon: ImageVector,
+    description: String,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+    onTap: () -> Unit
+) {
+    val selected = pagerState.currentPage == page
+    Box(
+        modifier = modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .background(if (selected) Color.White else Color.Transparent)
+            .clickable(enabled = enabled, onClick = onTap),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            icon,
+            contentDescription = description,
+            tint = if (selected) Color.Black else Color(0xB3BAE6FD),
+            modifier = Modifier.size(20.dp)
+        )
     }
 }
 `
@@ -7939,11 +8049,14 @@ object OutageEngine {
         val slots = (0 until OutageConfig.SLOTS_PER_DAY).map { i ->
             val s = dayStart.plusMinutes(i.toLong() * OutageConfig.SLOT_MINUTES)
             val e = s.plusMinutes(OutageConfig.SLOT_MINUTES.toLong())
-            val planned = relevant.any { it.isPlannedLike && it.start.isBefore(e) && it.end.isAfter(s) }
+            // Repair works (POE «планові роботи», registry rows naming the house) are drawn like emergencies
+            // (owner, 2026-11-17); they still alert like planned outages (planAlerts uses the kinds, not the cells)
+            val planned = relevant.any { it.kind == OutageKind.PLANNED && it.start.isBefore(e) && it.end.isAfter(s) }
             SlotState(
                 planned = planned,
-                emergency = relevant.any { it.kind == OutageKind.EMERGENCY && it.start.isBefore(e) && it.end.isAfter(s) },
-                switching = !planned && switching.any { it.start.isBefore(e) && it.end.isAfter(s) }
+                emergency = relevant.any { it.kind != OutageKind.PLANNED && it.start.isBefore(e) && it.end.isAfter(s) },
+                // planned outages and repair works both hide a switching half-hour (spec section 3.5)
+                switching = relevant.none { it.isPlannedLike && it.start.isBefore(e) && it.end.isAfter(s) } && switching.any { it.start.isBefore(e) && it.end.isAfter(s) }
             )
         }
 
@@ -8920,12 +9033,28 @@ class OutageRepository(context: Context) {
     }
 
     /**
+     * The registry rows of today that name each address's house, stored as its repair outages
+     * ([PoeMapper.registryRepairs]). An address whose registries have no answer of today keeps what it had.
+     */
+    private fun saveRegistryRepairs(addresses: List<SelectedAddressQuery>, now: LocalDateTime) {
+        for (address in addresses) {
+            val key = addressKey(address) ?: continue
+            val settlement = PoeAddressLookup.findSettlementById(address.settlementId) ?: continue
+            val caches = branchesOf(address).mapNotNull { id -> store.registry(id)?.takeIf { it.date == now.toLocalDate() }?.let { id to it } }
+            if (caches.isEmpty()) continue
+            val rows = caches.flatMap { (id, c) -> parsedRows(id, c) }
+            val street = PoeAddressLookup.findStreetById(address.streetId)?.nameUk.orEmpty()
+            store.saveRegistryRepairs(key, PoeMapper.registryRepairs(rows, settlement.nameUk, street, address.house))
+        }
+    }
+
+    /**
      * Fetches the registry (E5) of every branch of [address]'s settlement, at most once per
      * [NEARBY_TTL_MS] unless [force]. A failure keeps the stored rows (spec/POE_API.md section 9).
      */
-    private fun refreshNearby(address: SelectedAddressQuery?, nowMs: Long, force: Boolean) {
+    private fun refreshNearby(addresses: List<SelectedAddressQuery>, nowMs: Long, force: Boolean) {
         val today = LocalDate.now(KYIV_ZONE)
-        for (id in branchesOf(address)) {
+        for (id in addresses.flatMap { branchesOf(it) }.distinct()) {
             val cached = store.registry(id)
             if (!force && cached != null && cached.date == today && cached.lastOk && nowMs - cached.fetchedMs in 0 until NEARBY_TTL_MS) continue
             when (val r = runCatching { client.registry(id, today) }.getOrNull()) {
@@ -8949,7 +9078,13 @@ class OutageRepository(context: Context) {
         }
         val emergencies = if (key != null) EmergencyLedger.outages(store.ledger(key), now) else emptyList()
         val repairs = if (key != null) store.repairs(key) else emptyList()
-        return OutageEngine.inWindow(planned + repairs + emergencies, today)
+        // registry rows naming the house, unless the per-house status already lists the same works
+        val listed = if (key != null) {
+            store.registryRepairs(key).filter { r -> repairs.none { it.start == r.start && it.end == r.end } }
+        } else {
+            emptyList()
+        }
+        return OutageEngine.inWindow(planned + repairs + listed + emergencies, today)
     }
 
     /**
@@ -9022,7 +9157,14 @@ class OutageRepository(context: Context) {
         // The nearby outages card of the address the main screen shows (the primary unless another is shown)
         val shown = subs?.first?.items?.firstOrNull { it.id == shownId && it.id != subs.first.primaryId }?.address
         val nearbyAddress = shown?.let { SelectedAddressQuery(it.remSlug, it.settlementId, it.streetId, it.house) } ?: query
-        if (key != null || shown != null) runCatching { refreshNearby(nearbyAddress, nowMs, forceNetwork) }
+        // The registries of every address's branches: their rows naming a house become its repair outages
+        val addresses = (listOfNotNull(nearbyAddress, query) + subs?.first?.items.orEmpty().mapNotNull { item ->
+            item.address?.let { SelectedAddressQuery(it.remSlug, it.settlementId, it.streetId, it.house) }
+        }).distinct()
+        if (addresses.isNotEmpty()) {
+            runCatching { refreshNearby(addresses, nowMs, forceNetwork) }
+            runCatching { saveRegistryRepairs(addresses, LocalDateTime.now(KYIV_ZONE)) }
+        }
         val current = if (queueChanged) runCatching { SettingsRepository(appContext).getSettings() }.getOrDefault(settings) else settings
         // The hourly-schedule catalogue from this repository's CI, at most once a week (spec/POE_API.md 8.11), last
         runCatching { PoeQueues.refreshIfDue(appContext) }
@@ -9218,7 +9360,16 @@ class OutageStateStore(context: Context) {
 
     // --- planned repair works from PowerOn (per address) -----------------------------------------
 
-    fun repairs(addressKey: String): List<Outage> = readArray("repair_$addressKey") { o ->
+    fun repairs(addressKey: String): List<Outage> = readOutages("repair_$addressKey")
+
+    fun saveRepairs(addressKey: String, outages: List<Outage>) = writeOutages("repair_$addressKey", outages)
+
+    /** Registry rows (E5) naming the house, as REPAIR outages (PoeMapper.registryRepairs), per address. */
+    fun registryRepairs(addressKey: String): List<Outage> = readOutages("regrepair_$addressKey")
+
+    fun saveRegistryRepairs(addressKey: String, outages: List<Outage>) = writeOutages("regrepair_$addressKey", outages)
+
+    private fun readOutages(key: String): List<Outage> = readArray(key) { o ->
         Outage(
             id = o.getString("id"),
             kind = OutageKind.REPAIR,
@@ -9228,8 +9379,7 @@ class OutageStateStore(context: Context) {
         )
     }
 
-    fun saveRepairs(addressKey: String, outages: List<Outage>) {
-        val key = "repair_$addressKey"
+    private fun writeOutages(key: String, outages: List<Outage>) {
         if (outages.isEmpty()) {
             prefs.edit().remove(key).apply()
             return
@@ -10895,6 +11045,25 @@ object Subscriptions {
         }
     }
 
+    /**
+     * The user edited the item's address (\`spec/SUBSCRIPTIONS.md\` section 4): address, queue and status text come
+     * from the lookup; id, label, switches, position and primary stay. Another item with the new identity is a duplicate.
+     */
+    fun setAddress(store: SubscriptionStore, id: String, address: SubscriptionAddress, queue: String?, statusText: String?): StoreResult {
+        val item = store.items.firstOrNull { it.id == id } ?: return StoreResult.Error(ERR_NOT_FOUND)
+        val changed = normalize(
+            item.copy(
+                address = address,
+                queue = queue,
+                queueSource = QueueSource.LOOKUP,
+                queueStatusText = statusText?.takeIf { it.isNotBlank() }
+            )
+        )
+        if (changed.address == null) return StoreResult.Error(ERR_INVALID)
+        store.items.firstOrNull { it.id != id && it.identity == changed.identity }?.let { return StoreResult.Error(ERR_DUPLICATE, it.id) }
+        return update(store, id) { changed }
+    }
+
     private inline fun update(store: SubscriptionStore, id: String, change: (Subscription) -> Subscription): StoreResult {
         if (store.items.none { it.id == id }) return StoreResult.Error(ERR_NOT_FOUND)
         return StoreResult.Ok(store.copy(items = store.items.map { if (it.id == id) change(it) else it }))
@@ -11061,6 +11230,18 @@ object Subscriptions {
     /** The distinct items the placed widgets show, in order of first appearance (redraw alarms, polling). */
     fun widgetItemIds(store: SubscriptionStore, boundIds: List<String?>): List<String> =
         boundIds.mapNotNull { widgetItem(store, it)?.id }.distinct()
+
+    /**
+     * Android: the cards of a widget's address stack (\`spec/SUBSCRIPTIONS.md\` section 10). A widget that follows
+     * the primary shows every item when there are two or more, the primary first; otherwise its one item.
+     */
+    fun widgetStackIds(store: SubscriptionStore, boundId: String?): List<String> {
+        if (boundId == null && store.items.size >= 2) {
+            val primary = store.items.firstOrNull { it.id == store.primaryId }
+            return listOfNotNull(primary?.id) + store.items.filter { it.id != primary?.id }.map { it.id }
+        }
+        return listOfNotNull(widgetItem(store, boundId)?.id)
+    }
 }
 
 /** One planned pre-warning shared by every item on one queue with the same span (\`spec/SUBSCRIPTIONS.md\` 8.1). */
@@ -11303,6 +11484,20 @@ class SubscriptionSync(context: Context) {
             createdAtMs = System.currentTimeMillis()
         )
         return change { Subscriptions.add(it, item) }
+    }
+
+    /** The user edited the address of item [id] in Settings (\`Subscriptions.setAddress\`). */
+    fun editAddress(id: String, queue: String, statusText: String?, addressText: String, query: SelectedAddressQuery): StoreResult {
+        ensureReady()
+        val address = SubscriptionAddress(
+            remSlug = query.remId,
+            settlementId = query.settlementId,
+            streetId = query.streetId,
+            streetName = SubscriptionRepository.resolveStreetName(query.streetId).orEmpty(),
+            house = query.house,
+            text = addressText
+        )
+        return change { Subscriptions.setAddress(it, id, address, queue.takeIf { q -> Subscriptions.isValidQueue(q) }, statusText) }
     }
 
     /** A queue without an address; [label] names it (a workplace found in the company search). */
@@ -11758,6 +11953,26 @@ object PoeMapper {
             if (out.none { it.id == item.id && it.kind == item.kind && it.end == item.end && it.streets == item.streets }) out.add(item)
         }
         return out.sortedWith(compareBy<NearbyOutage>({ it.status.ordinal }, { it.start }, { it.id }))
+    }
+
+    /**
+     * Registry rows (8.7) that name the house itself ([registryMatch] CONFIRMED), as REPAIR outages of the
+     * address (owner, 2026-11-17: a repair or fault listed for the house must reach the drum, the list and
+     * the timer even when the per-house status says nothing). Rows without an end and ГПВ mirror rows are
+     * left out; a row naming only the street never becomes an outage (registry lists are incomplete).
+     */
+    fun registryRepairs(rows: List<RegistryRow>, settlement: String, street: String, house: String): List<Outage> {
+        if (street.isBlank() || house.isBlank()) return emptyList()
+        val out = LinkedHashMap<String, Outage>()
+        for (row in rows) {
+            if (row.kind == RegistryKind.MIRROR) continue
+            val end = row.end ?: continue
+            if (!end.isAfter(row.start)) continue
+            if (registryMatch(row.places, settlement, street, house) != Match.CONFIRMED) continue
+            val id = "registry_\${row.start}_$end"
+            if (id !in out) out[id] = Outage(id = id, kind = OutageKind.REPAIR, start = row.start, end = end, label = LABEL_REPAIR)
+        }
+        return out.values.sortedBy { it.start }
     }
 
     /** Does a registry row name the address? Registry house lists are incomplete, see section 6. */
@@ -13097,6 +13312,11 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -13118,6 +13338,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -13137,6 +13359,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
@@ -13153,6 +13377,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 import ua.blackout.prewarning.ui.AppStrings
 import ua.blackout.prewarning.ui.theme.ZtColors
 import ua.blackout.prewarning.ui.theme.ZtMinTouch
@@ -13162,13 +13387,23 @@ import ua.blackout.prewarning.ui.theme.ZtType
  * Spotlight overlay of the first-run tour (spec/ONBOARDING.md), mirrored by src/components/CoachTour.tsx.
  *
  * Controls mark themselves with [coachTarget]; [CoachOverlay] dims its window except the lit targets, points
- * an arrow with a tip at a target (outside it) and rings the control to use next. The dim layer has no
- * pointer input, so every touch reaches the controls underneath; only the tips' buttons take touches.
+ * an arrow with a tip at a target (outside it) and rings the control to use next, after scrolling the target
+ * into view. The dim layer has no pointer input, so touches on the lit controls reach them; a window that
+ * wants "a tap outside goes on" puts [coachOutsideTaps] on its root, which takes every touch outside the lit
+ * controls and the tips while an overlay is shown.
  * A dialog is its own window, so the address lookup dialog has its own [CoachTargets] and overlay.
  */
 class CoachTargets {
     /** Target bounds in the coordinates of their window's root. */
     val rects = mutableStateMapOf<String, Rect>()
+
+    /** Scrolls a target into view (the tour shows a tip at it). */
+    @OptIn(ExperimentalFoundationApi::class)
+    internal val requesters = mutableMapOf<String, BringIntoViewRequester>()
+
+    /** While an overlay is shown: the lit holes and the tips, in root coordinates. Touches there go through. */
+    internal var passThrough by mutableStateOf<List<Rect>?>(null)
+    internal val tipRects = mutableStateMapOf<Int, Rect>()
 
     /** The smallest rectangle around all the [keys] that are on screen; null when none is. */
     fun union(keys: List<String>): Rect? {
@@ -13181,12 +13416,47 @@ class CoachTargets {
 val LocalCoachTargets = staticCompositionLocalOf<CoachTargets?> { null }
 
 /** Registers this element as tour target [key] (no effect outside a [LocalCoachTargets] provider). */
+@OptIn(ExperimentalFoundationApi::class)
 fun Modifier.coachTarget(key: String): Modifier = composed {
     val targets = LocalCoachTargets.current ?: return@composed this
-    DisposableEffect(targets, key) { onDispose { targets.rects.remove(key) } }
-    onGloballyPositioned { coordinates ->
+    val requester = remember { BringIntoViewRequester() }
+    DisposableEffect(targets, key) {
+        targets.requesters[key] = requester
+        onDispose {
+            targets.rects.remove(key)
+            if (targets.requesters[key] === requester) targets.requesters.remove(key)
+        }
+    }
+    bringIntoViewRequester(requester).onGloballyPositioned { coordinates ->
         val p = coordinates.positionInRoot()
         targets.rects[key] = Rect(p, androidx.compose.ui.geometry.Size(coordinates.size.width.toFloat(), coordinates.size.height.toFloat()))
+    }
+}
+
+/**
+ * On a window's root: while an overlay of [targets] is shown and [onOutside] is set, a tap outside the lit
+ * controls and the tips is taken (it reaches nothing underneath, not even a scroll) and calls [onOutside].
+ */
+fun Modifier.coachOutsideTaps(targets: CoachTargets, onOutside: (() -> Unit)?): Modifier = composed {
+    var origin by remember { mutableStateOf(Offset.Zero) }
+    val current = androidx.compose.runtime.rememberUpdatedState(onOutside)
+    onGloballyPositioned { origin = it.positionInRoot() }.pointerInput(targets) {
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            val action = current.value ?: return@awaitEachGesture
+            val open = targets.passThrough ?: return@awaitEachGesture
+            val p = down.position + origin
+            if (open.any { it.contains(p) }) return@awaitEachGesture
+            down.consume()
+            var tapped = true
+            while (true) {
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                event.changes.forEach { it.consume() }
+                if (event.changes.none { it.pressed }) break
+                if (event.changes.any { (it.position - down.position).getDistance() > viewConfiguration.touchSlop }) tapped = false
+            }
+            if (tapped) action()
+        }
     }
 }
 
@@ -13214,6 +13484,7 @@ private val DimColor = Color(0xC705080F)
  * Dims the window except the [holes] (each the union of its keys) and draws the [tips]. Draws nothing until
  * a tip's anchor is on screen.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun CoachOverlay(
     targets: CoachTargets,
@@ -13229,6 +13500,26 @@ fun CoachOverlay(
     var origin by remember { mutableStateOf(Offset.Zero) }
     val local = { r: Rect -> r.translate(-origin.x, -origin.y) }
     val shown = tips.mapNotNull { tip -> targets.union(tip.anchor)?.let { tip to local(it) } }
+    // the first tip's controls are scrolled into view (Settings is a long page)
+    val scrollKeys = tips.firstOrNull()?.anchor.orEmpty()
+    LaunchedEffect(scrollKeys) {
+        delay(300)
+        scrollKeys.forEach { key -> targets.requesters[key]?.bringIntoView() }
+    }
+    val holePadPx = with(LocalDensity.current) { HolePad.toPx() }
+    SideEffect {
+        targets.passThrough = if (shown.isEmpty()) {
+            null
+        } else {
+            holes.mapNotNull { targets.union(it)?.inflate(holePadPx) } + targets.tipRects.values
+        }
+    }
+    DisposableEffect(targets) {
+        onDispose {
+            targets.passThrough = null
+            targets.tipRects.clear()
+        }
+    }
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
@@ -13249,8 +13540,9 @@ fun CoachOverlay(
         }
         val width = with(density) { constraints.maxWidth.toDp() }
         val height = with(density) { constraints.maxHeight.toDp() }
-        shown.forEach { (tip, anchor) ->
+        shown.forEachIndexed { index, (tip, anchor) ->
             TipMark(
+                onBounds = { targets.tipRects[index] = it },
                 tip = tip,
                 anchor = anchor,
                 ring = tip.ring?.let { targets.rects[it] }?.let(local),
@@ -13267,6 +13559,7 @@ fun CoachOverlay(
 
 @Composable
 private fun TipMark(
+    onBounds: (Rect) -> Unit,
     tip: CoachTip,
     anchor: Rect,
     ring: Rect?,
@@ -13324,6 +13617,7 @@ private fun TipMark(
             }
             .width(bubbleWidth.dp)
             .onSizeChanged { bubbleHeight = it.height }
+            .onGloballyPositioned { onBounds(it.boundsInRoot()) }
             .background(ZtColors.CardSolid, RoundedCornerShape(16.dp))
             .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(16.dp))
             .padding(horizontal = 16.dp, vertical = 12.dp)
@@ -13388,6 +13682,9 @@ import android.content.Context
  */
 enum class TourStep { NONE, PICK, APPLY, RENAME, ALERTS, ABOUT }
 
+/** What a tap on the dimmed area (outside the lit controls and the tips) does. */
+enum class TourTap { NOTHING, RENAME_DONE, GO_HOME, FINISH }
+
 enum class TourPage { SCHEDULE, SETTINGS, ABOUT, OTHER }
 
 data class TourInput(
@@ -13416,6 +13713,17 @@ object OnboardingTour {
         i.page == TourPage.SETTINGS -> if (i.renameDone) TourStep.ALERTS else TourStep.RENAME
         i.page == TourPage.SCHEDULE && i.reachedRename -> TourStep.ABOUT
         else -> TourStep.NONE
+    }
+
+    /**
+     * A tap outside the lit controls goes on to the next tip: RENAME -> ALERTS, ALERTS -> the main screen
+     * (ABOUT), ABOUT -> the end. PICK and APPLY wait for the address, so the tap does nothing there.
+     */
+    fun outsideTap(step: TourStep): TourTap = when (step) {
+        TourStep.RENAME -> TourTap.RENAME_DONE
+        TourStep.ALERTS -> TourTap.GO_HOME
+        TourStep.ABOUT -> TourTap.FINISH
+        else -> TourTap.NOTHING
     }
 
     /** Opening About after the RENAME step finishes the tour (the donations are there). */
