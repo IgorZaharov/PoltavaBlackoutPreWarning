@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Written | 2026-11-19 |
-| Status | Draft for the owner. Milestones from `docs/POLTAVA_PORT_PLAN.md` section 7; the iOS rules (Liquid Glass, App Review R1–R13, CI as the only compiler) from `docs/ios/IOS_PORT_PLAN.md` stay. |
+| Status | Owner agreed the identifiers and the CI change on 2026-11-19; **I0 on branch `feat/ios-i0-ids`** (section 9 holds the geo-check result). Milestones from `docs/POLTAVA_PORT_PLAN.md` section 7; the iOS rules (Liquid Glass, App Review R1–R13, CI as the only compiler) from `docs/ios/IOS_PORT_PLAN.md` stay. |
 | Base | `feat/p4-poe-ui` at `0aef4e8` (iOS CI run 44072194503 green: the Zhytomyr data layer still compiles and its tests pass) |
 
 ## 1. Where `ios/` stands today
@@ -115,7 +115,22 @@ Every milestone is one PR into the Poltava feature branch, never `main`; done = 
 
 Two simulator bugs seen on 2026-11-18 matter for I1/I3: a registry row naming the house becomes a repair even when E4 reports the same span as an emergency (`POE_API.md` 8.10a, tomorrow shows it twice), and the primary address chip does not switch the address in the web simulator. The first is a spec/core rule: it is fixed in the spec and a vector first, then ported to Swift with the rest of `PoeMapper`; I1 waits for that fix or ports the corrected rule.
 
-## 8. Decisions needed from the owner
+## 8. Owner decisions
 
-1. The identifiers of section 6.
-2. OK to change `.github/workflows/build-ios.yml` in I0 (launch step, geo-check, project name) and later `poe-data.yml` (iOS copies of the data files). Without it the bundle id cannot change: the launch step would start an app that is not installed.
+1. Identifiers of section 6: **approved 2026-11-19** as proposed.
+2. `.github/workflows/build-ios.yml` may change in I0 (launch step, geo-check, project name): **approved 2026-11-19**. `poe-data.yml` (iOS copies of the data files) is asked again in I2.
+
+## 9. Geo-check result (I0, App Review R1)
+
+CI run 44409083888 (2026-11-18 22:11 UTC, GitHub-hosted `ubuntu-latest`, outside Ukraine):
+
+| Request | Result |
+|---|---|
+| POE E1 schedule, E3 settlements, E4 house status, E5 registry (`www.poe.pl.ua/customs/…`) | **all four: `curl: (28) Connection timed out after 30000 ms`** (no TCP connection at all) |
+| ztoe schedule GET, ztoe `all=1` POST, PowerOn `pw_otgs`, PowerOn `pw_accidents` | 200 in 0.2–1.4 s |
+
+The same four POE requests answer at once from Ukraine (200, schedule table, directory, house status, registry; checked 2026-11-18). So `www.poe.pl.ua` drops connections from this non-Ukrainian (datacenter) address, while the Zhytomyr hosts do not. One run is one data point; the probe runs on every iOS push, so later runs show whether it lasts. Consequences:
+
+- **App Review (R1, guideline 2.1).** A reviewer outside Ukraine will most likely see «сайт недоступний» and no schedule. Not solvable in code without a server in Ukraine. To decide before I5: a screen recording made in Ukraine plus an explanation in the review notes (usual for region-locked data), and/or a clearly labelled demo schedule shown only while POE cannot be reached and no data was ever loaded. A relay server in Ukraine is not recommended (cost, privacy: the house number would pass through it).
+- **CI live tests (I2).** `LiveFetchTests` cannot reach POE from GitHub-hosted runners. The POE live test prints the result and passes when the host is unreachable from the runner (it still fails on a reachable host with an unparsable answer); the fixture tests carry the parser checks.
+- **`poe-data.yml` (Android and web, outside the iOS plan).** The daily probe, the weekly directory crawl and the daily queue-catalogue rebuild run on `ubuntu-latest` too, and have never run yet (the workflow is not on the default branch). They will probably time out in the same way: a self-hosted runner in Ukraine, or running the scripts locally and committing the result, are the alternatives.
