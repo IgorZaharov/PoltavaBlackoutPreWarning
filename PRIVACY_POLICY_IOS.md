@@ -1,7 +1,7 @@
 # Privacy Policy for iPhone / Політика конфіденційності для iPhone
 
 **Application:** Світло в Полтаві (iPhone and its home-screen widgets)  
-**Bundle Identifier:** `ua.blackout.prewarning` (widget extension `ua.blackout.prewarning.widget`)  
+**Bundle Identifier:** `ua.blackout.prewarning.poltava` (widget extension `ua.blackout.prewarning.poltava.widget`)  
 **Platform:** iOS 17.0 or newer, distributed through the Apple App Store  
 **Developer:** Igor Zaharov  
 **Effective Date:** November 15, 2026  
@@ -39,7 +39,7 @@ The app does not track you across apps or websites, so it never shows the App Tr
 
 ## 3. Data kept only on your iPhone
 
-The app keeps these on the device, inside its own sandbox and the App Group container `group.ua.blackout.prewarning`, which only the app and its own widgets can read:
+The app keeps these on the device, inside its own sandbox and the App Group container `group.ua.blackout.prewarning.poltava`, which only the app and its own widgets can read:
 
 1. **Saved addresses or queues** (up to five): district, settlement, street, house number, the queue found for it (1.1 to 6.2), an optional custom name, and the notification switches for each.
 2. **Settings:** warning lead time, notification sound, refresh interval, language.
@@ -104,7 +104,7 @@ Questions about this policy: [github.com/IgorZaharov/PoltavaBlackoutPreWarning/i
 # Політика конфіденційності для iPhone
 
 **Застосунок:** Світло в Полтаві (iPhone і віджети головного екрана)  
-**Ідентифікатор (Bundle ID):** `ua.blackout.prewarning` (віджет `ua.blackout.prewarning.widget`)  
+**Ідентифікатор (Bundle ID):** `ua.blackout.prewarning.poltava` (віджет `ua.blackout.prewarning.poltava.widget`)  
 **Платформа:** iOS 17.0 або новіша, App Store  
 **Розробник:** Ігор Захаров (Igor Zaharov)  
 **Набирає чинності:** 15 листопада 2026 року  
@@ -128,7 +128,7 @@ Questions about this policy: [github.com/IgorZaharov/PoltavaBlackoutPreWarning/i
 
 ### 3. Що зберігається лише на iPhone
 
-У пісочниці застосунку та в контейнері App Group `group.ua.blackout.prewarning`, доступному лише застосунку та його віджетам:
+У пісочниці застосунку та в контейнері App Group `group.ua.blackout.prewarning.poltava`, доступному лише застосунку та його віджетам:
 
 1. **Збережені адреси або черги** (до п'яти): район, населений пункт, вулиця, номер будинку, знайдена черга (від 1.1 до 6.2), власна назва та перемикачі сповіщень.
 2. **Налаштування:** час завчасного попередження, звук сповіщень, інтервал оновлення, мова.

@@ -8,7 +8,7 @@ import WidgetKit
 /// Planned pre-warnings do not depend on it: they are scheduled ahead as local notifications.
 enum BackgroundRefresh {
     /// Listed in `BGTaskSchedulerPermittedIdentifiers` (ios/App/Info.plist).
-    static let identifier = "ua.blackout.prewarning.sync"
+    static let identifier = "ua.blackout.prewarning.poltava.sync"
 
     /// Asks iOS for the next run, no earlier than one refresh interval from now (at least 15 minutes,
     /// like WorkManager's floor on Android). Called on launch, when the app goes to the background and

@@ -105,7 +105,7 @@
       <div class="meta-box">
         <p><strong>Application Name / Назва додатку:</strong> Світло в Полтаві (PoltavaBlackoutPreWarning)</p>
         <p><strong>Package Name / Application ID (Android):</strong> <code>ua.blackout.prewarning.poltava</code></p>
-        <p><strong>Bundle Identifier (iOS):</strong> <code>ua.blackout.prewarning</code> (widget <code>ua.blackout.prewarning.widget</code>)</p>
+        <p><strong>Bundle Identifier (iOS):</strong> <code>ua.blackout.prewarning.poltava</code> (widget <code>ua.blackout.prewarning.poltava.widget</code>)</p>
         <p><strong>Developer / Publisher:</strong> Igor Zaharov</p>
         <p><strong>Effective Date / Дата набрання чинності:</strong> November 9, 2026</p>
         <p><strong>Last Updated / Останнє оновлення:</strong> November 15, 2026</p>
@@ -113,7 +113,7 @@
       </div>
 
       <h2>1. Introduction and Scope</h2>
-      <p>This Privacy Policy governs the mobile application <strong>"Світло в Полтаві"</strong> for Android (package name <code>ua.blackout.prewarning.poltava</code>) and for iPhone (bundle identifier <code>ua.blackout.prewarning</code>, iOS 17.0 or newer), created and maintained by Igor Zaharov as a free, open-source utility. Both versions handle data in the same way; where they differ, this policy says so (section 5 for Android, section 5A for iOS).</p>
+      <p>This Privacy Policy governs the mobile application <strong>"Світло в Полтаві"</strong> for Android (package name <code>ua.blackout.prewarning.poltava</code>) and for iPhone (bundle identifier <code>ua.blackout.prewarning.poltava</code>, iOS 17.0 or newer), created and maintained by Igor Zaharov as a free, open-source utility. Both versions handle data in the same way; where they differ, this policy says so (section 5 for Android, section 5A for iOS).</p>
       <p>The Application is designed to provide residents and organizations in the Zhytomyr region of Ukraine with timely, accurate information regarding scheduled electrical power outages published by <strong>JSC "Zhytomyroblenergo" (АТ «Житомиробленерго»)</strong>.</p>
       <p>We are strictly committed to user privacy. This document outlines our data handling practices in accordance with the <strong>Google Play Developer Program Policies</strong>, the <strong>Apple App Store Review Guidelines (section 5.1, Privacy)</strong>, the <strong>General Data Protection Regulation (GDPR) (EU) 2016/679</strong>, and the <strong>Law of Ukraine "On Protection of Personal Data" (Закон України «Про захист персональних даних» № 2297-VI)</strong>.</p>
 
@@ -127,7 +127,7 @@
       </ul>
 
       <h2>3. Information Processed Locally on the User's Device</h2>
-      <p>All configuration settings and operational data created during application use are retained <strong>strictly on the user's physical device</strong>: on Android within the sandboxed application private storage (<code>SharedPreferences</code> under <code>Context.MODE_PRIVATE</code>); on iPhone within the application sandbox and the App Group container <code>group.ua.blackout.prewarning</code>, which only the Application and its own widgets can read. This information is never transmitted to any external server or third party, except the public street and settlement identifiers described in section 4.</p>
+      <p>All configuration settings and operational data created during application use are retained <strong>strictly on the user's physical device</strong>: on Android within the sandboxed application private storage (<code>SharedPreferences</code> under <code>Context.MODE_PRIVATE</code>); on iPhone within the application sandbox and the App Group container <code>group.ua.blackout.prewarning.poltava</code>, which only the Application and its own widgets can read. This information is never transmitted to any external server or third party, except the public street and settlement identifiers described in section 4.</p>
       <ul>
         <li><strong>Saved Addresses and Queues:</strong> Up to five addresses or queues (district, settlement, street, house number, the queue found for it, an optional custom name) with their notification switches.</li>
         <li><strong>Notification & Pre-Warning Settings:</strong> The user's chosen pre-warning lead time (e.g., 15 or 30 minutes in advance), sound toggles, and vibration toggles.</li>
@@ -199,11 +199,11 @@
             <td>Local notifications before a scheduled outage and about emergency outages. Permission is asked only after the user has chosen a queue or an address; the Application works fully without it. All notifications are created on the device; there is no push server.</td>
           </tr>
           <tr>
-            <td>Background App Refresh (<code>BGAppRefreshTask</code> <code>ua.blackout.prewarning.sync</code>, background mode <code>fetch</code>)</td>
+            <td>Background App Refresh (<code>BGAppRefreshTask</code> <code>ua.blackout.prewarning.poltava.sync</code>, background mode <code>fetch</code>)</td>
             <td>Refreshing the schedule and emergency outages from time to time while the Application is closed, so warnings and widgets stay current. iOS decides how often this runs; the user can turn it off in iOS Settings.</td>
           </tr>
           <tr>
-            <td>Home-Screen Widgets (<code>WidgetKit</code>) and App Group <code>group.ua.blackout.prewarning</code></td>
+            <td>Home-Screen Widgets (<code>WidgetKit</code>) and App Group <code>group.ua.blackout.prewarning.poltava</code></td>
             <td>Sharing the saved addresses and the cached schedule between the Application and its own widgets.</td>
           </tr>
         </tbody>
@@ -234,7 +234,7 @@
       <strong>Назва додатку:</strong> Світло в Полтаві (PoltavaBlackoutPreWarning)<br />
       <strong>Останнє оновлення:</strong> 15 листопада 2026 року<br />
       <strong>Ідентифікатор пакета Android (Package Name):</strong> <code>ua.blackout.prewarning.poltava</code><br />
-      <strong>Ідентифікатор iPhone (Bundle Identifier):</strong> <code>ua.blackout.prewarning</code><br />
+      <strong>Ідентифікатор iPhone (Bundle Identifier):</strong> <code>ua.blackout.prewarning.poltava</code><br />
       <strong>Розробник:</strong> Ігор Захаров (Igor Zaharov)</p>
 
       <h3>1. Загальні положення та відсутність збору даних</h3>
@@ -247,7 +247,7 @@
       <p>Дозволи використовуються виключно для технічного функціонування (завантаження графіка з сайту ztoe.com.ua та аварійних відключень зі служби ztoe-poweron.inneti.net (надсилаються лише публічні коди вибраного населеного пункту й вулиці), надсилання локальних сповіщень та точний таймер попередження (дозвіл «Будильники й нагадування»)).</p>
 
       <h3>3А. Можливості iPhone</h3>
-      <p>Локальні сповіщення (дозвіл запитується лише після вибору черги або адреси, push-сервера немає), фонове оновлення <code>ua.blackout.prewarning.sync</code> (частоту визначає iOS, його можна вимкнути в налаштуваннях iOS) та віджети через App Group <code>group.ua.blackout.prewarning</code>. Маніфест конфіденційності: без відстеження й без зібраних даних; єдиний API з обов'язковою причиною — <code>UserDefaults</code>. Посилання відкриваються в Safari; додаток не обробляє платежі.</p>
+      <p>Локальні сповіщення (дозвіл запитується лише після вибору черги або адреси, push-сервера немає), фонове оновлення <code>ua.blackout.prewarning.poltava.sync</code> (частоту визначає iOS, його можна вимкнути в налаштуваннях iOS) та віджети через App Group <code>group.ua.blackout.prewarning.poltava</code>. Маніфест конфіденційності: без відстеження й без зібраних даних; єдиний API з обов'язковою причиною — <code>UserDefaults</code>. Посилання відкриваються в Safari; додаток не обробляє платежі.</p>
 
       <h3>4. Видалення даних</h3>
       <p>Користувач може будь-коли стерти всі налаштування кнопкою скидання в налаштуваннях додатку, через «Налаштування &gt; Програми &gt; Світло в Полтаві &gt; Очистити дані» на Android або просто видаливши додаток.</p>

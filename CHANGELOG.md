@@ -71,6 +71,11 @@ First version line of «Світло в Полтаві», built from «Світ�
 - The no-queue card has a title («Черга відсутня (не вимикається)») and the house's info line (`MainScreen.kt`, `MainView.tsx`).
 - `spec/PERSISTENCE.md` (new POE keys), `spec/SUBSCRIPTIONS.md` (`queueStatusText` is the no-queue text; `gav_message` is kept with the per-address status), `spec/UI_DRUM.md` (status).
 
+### Changed (iOS milestone I0: own identifiers and CI)
+- **iOS identifiers of its own** (owner, 2026-11-19), so the Poltava iPhone app is a separate App Store app and installs next to the Zhytomyr one: bundle ids `ua.blackout.prewarning.poltava` (= the Android application id), `ua.blackout.prewarning.poltava.widget`, `ua.blackout.prewarning.poltava.tests`; App Group `group.ua.blackout.prewarning.poltava`; background task `ua.blackout.prewarning.poltava.sync`; widget URL scheme `svitlopoltava` (`ios/project.yml`, `ios/App/Info.plist`, both entitlements, `AppGroup.swift`, `BackgroundRefresh.swift`, `NetworkProbe.swift`, `ios/Widget/BlackoutWidget.swift`, `ios/App/UI/RootView.swift`, `ios/scripts/*.sh`). Fresh App Group store, so there is nothing to migrate. Xcode project `SvitloPoltava.xcodeproj`. Privacy policies (`PRIVACY_POLICY.md`, `PRIVACY_POLICY_IOS.md`, `public/privacy.html`) and `docs/ios/APP_STORE_PUBLISHING.md` name the new ids.
+- **iOS CI** (`.github/workflows/build-ios.yml`, owner's OK 2026-11-19): the geo-check also probes `www.poe.pl.ua` (E1 schedule, E3 settlements, E4 house status, E5 registry); the launch step reads the bundle id from the built app. `tests/unit.test.ts` asserts the Poltava ids and that no iOS file keeps the Zhytomyr App Group or URL scheme.
+- Readiness report and work plan for I0–I5: `docs/ios/POLTAVA_IOS_PLAN.md`.
+
 # History inherited from «Світло в Житомирі»
 
 ## [Unreleased] - iOS port

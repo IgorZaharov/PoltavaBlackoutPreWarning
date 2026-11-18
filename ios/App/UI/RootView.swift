@@ -119,7 +119,7 @@ struct RootView: View {
             model.openFromNotification(tap.subscriptionId)
             NotificationRouter.shared.tapped = nil
         }
-        // a widget tap: svitlozt://open?item=<subscription id> shows that address (spec/SUBSCRIPTIONS.md 10)
+        // a widget tap: svitlopoltava://open?item=<subscription id> shows that address (spec/SUBSCRIPTIONS.md 10)
         .onOpenURL { url in
             let item = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "item" }?.value
             model.openFromNotification(item)

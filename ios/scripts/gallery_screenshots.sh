@@ -8,7 +8,7 @@ set -uo pipefail
 
 UDID="$1"
 OUT="$2"
-BUNDLE=ua.blackout.prewarning
+BUNDLE=ua.blackout.prewarning.poltava
 mkdir -p "$OUT"
 FAILED=0
 

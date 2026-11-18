@@ -960,6 +960,19 @@ function runUnitTestG_IosPort() {
   assert.ok(versionName, 'versionName not found in build.gradle.kts');
   assert.ok(projectYml.includes(`MARKETING_VERSION: "${versionName}"`), `ios/project.yml MARKETING_VERSION must be ${versionName}`);
 
+  // The Poltava iPhone app has identifiers of its own (owner, 2026-11-19; docs/ios/POLTAVA_IOS_PLAN.md 6), so it
+  // never shares a bundle id, App Group or URL scheme with the Zhytomyr app in the same team.
+  for (const id of ['ua.blackout.prewarning.poltava', 'ua.blackout.prewarning.poltava.widget', 'ua.blackout.prewarning.poltava.tests']) {
+    assert.ok(projectYml.includes(`PRODUCT_BUNDLE_IDENTIFIER: ${id}\n`), `ios/project.yml must use bundle id ${id}`);
+  }
+  assert.ok(/^name: SvitloPoltava$/m.test(projectYml), 'ios/project.yml must name the project SvitloPoltava');
+  const appGroup = 'group.ua.blackout.prewarning.poltava';
+  for (const rel of ['ios/App/App.entitlements', 'ios/Widget/Widget.entitlements', 'ios/Shared/Data/AppGroup.swift']) {
+    assert.ok(read(rel).includes(appGroup), `${rel} must use the App Group ${appGroup}`);
+  }
+  assert.ok(infoPlist.includes('<string>ua.blackout.prewarning.poltava.sync</string>'), 'iOS background task id must be ua.blackout.prewarning.poltava.sync');
+  assert.ok(infoPlist.includes('<string>svitlopoltava</string>'), 'iOS widget URL scheme must be svitlopoltava');
+
   // iPhone only (plan R10): XcodeGen's iOS target preset sets TARGETED_DEVICE_FAMILY "1,2" per target, which
   // overrides the project-level value, so the app and the widget targets must each set "1" themselves.
   for (const target of ['ZTPreBlackout', 'BlackoutWidgetExtension']) {
@@ -977,6 +990,11 @@ function runUnitTestG_IosPort() {
     );
   for (const rel of walk('ios').filter((f) => /\.(swift|plist|yml)$/.test(f))) {
     assert.ok(!/roulette/i.test(read(rel)), `${rel} must not contain the roulette (iOS v1 ships without it)`);
+  }
+  for (const rel of walk('ios').filter((f) => /\.(swift|plist|yml|entitlements|sh)$/.test(f))) {
+    const text = read(rel);
+    assert.ok(!/group\.ua\.blackout\.prewarning(?!\.poltava)/.test(text), `${rel} must not use the Zhytomyr App Group`);
+    assert.ok(!text.includes('svitlozt'), `${rel} must not use the Zhytomyr URL scheme svitlozt`);
   }
 
   // One source of strings (plan section 7): ios/Shared/AppStrings.swift is generated from AppStrings.kt,

@@ -29,12 +29,12 @@ Fix these first. Each one is a likely rejection or a step you cannot finish.
 
 | Field | Value |
 |---|---|
-| Bundle ID | `ua.blackout.prewarning` |
+| Bundle ID | `ua.blackout.prewarning.poltava` |
 | SKU | the one you entered at creation (any unique text, for example `svitlo-zhytomyr-ios`) |
 | Primary Language | **Ukrainian**. If it shows English, change it here (it decides which localization the store shows by default outside the listed languages). |
 
 If the record had to be created again: **Apps → + → New App**, Platform iOS, Name `Світло в Житомирі`,
-Primary Language Ukrainian, Bundle ID `ua.blackout.prewarning`, SKU as above, User Access Full Access.
+Primary Language Ukrainian, Bundle ID `ua.blackout.prewarning.poltava`, SKU as above, User Access Full Access.
 
 ---
 
