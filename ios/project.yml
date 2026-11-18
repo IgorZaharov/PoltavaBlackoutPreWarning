@@ -99,6 +99,10 @@ targets:
       - path: ../spec/vectors
         type: folder
         buildPhase: resources
+      # Recorded POE answers (poe_schedule.json names the schedule fixture), read in place like the vectors.
+      - path: ../spec/fixtures/poe
+        type: folder
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ua.blackout.prewarning.poltava.tests

@@ -76,6 +76,11 @@ First version line of «Світло в Полтаві», built from «Світ�
 - **iOS CI** (`.github/workflows/build-ios.yml`, owner's OK 2026-11-19): the geo-check also probes `www.poe.pl.ua` (E1 schedule, E3 settlements, E4 house status, E5 registry); the launch step reads the bundle id from the built app. `tests/unit.test.ts` asserts the Poltava ids and that no iOS file keeps the Zhytomyr App Group or URL scheme.
 - Readiness report and work plan for I0–I5: `docs/ios/POLTAVA_IOS_PLAN.md`.
 
+### Added (iOS milestone I1: POE core in Swift)
+- **Switching half-hour in the Swift engine** (`ios/Shared/Core/OutageModels.swift`, `OutageEngine.swift`, spec/OUTAGE_ENGINE.md 3.5): `ScheduleCell` (ON/OFF/SWITCHING), `SwitchWindow`, `buildPlannedCells`, `switchWindows`, `SlotState.switching` in `dayView` and `StatusInfo.restoreUntil` in `status`, as in `OutageEngine.kt`.
+- **`PoeMapper.swift`, `PoeSchedule.swift`, `QueueCatalogue.swift`** in `ios/Shared/Core/`, ports of the Kotlin core (times, ETA, planned list, queue, per-house status, registry rows and places, nearby outages, registry repairs, schedule table parser, queue catalogue lookup); `Rx.swift` gains dot-all, `allMatches` and a Kotlin-style `split`.
+- **`ios/Tests/PoeVectorsTests.swift`** runs `poe_api.json` (10 groups), `outage_engine_poe.json`, `poe_schedule.json` and `queue_catalogue.json` with asserted case counts; the test target reads `spec/fixtures/poe` in place (`ios/project.yml`). Not wired into the app yet (I2).
+
 # History inherited from «Світло в Житомирі»
 
 ## [Unreleased] - iOS port
