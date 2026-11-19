@@ -1,5 +1,6 @@
 package ua.blackout.prewarning.data.poe
 
+import org.json.JSONArray
 import org.json.JSONObject
 
 /**
@@ -28,6 +29,59 @@ class PoeDirectoryIndex private constructor(
     fun streetsOf(settlementId: Long): List<Street> = byId[settlementId]?.streets.orEmpty()
 
     fun branch(cabinetId: Int): Branch? = branches.firstOrNull { it.cabinetId == cabinetId }
+
+    /**
+     * The settlement list of one branch as POE gives it now (E3 `city`): new settlements are added (without
+     * streets), known ones gain the branch. Nothing is removed, so a saved address always stays findable.
+     */
+    fun withBranchSettlements(cabinetId: Int, fetched: List<Pair<Long, String>>): PoeDirectoryIndex {
+        val ids = fetched.map { it.first }.toSet()
+        val updated = settlements.map { s ->
+            if (s.id in ids && cabinetId !in s.branchCabinetIds) s.copy(branchCabinetIds = s.branchCabinetIds + cabinetId) else s
+        }
+        val known = settlements.map { it.id }.toSet()
+        val added = fetched.filter { it.first !in known }.map { (id, name) -> Settlement(id, name, listOf(cabinetId), emptyList()) }
+        return PoeDirectoryIndex(crawledAt, branches, updated + added)
+    }
+
+    /** The street list of one settlement as POE gives it now (E3 `street`), merged with the known one (nothing removed). */
+    fun withStreets(settlementId: Long, fetched: List<Pair<Long, String>>): PoeDirectoryIndex {
+        val s = byId[settlementId] ?: return this
+        val known = s.streets.map { it.id }.toSet()
+        val streets = s.streets + fetched.filter { it.first !in known }.map { Street(it.first, it.second) }
+        return PoeDirectoryIndex(crawledAt, branches, settlements.map { if (it.id == settlementId) it.copy(streets = streets) else it })
+    }
+
+    /**
+     * This index plus everything [older] knew that this one does not (settlements, their branches,
+     * streets), so a newer crawl never makes a saved address unfindable.
+     */
+    fun keeping(older: PoeDirectoryIndex): PoeDirectoryIndex {
+        val merged = settlements.map { s ->
+            val old = older.settlement(s.id) ?: return@map s
+            val known = s.streets.map { it.id }.toSet()
+            s.copy(
+                branchCabinetIds = s.branchCabinetIds + old.branchCabinetIds.filter { it !in s.branchCabinetIds },
+                streets = s.streets + old.streets.filter { it.id !in known }
+            )
+        }
+        val missing = older.settlements.filter { byId[it.id] == null }
+        return PoeDirectoryIndex(crawledAt, branches, merged + missing)
+    }
+
+    /** The same JSON layout as `poe_directory.json`, so a stored copy reads back through [fromJson]. */
+    fun toJson(): String {
+        val root = JSONObject().put("crawledAt", crawledAt)
+        root.put("branches", JSONArray(branches.map { JSONObject().put("cabinetId", it.cabinetId).put("registryId", it.registryId).put("name", it.name) }))
+        root.put("settlements", JSONArray(settlements.map { s ->
+            JSONObject()
+                .put("id", s.id)
+                .put("name", s.name)
+                .put("branches", JSONArray(s.branchCabinetIds))
+                .put("streets", JSONArray(s.streets.map { JSONArray().put(it.id).put(it.name) }))
+        }))
+        return root.toString()
+    }
 
     companion object {
         /** Parses the snapshot; null when the text is not a usable snapshot (the bundled copy is then kept). */

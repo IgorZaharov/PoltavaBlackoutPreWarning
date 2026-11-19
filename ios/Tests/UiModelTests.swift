@@ -35,7 +35,7 @@ final class SiteStatusModelTests: XCTestCase {
         XCTAssertEqual(chips.count, 2)
         XCTAssertEqual(chips[0].tone, .green)
         XCTAssertEqual(chips[0].icon, .OK)
-        XCTAssertEqual(chips[0].text, "Сайт ZTOE доступний, графік опубліковано")
+        XCTAssertEqual(chips[0].text, "Сайт POE доступний, графік опубліковано")
         XCTAssertEqual(chips[1].tone, .green)
         XCTAssertEqual(chips[1].text, "Графік на завтра: опубліковано")
         XCTAssertNil(SiteStatusModel.banner(s, "uk"))
@@ -50,7 +50,7 @@ final class SiteStatusModelTests: XCTestCase {
         XCTAssertTrue(chips.contains { $0.text == "Графік на завтра: ще немає" && $0.tone == .grey })
         let banner = SiteStatusModel.banner(s, "uk")
         XCTAssertEqual(banner?.tone, .amber)
-        XCTAssertEqual(banner?.title, "Сайт ZTOE доступний, але графіка немає")
+        XCTAssertEqual(banner?.title, "Сайт POE доступний, але графіка немає")
         XCTAssertEqual(banner?.message, "Показано збережений графік (дані за 09:30)\nГрафік ще не опубліковано або сторінка змінилась.")
     }
 
@@ -58,7 +58,7 @@ final class SiteStatusModelTests: XCTestCase {
         let red = SiteStatusModel.banner(snapshot(.SITE_UNREACHABLE), "en")
         XCTAssertEqual(red?.tone, .red)
         XCTAssertEqual(red?.icon, .SERVER_DOWN)
-        XCTAssertEqual(red?.title, "ZTOE site unreachable, your internet works")
+        XCTAssertEqual(red?.title, "POE site unreachable, your internet works")
         let grey = SiteStatusModel.banner(snapshot(.NO_INTERNET), "en")
         XCTAssertEqual(grey?.tone, .grey)
         XCTAssertEqual(grey?.icon, .OFFLINE)
@@ -74,7 +74,7 @@ final class SiteStatusModelTests: XCTestCase {
     func testSiteNotCheckedYetShowsGreyChecking() {
         let chips = SiteStatusModel.chips(snapshot(nil), "uk")
         XCTAssertEqual(chips[0].tone, .grey)
-        XCTAssertEqual(chips[0].text, "Перевірка сайту ZTOE…")
+        XCTAssertEqual(chips[0].text, "Перевірка сайту POE…")
         XCTAssertNil(SiteStatusModel.banner(snapshot(nil), "uk"))
     }
 

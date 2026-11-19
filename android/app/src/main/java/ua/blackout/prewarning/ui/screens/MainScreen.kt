@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Alarm
+import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Notifications
@@ -32,11 +33,16 @@ import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -71,6 +77,7 @@ import ua.blackout.prewarning.data.repository.ScheduleStatusInfo
 import ua.blackout.prewarning.ui.AppStrings
 import ua.blackout.prewarning.ui.components.spinWhile
 import ua.blackout.prewarning.ui.components.GlassCard
+import ua.blackout.prewarning.ui.components.NearbyOutagesCard
 import ua.blackout.prewarning.ui.components.OutageRowFormat
 import ua.blackout.prewarning.ui.components.SiteNoticeCard
 import ua.blackout.prewarning.ui.components.SiteStatusBanner
@@ -132,6 +139,48 @@ private fun rememberAnimationsEnabled(): Boolean {
     }
 }
 
+/**
+ * Tip above the first-launch "Виберіть чергу" button: a line of text and an arrow nudging down at the button
+ * (owner, 2026-11-17). The arrow stands still when system animations are off; read in graphicsLayer, so only it redraws.
+ */
+@Composable
+private fun FirstStartTip(lang: String, modifier: Modifier = Modifier) {
+    val animate = rememberAnimationsEnabled()
+    val nudge: State<Float>? = if (animate) {
+        rememberInfiniteTransition(label = "tip").animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(700, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "tipNudge"
+        )
+    } else {
+        null
+    }
+    Column(
+        modifier = modifier.widthIn(max = 300.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(
+            text = AppStrings.firstStartTip(lang),
+            style = ZtType.body.copy(fontWeight = FontWeight.Bold),
+            color = Color.White,
+            textAlign = TextAlign.Center
+        )
+        Icon(
+            imageVector = Icons.Default.ArrowDownward,
+            contentDescription = null,
+            tint = ZtColors.Accent,
+            modifier = Modifier
+                .size(32.dp)
+                .graphicsLayer { translationY = (nudge?.value ?: 0f) * 8.dp.toPx() }
+        )
+    }
+}
+
 /** Status dot of the hero. The pulse is read inside graphicsLayer, so only this node redraws, never the screen. */
 @Composable
 private fun StatusDot(color: Color, pulsing: Boolean) {
@@ -162,6 +211,7 @@ private fun StatusDot(color: Color, pulsing: Boolean) {
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
     queue: String = "",
@@ -202,8 +252,8 @@ fun MainScreen(
     val tomorrowDate = todayDate.plusDays(1)
     val now = snapshot.now
 
-    // Another address starts on Today (spec/SUBSCRIPTIONS.md 9)
-    var selectedDayTab by rememberSaveable(shownAddressId) { mutableStateOf(TAB_TODAY) }
+    // Today / Tomorrow stays when another address is shown (spec/SUBSCRIPTIONS.md 9, owner 2026-11-18)
+    var selectedDayTab by rememberSaveable { mutableStateOf(TAB_TODAY) }
     val isTomorrowSelected = selectedDayTab == TAB_TOMORROW
     val activeDate = if (isTomorrowSelected) tomorrowDate else todayDate
 
@@ -211,6 +261,9 @@ fun MainScreen(
     val featuredEmergency = remember(snapshot) { snapshot.featuredEmergency() }
     val siteBanner = remember(snapshot, lang) { SiteStatusModel.banner(snapshot, lang) }
     val siteNotice = remember(snapshot) { SiteStatusModel.notice(snapshot) }
+    val restoreWindow = remember(snapshot) { snapshot.restoreWindow() }
+    val nearby = snapshot.nearby?.takeIf { it.items.isNotEmpty() }
+    val gavMessage = snapshot.gavMessage
 
     val hasEmergencyOutage = featuredEmergency != null
     val hasCustomNoQueueStatus = !customQueueStatusText.isNullOrBlank() && !hasEmergencyOutage
@@ -236,7 +289,7 @@ fun MainScreen(
         }
     }
 
-    // The ztoe table of the shown day is not known: the drum is grey, known emergency/repair outages are drawn on top
+    // The POE table of the shown day is not known: the drum is grey, known emergency/repair outages are drawn on top
     val isTodayUnclear = !hasCustomNoQueueStatus && queue.isNotBlank() && !snapshot.plannedKnown
     val isTomorrowUnclear = !hasCustomNoQueueStatus && queue.isNotBlank() && !snapshot.tomorrowPublished
     val activeUnclear = if (isTomorrowSelected) isTomorrowUnclear else isTodayUnclear
@@ -254,7 +307,34 @@ fun MainScreen(
         clock.format(DateTimeFormatter.ofPattern("HH:mm"))
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    // Pull the page down to refresh, as in a browser (owner, 2026-11-18). The spinner shows only for a pull: the
+    // quiet refresh on entering the page also sets isRefreshing. Without a queue the page does not scroll, so it
+    // can not be pulled either.
+    val pullState = rememberPullToRefreshState()
+    var pulled by remember { mutableStateOf(false) }
+    LaunchedEffect(isRefreshing) { if (!isRefreshing) pulled = false }
+    LaunchedEffect(pulled) {
+        // a pull whose refresh never started (one was already running and ended) must not spin forever
+        if (pulled) { delay(1_500); if (!isRefreshing) pulled = false }
+    }
+    PullToRefreshBox(
+        isRefreshing = pulled,
+        onRefresh = {
+            pulled = true
+            if (!isRefreshing) onRefresh()
+        },
+        modifier = Modifier.fillMaxSize(),
+        state = pullState,
+        indicator = {
+            PullToRefreshDefaults.Indicator(
+                state = pullState,
+                isRefreshing = pulled,
+                modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding(),
+                containerColor = ZtColors.CardSolid,
+                color = ZtColors.Accent
+            )
+        }
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -294,6 +374,10 @@ fun MainScreen(
                             maxLines = 3,
                             overflow = TextOverflow.Ellipsis
                         )
+                        // POE's own line about the house: feeder and the schedules it belongs to
+                        if (!gavMessage.isNullOrBlank()) {
+                            GavMessageLine(text = gavMessage, lang = lang)
+                        }
                     }
                 }
 
@@ -327,7 +411,7 @@ fun MainScreen(
                 SiteStatusBanner(siteBanner)
             }
 
-            // 1c'. ztoe is up but publishes a notice instead of the table: quote it to the user
+            // 1c'. The site is up but publishes a notice instead of the table: quote it to the user
             if (siteNotice != null) {
                 SiteNoticeCard(text = siteNotice, lang = lang)
             }
@@ -346,16 +430,25 @@ fun MainScreen(
                 }
             }
 
-            // 1d. Custom ZTOE queue/house status message
+            // 1d. No-queue card: the house is in no queue of the hourly schedule (spec/SUBSCRIPTIONS.md, POE)
             if (!isQueueUnselected && !customQueueStatusText.isNullOrBlank()) {
                 GlassCard(modifier = Modifier.fillMaxWidth()) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(text = AppStrings.noQueueNotDisconnected(lang), style = ZtType.overline, color = ZtColors.ChipGreenText)
                         if (!formattedSelectedAddress.isNullOrBlank()) {
                             Text(text = formattedSelectedAddress, style = ZtType.caption, color = TextSecondary)
                         }
                         Text(text = customQueueStatusText, style = ZtType.subhead, color = Color.White)
+                        if (!gavMessage.isNullOrBlank() && queue.isBlank()) {
+                            GavMessageLine(text = gavMessage, lang = lang)
+                        }
                     }
                 }
+            }
+
+            // 1e. «Ремонти й пошкодження поруч», directly above the hero card (owner decision D9)
+            if (!isQueueUnselected && nearby != null) {
+                NearbyOutagesCard(nearby = nearby, lang = lang)
             }
 
             // 2. Hero outage status card
@@ -490,6 +583,12 @@ fun MainScreen(
                                 }
                             }
                         }
+
+                        // POE: power comes back inside the switching half-hour after the span (spec/OUTAGE_ENGINE.md 3.5)
+                        if (!isStatusUnclear && restoreWindow != null) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            RestoreWindowLine(from = restoreWindow.first, to = restoreWindow.second, lang = lang)
+                        }
                     }
                 }
             }
@@ -584,6 +683,12 @@ fun MainScreen(
                 }
             }
 
+            // 5b. Today's POE measures (ГАВ, ГОП, СГАВ ...) whatever the site state (spec/POE_API.md section 7),
+            // under the schedule, right before the links (owner, 2026-11-16)
+            if (!isQueueUnselected && !snapshot.measures.isNullOrBlank()) {
+                SiteNoticeCard(text = snapshot.measures, lang = lang, title = AppStrings.measuresTitle(lang))
+            }
+
             // 6. Emergency outages info link (Facebook)
             LinkCard(
                 title = AppStrings.emergencyOutagesLabel(lang),
@@ -606,7 +711,7 @@ fun MainScreen(
                 )
             }
 
-            // 7. Blackout schedules on the ZTOE website, at the very bottom after the Facebook link
+            // 7. Blackout schedules on the POE website, at the very bottom after the Facebook link
             LinkCard(
                 title = AppStrings.siteSchedulesLabel(lang),
                 url = AppStrings.SITE_SCHEDULES_URL,
@@ -645,6 +750,7 @@ fun MainScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(24.dp)
                 ) {
+                    FirstStartTip(lang = lang, modifier = Modifier.offset(y = 12.dp))
                     Box(
                         modifier = Modifier
                             .defaultMinSize(minWidth = 260.dp, minHeight = ZtMinTouch)
@@ -689,6 +795,44 @@ fun MainScreen(
 // -------------------------------------------------------------------------------------------------
 // Pieces
 // -------------------------------------------------------------------------------------------------
+
+/** "Світло повернеться 19:00–19:30" with a yellow swatch: the same colour as the switching cells of the drum. */
+@Composable
+private fun RestoreWindowLine(from: java.time.LocalDateTime, to: java.time.LocalDateTime, lang: String) {
+    fun hm(t: java.time.LocalDateTime) = "%02d:%02d".format(t.hour, t.minute)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(width = 14.dp, height = 10.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(ZtColors.SwitchingMid)
+        )
+        Text(
+            text = AppStrings.restoreWindow(lang, hm(from), hm(to)),
+            style = ZtType.caption.copy(fontWeight = FontWeight.Bold),
+            color = ZtColors.SwitchingMid
+        )
+    }
+}
+
+/** POE's `gav_message` of the house (feeder, ГАВ / АЧР / ГПВ queues): an info line, never parsed. */
+@Composable
+private fun GavMessageLine(text: String, lang: String) {
+    Text(
+        text = text,
+        style = ZtType.caption,
+        color = ZtColors.TextTertiary,
+        maxLines = 4,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier
+            .padding(top = 2.dp)
+            .semantics { contentDescription = AppStrings.gavMessageA11y(lang) + ". " + text }
+    )
+}
 
 /** 58 x 34 pill switch for the notifications; the touch target is 48 dp tall without changing the look. */
 @Composable

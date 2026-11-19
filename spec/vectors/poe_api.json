@@ -217,7 +217,8 @@
     "emergency": null,
     "repairs": [],
     "scheduleMirror": false,
-    "unparsed": false
+    "unparsed": false,
+    "severalConnections": false
    }
   },
   {
@@ -254,7 +255,8 @@
      }
     ],
     "scheduleMirror": false,
-    "unparsed": false
+    "unparsed": false,
+    "severalConnections": false
    }
   },
   {
@@ -283,7 +285,8 @@
     },
     "repairs": [],
     "scheduleMirror": false,
-    "unparsed": false
+    "unparsed": false,
+    "severalConnections": false
    }
   },
   {
@@ -319,7 +322,8 @@
      }
     ],
     "scheduleMirror": false,
-    "unparsed": false
+    "unparsed": false,
+    "severalConnections": false
    }
   },
   {
@@ -340,7 +344,8 @@
     "emergency": null,
     "repairs": [],
     "scheduleMirror": false,
-    "unparsed": true
+    "unparsed": true,
+    "severalConnections": false
    }
   },
   {
@@ -366,7 +371,8 @@
     },
     "repairs": [],
     "scheduleMirror": false,
-    "unparsed": false
+    "unparsed": false,
+    "severalConnections": false
    }
   },
   {
@@ -387,7 +393,8 @@
     "emergency": null,
     "repairs": [],
     "scheduleMirror": false,
-    "unparsed": true
+    "unparsed": true,
+    "severalConnections": false
    }
   },
   {
@@ -413,7 +420,8 @@
     },
     "repairs": [],
     "scheduleMirror": false,
-    "unparsed": false
+    "unparsed": false,
+    "severalConnections": false
    }
   },
   {
@@ -437,7 +445,8 @@
     "emergency": null,
     "repairs": [],
     "scheduleMirror": true,
-    "unparsed": false
+    "unparsed": false,
+    "severalConnections": false
    }
   },
   {
@@ -463,7 +472,8 @@
     },
     "repairs": [],
     "scheduleMirror": false,
-    "unparsed": false
+    "unparsed": false,
+    "severalConnections": false
    }
   },
   {
@@ -484,7 +494,33 @@
     },
     "repairs": [],
     "scheduleMirror": false,
-    "unparsed": false
+    "unparsed": false,
+    "severalConnections": false
+   }
+  },
+  {
+   "name": "live (17.11): several connections at the address (Полтава, Європейська 88): no queue given, which is not 'no queue'",
+   "today": "2026-11-17",
+   "in": {
+    "fn_accident_message": "Увага! За вказаною адресою зареєстровано декілька підключень електропостачання.<br>Для отримання детальної та коректної інформації про перерви в електропостачанніскористайтеся сервісами, які розміщені у вкладці «Відключення»: «Пошук відключення за особовим рахунком» (для побутових споживачів) або «Пошук відключень за номером договору» (для непобутових споживачів).",
+    "message_type": 0,
+    "accident_str": null,
+    "accident_id": null,
+    "accident_date": "17.11.2026 00:15",
+    "accid_msg_logid": null,
+    "gav_message": "",
+    "gp_qnum_1": "",
+    "gp_qnum_2": "",
+    "planned_message": ""
+   },
+   "expect": {
+    "messageType": 0,
+    "queue": null,
+    "emergency": null,
+    "repairs": [],
+    "scheduleMirror": false,
+    "unparsed": false,
+    "severalConnections": true
    }
   }
  ],
@@ -766,6 +802,328 @@
    "street": "вул. Шевченка",
    "house": "10",
    "out": "STREET"
+  }
+ ],
+ "nearby": [
+  {
+   "name": "live Полтава rows at 12:00: the mirror row is dropped, two groups of one street merge, the user's house is listed",
+   "rows": [
+    "<tr><td>16.11.2026 09:25:00</td><td>16.11.2026 16:00</td><td><b>м.Полтава</b><br><b>вул.Олександра Бідного</b> (б. 1а)<br><br><b>м.Полтава</b><br>Полтава, вул. Української Повстанської  Армії, 35,<br><b>вул.Олександра Бідного</b> (б. 1, 1-1а, 1а, 5)<br></td><td>Планова перерва</td><tr>",
+    "<tr><td>16.11.2026 12:00:00</td><td>16.11.2026 15:00</td><td><b>м.Полтава</b><br><b>вул.Героїв ОУН</b> (б. 37а)<br></td><td>Застосування графіків обмеження споживачів (ГПВ 3-1)</td><tr>",
+    "<tr><td>16.11.2026 08:59:00</td><td>16.11.2026 15:59</td><td><b>с.Зуївці</b><br><b>вул.Дружби</b> (б. 1, 9, 15, 17, 26, 28),<br><b>вул.Зелена</b> (б. 2, 13, 23, 27),<br><b>вул.Молодіжна</b> (б. 28)<br></td><td>Аварійна перерва</td><tr>"
+   ],
+   "settlement": "місто Полтава",
+   "street": "вул. Олександра Бідного",
+   "house": "5",
+   "now": "2026-11-16T12:00",
+   "expect": [
+    {
+     "id": "poe_reg_2026-11-16T09:25",
+     "kind": "REPAIR",
+     "start": "2026-11-16T09:25",
+     "end": "2026-11-16T16:00",
+     "reason": "Планова перерва",
+     "status": "ACTIVE",
+     "streets": [
+      {
+       "name": "вул.Олександра Бідного",
+       "houses": [
+        "1а",
+        "1",
+        "1-1а",
+        "5"
+       ],
+       "mine": true
+      },
+      {
+       "name": "вул. Української Повстанської Армії",
+       "houses": [
+        "35"
+       ],
+       "mine": false
+      }
+     ],
+     "match": "CONFIRMED"
+    }
+   ]
+  },
+  {
+   "name": "live Зуївці row: house 3 is off per E4 but the registry omits it, so only the street matches; the same row from two branches is one item",
+   "rows": [
+    "<tr><td>16.11.2026 08:59:00</td><td>16.11.2026 15:59</td><td><b>с.Зуївці</b><br><b>вул.Дружби</b> (б. 1, 9, 15, 17, 26, 28),<br><b>вул.Зелена</b> (б. 2, 13, 23, 27),<br><b>вул.Молодіжна</b> (б. 28)<br></td><td>Аварійна перерва</td><tr>",
+    "<tr><td>16.11.2026 08:59:00</td><td>16.11.2026 15:59</td><td><b>с.Зуївці</b><br><b>вул.Дружби</b> (б. 1, 9, 15, 17, 26, 28),<br><b>вул.Зелена</b> (б. 2, 13, 23, 27),<br><b>вул.Молодіжна</b> (б. 28)<br></td><td>Аварійна перерва</td><tr>"
+   ],
+   "settlement": "село Зуївці",
+   "street": "вул. Дружби",
+   "house": "3",
+   "now": "2026-11-16T10:30",
+   "expect": [
+    {
+     "id": "poe_reg_2026-11-16T08:59",
+     "kind": "EMERGENCY",
+     "start": "2026-11-16T08:59",
+     "end": "2026-11-16T15:59",
+     "reason": "Аварійна перерва",
+     "status": "ACTIVE",
+     "streets": [
+      {
+       "name": "вул.Дружби",
+       "houses": [
+        "1",
+        "9",
+        "15",
+        "17",
+        "26",
+        "28"
+       ],
+       "mine": true
+      },
+      {
+       "name": "вул.Зелена",
+       "houses": [
+        "2",
+        "13",
+        "23",
+        "27"
+       ],
+       "mine": false
+      },
+      {
+       "name": "вул.Молодіжна",
+       "houses": [
+        "28"
+       ],
+       "mine": false
+      }
+     ],
+     "match": "STREET"
+    }
+   ]
+  },
+  {
+   "name": "order: active, then upcoming, then finished; a row without the user's street is dropped (owner: same settlement and street)",
+   "rows": [
+    "<tr><td>16.11.2026 08:59:00</td><td>16.11.2026 15:59</td><td><b>с.Зуївці</b><br><b>вул.Дружби</b> (б. 1, 9, 15, 17, 26, 28),<br><b>вул.Зелена</b> (б. 2, 13, 23, 27),<br><b>вул.Молодіжна</b> (б. 28)<br></td><td>Аварійна перерва</td><tr>",
+    "<tr><td>16.11.2026 18:00:00</td><td>16.11.2026 19:00</td><td><b>с.Зуївці</b><br><b>вул.Садова</b><br></td><td>Планова перерва</td><tr>",
+    "<tr><td>16.11.2026 07:00:00</td><td>16.11.2026 08:00</td><td><b>с.Зуївці</b><br><b>вул.Садова</b> (б. 2)<br></td><td>Аварійна перерва</td><tr>",
+    "<tr><td>16.11.2026 11:00:00</td><td>16.11.2026 13:00</td><td><b>с.Зуївці</b><br><b>вул.Садова</b> (б. 5)<br><b>вул.Зелена</b> (б. 1)<br></td><td>Аварійна перерва</td><tr>"
+   ],
+   "settlement": "Зуївці",
+   "street": "вул. Садова",
+   "house": "2",
+   "now": "2026-11-16T12:00",
+   "expect": [
+    {
+     "id": "poe_reg_2026-11-16T11:00",
+     "kind": "EMERGENCY",
+     "start": "2026-11-16T11:00",
+     "end": "2026-11-16T13:00",
+     "reason": "Аварійна перерва",
+     "status": "ACTIVE",
+     "streets": [
+      {
+       "name": "вул.Садова",
+       "houses": [
+        "5"
+       ],
+       "mine": true
+      },
+      {
+       "name": "вул.Зелена",
+       "houses": [
+        "1"
+       ],
+       "mine": false
+      }
+     ],
+     "match": "STREET"
+    },
+    {
+     "id": "poe_reg_2026-11-16T18:00",
+     "kind": "REPAIR",
+     "start": "2026-11-16T18:00",
+     "end": "2026-11-16T19:00",
+     "reason": "Планова перерва",
+     "status": "UPCOMING",
+     "streets": [
+      {
+       "name": "вул.Садова",
+       "houses": [],
+       "mine": true
+      }
+     ],
+     "match": "STREET"
+    },
+    {
+     "id": "poe_reg_2026-11-16T07:00",
+     "kind": "EMERGENCY",
+     "start": "2026-11-16T07:00",
+     "end": "2026-11-16T08:00",
+     "reason": "Аварійна перерва",
+     "status": "FINISHED",
+     "streets": [
+      {
+       "name": "вул.Садова",
+       "houses": [
+        "2"
+       ],
+       "mine": true
+      }
+     ],
+     "match": "CONFIRMED"
+    }
+   ]
+  },
+  {
+   "name": "queue-only subscription (no street, no house): nothing is shown",
+   "rows": [
+    "<tr><td>16.11.2026 08:59:00</td><td>16.11.2026 15:59</td><td><b>с.Зуївці</b><br><b>вул.Дружби</b> (б. 1, 9, 15, 17, 26, 28),<br><b>вул.Зелена</b> (б. 2, 13, 23, 27),<br><b>вул.Молодіжна</b> (б. 28)<br></td><td>Аварійна перерва</td><tr>"
+   ],
+   "settlement": "Зуївці",
+   "street": "",
+   "house": "",
+   "now": "2026-11-16T12:00",
+   "expect": []
+  },
+  {
+   "name": "constructed: no end is active; a whole-street entry makes the merged street whole; an empty reason reads as repair",
+   "rows": [
+    "<tr><td>16.11.2026 10:00:00</td><td></td><td><b>с.Нижні Млини</b><br><b>вул.Дем&#39;яна Бідного</b> (б. 4)<br><b>вул.Шевченка</b><br></td><td>Аварійна перерва</td><tr>",
+    "<tr><td>16.11.2026 11:00:00</td><td>16.11.2026 12:00</td><td><b>с.Нижні Млини</b><br><b>вул.Шевченка</b> (б. 1, 3)<br><br><b>с.Нижні Млини</b><br><b>вул. Шевченка</b><br></td><td></td><tr>"
+   ],
+   "settlement": "село Нижні Млини",
+   "street": "вул. Шевченка",
+   "house": "10",
+   "now": "2026-11-16T11:30",
+   "expect": [
+    {
+     "id": "poe_reg_2026-11-16T10:00",
+     "kind": "EMERGENCY",
+     "start": "2026-11-16T10:00",
+     "end": null,
+     "reason": "Аварійна перерва",
+     "status": "ACTIVE",
+     "streets": [
+      {
+       "name": "вул.Дем'яна Бідного",
+       "houses": [
+        "4"
+       ],
+       "mine": false
+      },
+      {
+       "name": "вул.Шевченка",
+       "houses": [],
+       "mine": true
+      }
+     ],
+     "match": "STREET"
+    },
+    {
+     "id": "poe_reg_2026-11-16T11:00",
+     "kind": "REPAIR",
+     "start": "2026-11-16T11:00",
+     "end": "2026-11-16T12:00",
+     "reason": "",
+     "status": "ACTIVE",
+     "streets": [
+      {
+       "name": "вул.Шевченка",
+       "houses": [],
+       "mine": true
+      }
+     ],
+     "match": "STREET"
+    }
+   ]
+  },
+  {
+   "name": "constructed: another settlement, a mirror only and nothing at all give no items",
+   "rows": [
+    "<tr><td>16.11.2026 12:00:00</td><td>16.11.2026 15:00</td><td><b>м.Полтава</b><br><b>вул.Героїв ОУН</b> (б. 37а)<br></td><td>Застосування графіків обмеження споживачів (ГПВ 3-1)</td><tr>",
+    "<tr><td>16.11.2026 08:59:00</td><td>16.11.2026 15:59</td><td><b>с.Зуївці</b><br><b>вул.Дружби</b> (б. 1, 9, 15, 17, 26, 28),<br><b>вул.Зелена</b> (б. 2, 13, 23, 27),<br><b>вул.Молодіжна</b> (б. 28)<br></td><td>Аварійна перерва</td><tr>"
+   ],
+   "settlement": "село Хомутець",
+   "street": "вул. Дружби",
+   "house": "9",
+   "now": "2026-11-16T12:00",
+   "expect": []
+  }
+ ],
+ "registryRepairs": [
+  {
+   "name": "live: the listed house gets the planned row as repair works",
+   "rows": [
+    "<tr><td>16.11.2026 09:25:00</td><td>16.11.2026 16:00</td><td><b>м.Полтава</b><br><b>вул.Олександра Бідного</b> (б. 1а)<br><br><b>м.Полтава</b><br>Полтава, вул. Української Повстанської  Армії, 35,<br><b>вул.Олександра Бідного</b> (б. 1, 1-1а, 1а, 5)<br></td><td>Планова перерва</td><tr>",
+    "<tr><td>16.11.2026 12:00:00</td><td>16.11.2026 15:00</td><td><b>м.Полтава</b><br><b>вул.Героїв ОУН</b> (б. 37а)<br></td><td>Застосування графіків обмеження споживачів (ГПВ 3-1)</td><tr>"
+   ],
+   "settlement": "місто Полтава",
+   "street": "вул. Олександра Бідного",
+   "house": "5",
+   "expect": [
+    {
+     "id": "registry_2026-11-16T09:25_2026-11-16T16:00",
+     "start": "2026-11-16T09:25",
+     "end": "2026-11-16T16:00"
+    }
+   ]
+  },
+  {
+   "name": "live: an emergency row naming the house is a repair outage too; the same row from two branches is one",
+   "rows": [
+    "<tr><td>16.11.2026 08:59:00</td><td>16.11.2026 15:59</td><td><b>с.Зуївці</b><br><b>вул.Дружби</b> (б. 1, 9, 15, 17, 26, 28),<br><b>вул.Зелена</b> (б. 2, 13, 23, 27),<br><b>вул.Молодіжна</b> (б. 28)<br></td><td>Аварійна перерва</td><tr>",
+    "<tr><td>16.11.2026 08:59:00</td><td>16.11.2026 15:59</td><td><b>с.Зуївці</b><br><b>вул.Дружби</b> (б. 1, 9, 15, 17, 26, 28),<br><b>вул.Зелена</b> (б. 2, 13, 23, 27),<br><b>вул.Молодіжна</b> (б. 28)<br></td><td>Аварійна перерва</td><tr>"
+   ],
+   "settlement": "село Зуївці",
+   "street": "вул. Дружби",
+   "house": "9",
+   "expect": [
+    {
+     "id": "registry_2026-11-16T08:59_2026-11-16T15:59",
+     "start": "2026-11-16T08:59",
+     "end": "2026-11-16T15:59"
+    }
+   ]
+  },
+  {
+   "name": "live: street listed but not the house gives nothing (registry lists are incomplete)",
+   "rows": [
+    "<tr><td>16.11.2026 08:59:00</td><td>16.11.2026 15:59</td><td><b>с.Зуївці</b><br><b>вул.Дружби</b> (б. 1, 9, 15, 17, 26, 28),<br><b>вул.Зелена</b> (б. 2, 13, 23, 27),<br><b>вул.Молодіжна</b> (б. 28)<br></td><td>Аварійна перерва</td><tr>"
+   ],
+   "settlement": "село Зуївці",
+   "street": "вул. Дружби",
+   "house": "3",
+   "expect": []
+  },
+  {
+   "name": "live: a schedule mirror row naming the house gives nothing",
+   "rows": [
+    "<tr><td>16.11.2026 12:00:00</td><td>16.11.2026 15:00</td><td><b>м.Полтава</b><br><b>вул.Героїв ОУН</b> (б. 37а)<br></td><td>Застосування графіків обмеження споживачів (ГПВ 3-1)</td><tr>"
+   ],
+   "settlement": "місто Полтава",
+   "street": "вул. Героїв ОУН",
+   "house": "37а",
+   "expect": []
+  },
+  {
+   "name": "constructed: a row without an end gives nothing",
+   "rows": [
+    "<tr><td>16.11.2026 10:00:00</td><td></td><td><b>с.Нижні Млини</b><br><b>вул.Дем&#39;яна Бідного</b> (б. 4)<br><b>вул.Шевченка</b><br></td><td>Аварійна перерва</td><tr>"
+   ],
+   "settlement": "село Нижні Млини",
+   "street": "вул. Дем'яна Бідного",
+   "house": "4",
+   "expect": []
+  },
+  {
+   "name": "queue-only subscription (no street, no house): nothing",
+   "rows": [
+    "<tr><td>16.11.2026 09:25:00</td><td>16.11.2026 16:00</td><td><b>м.Полтава</b><br><b>вул.Олександра Бідного</b> (б. 1а)<br><br><b>м.Полтава</b><br>Полтава, вул. Української Повстанської  Армії, 35,<br><b>вул.Олександра Бідного</b> (б. 1, 1-1а, 1а, 5)<br></td><td>Планова перерва</td><tr>"
+   ],
+   "settlement": "місто Полтава",
+   "street": "",
+   "house": "",
+   "expect": []
   }
  ]
 }

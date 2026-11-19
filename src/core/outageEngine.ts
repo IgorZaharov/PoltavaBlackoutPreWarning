@@ -250,11 +250,14 @@ export function dayView(
   const slots = Array.from({ length: OutageConfig.SLOTS_PER_DAY }, (_, i) => {
     const s = plusMinutes(dayStart, i * OutageConfig.SLOT_MINUTES);
     const e = plusMinutes(s, OutageConfig.SLOT_MINUTES);
-    const planned = relevant.some((o) => isPlannedLike(o) && o.start < e && o.end > s);
+    // Repair works (POE «планові роботи», registry rows naming the house) are drawn like emergencies
+    // (owner, 2026-11-17); they still alert like planned outages (planAlerts uses the kinds, not the cells)
+    const planned = relevant.some((o) => o.kind === 'PLANNED' && o.start < e && o.end > s);
     return makeSlotState(
       planned,
-      relevant.some((o) => o.kind === 'EMERGENCY' && o.start < e && o.end > s),
-      !planned && switching.some((w) => w.start < e && w.end > s)
+      relevant.some((o) => o.kind !== 'PLANNED' && o.start < e && o.end > s),
+      // planned outages and repair works both hide a switching half-hour (spec section 3.5)
+      !relevant.some((o) => isPlannedLike(o) && o.start < e && o.end > s) && switching.some((w) => w.start < e && w.end > s)
     );
   });
 

@@ -1,0 +1,498 @@
+{
+ "_doc": "Golden cases for QueueCatalogue.lookup (spec/POE_API.md 8.11): the queues the hourly-schedule catalogue gives for one address, best first, one per queue. 'entries' is a reduced catalogue (rows of the PDF of 2026-10-08 or constructed). 'branches' empty = any branch.",
+ "entries": [
+  {
+   "q": "3.1",
+   "branch": "poltavska",
+   "row": 28,
+   "settlement": "Полтава",
+   "street": "Європейська",
+   "houses": [
+    "78",
+    "86",
+    "88"
+   ],
+   "ranges": [],
+   "whole": null
+  },
+  {
+   "q": "1.1",
+   "branch": "poltavska",
+   "row": 37,
+   "settlement": "Полтава",
+   "street": "Європейська",
+   "houses": [],
+   "ranges": [],
+   "whole": "street"
+  },
+  {
+   "q": "5.1",
+   "branch": "poltavska",
+   "row": 19,
+   "settlement": "Полтава",
+   "street": "Європейська",
+   "houses": [
+    "88б",
+    "28"
+   ],
+   "ranges": [],
+   "whole": null
+  },
+  {
+   "q": "5.1",
+   "branch": "poltavska",
+   "row": 39,
+   "settlement": "Полтава",
+   "street": "Юліана Матвійчука",
+   "houses": [
+    "47",
+    "49"
+   ],
+   "ranges": [],
+   "whole": null
+  },
+  {
+   "q": "1.1",
+   "branch": "poltavska",
+   "row": 46,
+   "settlement": "Полтава",
+   "street": "Матвійчука",
+   "houses": [
+    "44",
+    "49"
+   ],
+   "ranges": [],
+   "whole": null
+  },
+  {
+   "q": "2.1",
+   "branch": "pyriatynska",
+   "row": 10,
+   "settlement": "Пирятин",
+   "street": "Приудайський Узвіз",
+   "houses": [],
+   "ranges": [
+    [
+     1,
+     33
+    ],
+    [
+     2,
+     60
+    ]
+   ],
+   "whole": null
+  },
+  {
+   "q": "2.2",
+   "branch": "reshetylivska",
+   "row": 5,
+   "settlement": "Братешки",
+   "street": null,
+   "houses": [],
+   "ranges": [],
+   "whole": "settlement"
+  },
+  {
+   "q": "4.1",
+   "branch": "pyriatynska",
+   "row": 3,
+   "settlement": "Пирятин",
+   "street": "Європейська",
+   "houses": [
+    "88"
+   ],
+   "ranges": [],
+   "whole": null
+  },
+  {
+   "q": "6.1",
+   "branch": "poltavska",
+   "row": 50,
+   "settlement": "Полтава",
+   "street": "П.Дорошенка",
+   "houses": [
+    "15"
+   ],
+   "ranges": [],
+   "whole": null
+  },
+  {
+   "q": "1.2",
+   "branch": "poltavska",
+   "row": 11,
+   "settlement": "Полтава",
+   "street": "Дорошенка",
+   "houses": [
+    "15"
+   ],
+   "ranges": [],
+   "whole": null
+  },
+  {
+   "q": "5.1",
+   "branch": "poltavska-rem",
+   "row": 1,
+   "settlement": "Головач",
+   "street": "Кринична",
+   "houses": [],
+   "ranges": [],
+   "whole": "street"
+  },
+  {
+   "q": "5.1",
+   "branch": "poltavska-rem",
+   "row": 1,
+   "settlement": "Минівка",
+   "street": null,
+   "houses": [],
+   "ranges": [],
+   "whole": "settlement"
+  }
+ ],
+ "cases": [
+  {
+   "name": "Європейська 88: the house is listed in 3.1; the whole street in 1.1 comes after; 88б of 5.1 is another house",
+   "settlement": "місто Полтава",
+   "branches": [
+    "poltavska",
+    "poltavska-rem"
+   ],
+   "street": "вул. Європейська",
+   "house": "88",
+   "expect": [
+    {
+     "queue": "3.1",
+     "kind": "HOUSE",
+     "branch": "poltavska",
+     "row": 28,
+     "exact": true
+    },
+    {
+     "queue": "1.1",
+     "kind": "STREET",
+     "branch": "poltavska",
+     "row": 37,
+     "exact": true
+    }
+   ]
+  },
+  {
+   "name": "88б is its own house; the street type and a Latin-free key do not matter",
+   "settlement": "Полтава",
+   "branches": [],
+   "street": "Європейська",
+   "house": "88Б",
+   "expect": [
+    {
+     "queue": "5.1",
+     "kind": "HOUSE",
+     "branch": "poltavska",
+     "row": 19,
+     "exact": true
+    },
+    {
+     "queue": "1.1",
+     "kind": "STREET",
+     "branch": "poltavska",
+     "row": 37,
+     "exact": true
+    }
+   ]
+  },
+  {
+   "name": "several rows list the same house: the full street name first, then the last-word match",
+   "settlement": "місто Полтава",
+   "branches": [
+    "poltavska"
+   ],
+   "street": "вул. Юліана Матвійчука",
+   "house": "49",
+   "expect": [
+    {
+     "queue": "5.1",
+     "kind": "HOUSE",
+     "branch": "poltavska",
+     "row": 39,
+     "exact": true
+    },
+    {
+     "queue": "1.1",
+     "kind": "HOUSE",
+     "branch": "poltavska",
+     "row": 46,
+     "exact": false
+    }
+   ]
+  },
+  {
+   "name": "an initial in the PDF (П.Дорошенка) meets the full name; the bare surname of another row comes later",
+   "settlement": "місто Полтава",
+   "branches": [
+    "poltavska"
+   ],
+   "street": "вул. Петра Дорошенка",
+   "house": "15",
+   "expect": [
+    {
+     "queue": "1.2",
+     "kind": "HOUSE",
+     "branch": "poltavska",
+     "row": 11,
+     "exact": false
+    },
+    {
+     "queue": "6.1",
+     "kind": "HOUSE",
+     "branch": "poltavska",
+     "row": 50,
+     "exact": false
+    }
+   ]
+  },
+  {
+   "name": "a house range covers plain numbers only",
+   "settlement": "місто Пирятин",
+   "branches": [],
+   "street": "вул. Приудайський Узвіз",
+   "house": "14",
+   "expect": [
+    {
+     "queue": "2.1",
+     "kind": "RANGE",
+     "branch": "pyriatynska",
+     "row": 10,
+     "exact": true
+    }
+   ]
+  },
+  {
+   "name": "a lettered house is not inside a number range",
+   "settlement": "місто Пирятин",
+   "branches": [],
+   "street": "вул. Приудайський Узвіз",
+   "house": "14а",
+   "expect": []
+  },
+  {
+   "name": "a whole village",
+   "settlement": "село Братешки",
+   "branches": [
+    "reshetylivska"
+   ],
+   "street": "вул. Шевченка",
+   "house": "3",
+   "expect": [
+    {
+     "queue": "2.2",
+     "kind": "SETTLEMENT",
+     "branch": "reshetylivska",
+     "row": 5,
+     "exact": true
+    }
+   ]
+  },
+  {
+   "name": "the same street name in another settlement does not count",
+   "settlement": "місто Пирятин",
+   "branches": [],
+   "street": "вул. Європейська",
+   "house": "88",
+   "expect": [
+    {
+     "queue": "4.1",
+     "kind": "HOUSE",
+     "branch": "pyriatynska",
+     "row": 3,
+     "exact": true
+    }
+   ]
+  },
+  {
+   "name": "entries of other branches are skipped when the address's branches are known",
+   "settlement": "місто Пирятин",
+   "branches": [
+    "poltavska"
+   ],
+   "street": "вул. Європейська",
+   "house": "88",
+   "expect": []
+  },
+  {
+   "name": "no street and no house: nothing but a whole settlement can match",
+   "settlement": "місто Полтава",
+   "branches": [],
+   "street": "",
+   "house": "",
+   "expect": []
+  },
+  {
+   "name": "a whole village without a street (село Минівка: the picker has no street to offer)",
+   "settlement": "село Минівка",
+   "branches": [
+    "poltavska-rem"
+   ],
+   "street": "",
+   "house": "",
+   "expect": [
+    {
+     "queue": "5.1",
+     "kind": "SETTLEMENT",
+     "branch": "poltavska-rem",
+     "row": 1,
+     "exact": true
+    }
+   ]
+  },
+  {
+   "name": "a whole street without a house number (село Головач, вул. Кринична: POE lists no houses)",
+   "settlement": "село Головач",
+   "branches": [],
+   "street": "вул. Кринична",
+   "house": "",
+   "expect": [
+    {
+     "queue": "5.1",
+     "kind": "STREET",
+     "branch": "poltavska-rem",
+     "row": 1,
+     "exact": true
+    }
+   ]
+  },
+  {
+   "name": "a street without a house number matches the whole street only, never a listed house",
+   "settlement": "місто Полтава",
+   "branches": [
+    "poltavska"
+   ],
+   "street": "вул. Європейська",
+   "house": "",
+   "expect": [
+    {
+     "queue": "1.1",
+     "kind": "STREET",
+     "branch": "poltavska",
+     "row": 37,
+     "exact": true
+    }
+   ]
+  },
+  {
+   "name": "a whole village also covers a street of it given without a house",
+   "settlement": "село Братешки",
+   "branches": [],
+   "street": "вул. Шевченка",
+   "house": "",
+   "expect": [
+    {
+     "queue": "2.2",
+     "kind": "SETTLEMENT",
+     "branch": "reshetylivska",
+     "row": 5,
+     "exact": true
+    }
+   ]
+  }
+ ],
+ "confident": [
+  {
+   "name": "the best hint is the only one of its kind: a refresh may take it",
+   "hints": [
+    {
+     "queue": "3.1",
+     "kind": "HOUSE",
+     "branch": "poltavska",
+     "row": 28,
+     "exact": true
+    },
+    {
+     "queue": "1.1",
+     "kind": "STREET",
+     "branch": "poltavska",
+     "row": 37,
+     "exact": true
+    }
+   ],
+   "expect": "3.1"
+  },
+  {
+   "name": "one house in rows of two queues: a tie, the user chooses",
+   "hints": [
+    {
+     "queue": "2.2",
+     "kind": "HOUSE",
+     "branch": "poltavska",
+     "row": 4,
+     "exact": true
+    },
+    {
+     "queue": "5.1",
+     "kind": "HOUSE",
+     "branch": "poltavska",
+     "row": 19,
+     "exact": true
+    }
+   ],
+   "expect": null
+  },
+  {
+   "name": "same kind but an exact street name beats a last-word match",
+   "hints": [
+    {
+     "queue": "1.2",
+     "kind": "HOUSE",
+     "branch": "poltavska",
+     "row": 11,
+     "exact": true
+    },
+    {
+     "queue": "6.1",
+     "kind": "HOUSE",
+     "branch": "poltavska",
+     "row": 50,
+     "exact": false
+    }
+   ],
+   "expect": "1.2"
+  },
+  {
+   "name": "two last-word matches of the same kind: a tie",
+   "hints": [
+    {
+     "queue": "1.2",
+     "kind": "HOUSE",
+     "branch": "poltavska",
+     "row": 11,
+     "exact": false
+    },
+    {
+     "queue": "6.1",
+     "kind": "HOUSE",
+     "branch": "poltavska",
+     "row": 50,
+     "exact": false
+    }
+   ],
+   "expect": null
+  },
+  {
+   "name": "a whole village alone",
+   "hints": [
+    {
+     "queue": "5.1",
+     "kind": "SETTLEMENT",
+     "branch": "poltavska-rem",
+     "row": 1,
+     "exact": true
+    }
+   ],
+   "expect": "5.1"
+  },
+  {
+   "name": "no hints",
+   "hints": [],
+   "expect": null
+  }
+ ]
+}

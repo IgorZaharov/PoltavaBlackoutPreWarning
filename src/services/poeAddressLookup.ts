@@ -11,6 +11,21 @@ import type { SelectedAddressQuery } from '../types';
 import { PoeDirectoryIndex } from './poeDirectory';
 import { getPoeClient } from './poeScheduleSync';
 import type { PoeClient } from './poeClient';
+import type { QueueHint } from '../core/queueCatalogue';
+import { ensurePoeQueues, queuesFor, refreshQueuesIfDue } from './poeQueues';
+
+/** The directory the weekly CI job commits (.github/workflows/poe-data.yml); never a crawl from the browser. */
+export const DIRECTORY_URL = 'https://raw.githubusercontent.com/IgorZaharov/PoltavaBlackoutPreWarning/main/poe_directory.json';
+
+/** Outcome of «Оновити довідник повністю». */
+export type DirectoryUpdate = 'UPDATED' | 'UP_TO_DATE' | 'FAILED';
+
+/** One entry of the settlement picker: [label] names the branch when the settlement is outside the chosen one or its name repeats. */
+export interface SettlementChoice {
+  option: PoeSettlementOption;
+  label: string;
+  inBranch: boolean;
+}
 
 export const NO_QUEUE_TEXT =
   'Будинок не входить до жодної черги погодинних відключень (ГПВ). Аварійні та планові роботи за адресою відстежуються.';
@@ -45,6 +60,10 @@ export interface PoeHouseLookupResult {
   queue: string;
   statusText?: string | null;
   addressLabel: string;
+  /** POE gives no queue because the address has several connections (spec/POE_API.md 8.11): ask the user. */
+  severalConnections?: boolean;
+  /** The queues of POE's hourly-schedule catalogue for this address, best first. */
+  hints?: readonly QueueHint[];
 }
 
 interface BranchRow {
@@ -126,6 +145,38 @@ export function getSettlementsForRem(remId: string): PoeSettlementOption[] {
   return index.settlementsOf(branch.cabinetId).map(settlementOption);
 }
 
+/** Every settlement of the oblast, once each (ids are global), for the oblast-wide search (plan D4). */
+export function getAllSettlements(): PoeSettlementOption[] {
+  return index === null ? [] : index.settlements.map(settlementOption);
+}
+
+/**
+ * The settlement picker list (plan section 4.4, D4): the chosen branch's settlements first, then the
+ * rest of the oblast, each settlement once. Picking one outside the branch switches to its branch.
+ * Mirrors PoeAddressLookup.settlementChoices.
+ */
+export function settlementChoices(remId: string, lang: 'uk' | 'en'): SettlementChoice[] {
+  const all = getAllSettlements();
+  const counts = new Map<string, number>();
+  for (const s of all) counts.set(s.nameUk.trim().toLowerCase(), (counts.get(s.nameUk.trim().toLowerCase()) ?? 0) + 1);
+  const branchName = (slug: string | undefined) => {
+    const b = branchBySlug(slug);
+    return b ? (lang === 'uk' ? b.nameUk : b.nameEn) : undefined;
+  };
+  const own = getSettlementsForRem(remId);
+  const ownIds = new Set(own.map((s) => s.id));
+  const first = own.map((s) => ({
+    option: s,
+    label: (counts.get(s.nameUk.trim().toLowerCase()) ?? 0) > 1 ? `${s.nameUk} · ${branchName(remId)}` : s.nameUk,
+    inBranch: true,
+  }));
+  const rest = all
+    .filter((s) => !ownIds.has(s.id))
+    .sort((a, b) => (a.nameUk.toLowerCase() < b.nameUk.toLowerCase() ? -1 : a.nameUk.toLowerCase() > b.nameUk.toLowerCase() ? 1 : 0))
+    .map((s) => ({ option: s, label: [s.nameUk, branchName(s.branchIds[0])].filter(Boolean).join(' · '), inBranch: false }));
+  return [...first, ...rest];
+}
+
 export function findSettlementById(settlementId: string): PoeSettlementOption | undefined {
   const id = Number(settlementId);
   if (!Number.isFinite(id) || index === null) return undefined;
@@ -139,8 +190,9 @@ export function getStreetsForSettlement(settlementId: string): PoeStreetOption[]
   if (cached) return cached;
   const id = Number(settlementId);
   if (!Number.isFinite(id) || index === null) return [];
+  const idx = index;
   const groups = new Map<string, { id: number; name: string }[]>();
-  for (const s of index.streetsOf(id)) {
+  for (const s of idx.streetsOf(id)) {
     const key = StreetKey.of(s.name);
     const g = groups.get(key);
     if (g) g.push(s);
@@ -149,6 +201,8 @@ export function getStreetsForSettlement(settlementId: string): PoeStreetOption[]
   const merged = [...groups.values()]
     .map((g) => ({ id: String(g[0].id), settlementId, nameUk: g[0].name.trim(), allIds: g.map((s) => String(s.id)) }))
     .sort((a, b) => a.nameUk.toLowerCase().localeCompare(b.nameUk.toLowerCase(), 'uk'));
+  // never cache a list of an index that was replaced meanwhile (mirrors PoeAddressLookup.kt)
+  if (index !== idx) return merged;
   streetsBySettlement.set(settlementId, merged);
   for (const o of merged) for (const sid of o.allIds) streetById.set(sid, o);
   return merged;
@@ -163,6 +217,55 @@ export function findStreetById(streetId: string): PoeStreetOption | undefined {
   const settlement = index.settlements.find((s) => s.streets.some((st) => st.id === id));
   if (!settlement) return undefined;
   return getStreetsForSettlement(String(settlement.id)).find((o) => o.allIds.includes(streetId));
+}
+
+// -------------------------------------------------------------------------------------------------
+// "My address is missing" (plan section 4.4): one request to POE, or the latest directory file
+// -------------------------------------------------------------------------------------------------
+
+/** Asks POE for the settlements of one branch (E3) and adds the new ones. False when POE could not be asked. */
+export async function refreshSettlements(remId: string): Promise<boolean> {
+  const branch = branchBySlug(remId);
+  if (!branch || index === null) return false;
+  const r = await client().cities(branch.cabinetId);
+  if (r.kind !== 'ok' || index === null) return false;
+  usePoeDirectory(index.withBranchSettlements(branch.cabinetId, r.options.map((o) => [o.id, o.name.trim()] as const)));
+  return true;
+}
+
+/** Asks POE for the streets of one settlement (E3) and adds the new ones. False when POE could not be asked. */
+export async function refreshStreets(remId: string, settlementId: string): Promise<boolean> {
+  const cityId = Number(settlementId);
+  const branch = branchBySlug(remId) ?? branchBySlug(findSettlementById(settlementId)?.branchIds[0]);
+  if (!branch || !Number.isFinite(cityId) || index === null) return false;
+  const r = await client().streets(branch.cabinetId, cityId);
+  if (r.kind !== 'ok' || index === null) return false;
+  usePoeDirectory(index.withStreets(cityId, r.options.map((o) => [o.id, o.name] as const)));
+  return true;
+}
+
+/** Downloads the directory the weekly CI job publishes; only a newer crawl replaces the one in use. */
+export async function updateDirectory(fetchText: (url: string) => Promise<string | null> = defaultFetchText): Promise<DirectoryUpdate> {
+  const directory = await updateDirectoryFile(fetchText);
+  // the queue catalogue is published by the same CI: ask for its newer copy too, whatever the directory did
+  const catalogue = await refreshQueuesIfDue(true, Date.now(), fetchText).catch(() => 'FAILED');
+  return directory === 'UPDATED' || catalogue === 'UPDATED' ? 'UPDATED' : directory;
+}
+
+async function updateDirectoryFile(fetchText: (url: string) => Promise<string | null>): Promise<DirectoryUpdate> {
+  const text = await fetchText(DIRECTORY_URL).catch(() => null);
+  const fetched = text ? PoeDirectoryIndex.fromJson(text) : null;
+  if (fetched === null) return 'FAILED';
+  if (index !== null && fetched.crawledAt <= index.crawledAt) return 'UP_TO_DATE';
+  // a newer crawl keeps what was already known, so a saved address stays findable
+  usePoeDirectory(index !== null ? fetched.keeping(index) : fetched);
+  return 'UPDATED';
+}
+
+async function defaultFetchText(url: string): Promise<string | null> {
+  if (typeof fetch !== 'function') return null;
+  const r = await fetch(url, { cache: 'no-cache' });
+  return r.ok ? r.text() : null;
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -242,11 +345,16 @@ export async function checkAddress(
     const r = await client().addressStatus(cityId, sid, query.house, today);
     if (r.kind === 'confirmed') {
       const queue = r.status.queue ?? '';
+      const several = r.status.severalConnections;
+      if (several) await ensurePoeQueues().catch(() => null);
       const result: PoeHouseLookupResult = {
         house: query.house,
         queue,
-        statusText: queue === '' ? NO_QUEUE_TEXT : null,
+        // several connections: the queue is unknown, never "no queue" (spec/POE_API.md 8.11)
+        statusText: queue === '' && !several ? NO_QUEUE_TEXT : null,
         addressLabel: addressLabel(query),
+        severalConnections: several,
+        hints: several ? queuesFor(query) : [],
       };
       const list = getHousesForStreet(street?.id ?? query.streetId);
       const key = HouseKey.of(result.house);

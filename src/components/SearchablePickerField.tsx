@@ -16,6 +16,10 @@ import { ModalPortal } from './ModalPortal';
 export interface PickerItem {
   id: string;
   label: string;
+  /** The text the search matches when it differs from label (a company's name and the words people search for). */
+  search?: string;
+  /** Text searched only after every label match (a company's PDF row); a hit shows the piece that matched. */
+  context?: string;
 }
 
 interface SearchablePickerFieldProps {
@@ -33,6 +37,8 @@ interface SearchablePickerFieldProps {
   kind?: SearchKind;
   disabledHint?: string;
   testId?: string;
+  /** Caption in front of the matched piece of an item's context ("у рядку графіка:"). */
+  contextLabel?: string;
 }
 
 const ROW_HEIGHT = 52;
@@ -53,6 +59,7 @@ export const SearchablePickerField: React.FC<SearchablePickerFieldProps> = ({
   kind = 'TEXT',
   disabledHint,
   testId,
+  contextLabel,
 }) => {
   const t = translations[lang];
   const [open, setOpen] = useState(false);
@@ -103,6 +110,7 @@ export const SearchablePickerField: React.FC<SearchablePickerFieldProps> = ({
           loadFailed={loadFailed}
           onRetry={onRetry}
           kind={kind}
+          contextLabel={contextLabel}
           onDismiss={close}
           onSelect={(item) => {
             close();
@@ -124,20 +132,25 @@ interface PickerDialogProps {
   loadFailed: boolean;
   onRetry?: () => void;
   kind: SearchKind;
+  contextLabel?: string;
   onDismiss: () => void;
   onSelect: (item: PickerItem) => void;
 }
 
-const PickerDialog: React.FC<PickerDialogProps> = ({ title, items, selectedId, lang, loading, loadFailed, onRetry, kind, onDismiss, onSelect }) => {
+const PickerDialog: React.FC<PickerDialogProps> = ({ title, items, selectedId, lang, loading, loadFailed, onRetry, kind, contextLabel, onDismiss, onSelect }) => {
   const t = translations[lang];
   // duplicate ids would break keyed rendering, so the list is made unique once
   const unique = useMemo(() => {
     const seen = new Set<string>();
     return items.filter((it) => (seen.has(it.id) ? false : (seen.add(it.id), true)));
   }, [items]);
-  const index = useMemo(() => new PickerIndex(unique, kind, (it) => it.label), [unique, kind]);
+  const index = useMemo(
+    () => new PickerIndex(unique, kind, (it) => it.search ?? it.label, (it) => it.context),
+    [unique, kind]
+  );
   const [query, setQuery] = useState('');
-  const shown = useMemo(() => index.search(query), [index, query]);
+  const hits = useMemo(() => index.searchHits(query), [index, query]);
+  const shown = useMemo(() => hits.map((h) => h.item), [hits]);
 
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -294,7 +307,7 @@ const PickerDialog: React.FC<PickerDialogProps> = ({ title, items, selectedId, l
             data-testid="picker-list"
           >
             <div className="relative" style={{ height: shown.length * ROW_HEIGHT }}>
-              {shown.slice(first, last).map((item, k) => {
+              {hits.slice(first, last).map(({ item, snippet }, k) => {
                 const i = first + k;
                 const selected = item.id === selectedId;
                 return (
@@ -312,7 +325,16 @@ const PickerDialog: React.FC<PickerDialogProps> = ({ title, items, selectedId, l
                     } ${i === activeIdx ? 'outline-2 -outline-offset-2 outline-[#FF5E3A]' : ''}`}
                     style={{ top: i * ROW_HEIGHT, height: ROW_HEIGHT }}
                   >
-                    <span className="line-clamp-2 flex-1 pr-3">{item.label}</span>
+                    {snippet === null ? (
+                      <span className="line-clamp-2 flex-1 pr-3">{item.label}</span>
+                    ) : (
+                      <span className="flex min-w-0 flex-1 flex-col pr-3" data-testid="picker-snippet">
+                        <span className="truncate">{item.label}</span>
+                        <span className="truncate text-[13px] font-normal leading-[18px] text-[#BAE6FD]/80">
+                          {contextLabel ? `${contextLabel} ${snippet}` : snippet}
+                        </span>
+                      </span>
+                    )}
                     {selected && (
                       <>
                         <Check className="h-6 w-6 shrink-0 text-[#FF5E3A]" aria-hidden="true" />

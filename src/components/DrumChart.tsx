@@ -4,8 +4,9 @@
  *
  * Both read the same 48 BlackoutSlot cells (snapshot.slotsFor(date)), so the main timeline and the
  * widgets cannot disagree. Planned and repair outages are crimson, emergency outages are amber with
- * 45 degree stripes (a second cue besides colour), emergency over planned is crimson with amber stripes;
- * `unclearBase` paints cells without an outage grey (spec/UI_DRUM.md section 1).
+ * 45 degree stripes (a second cue besides colour), emergency over planned is crimson with amber stripes,
+ * POE's switching half-hour (power may still be off) is yellow over the whole cell; `unclearBase` paints
+ * cells without an outage grey (spec/UI_DRUM.md section 1). Classification mirrors DrumCells.kt.
  */
 import React, { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { BlackoutSlot } from '../types';
@@ -24,19 +25,23 @@ export const DRUM_COLORS = {
   on: ['#D8D6CC', '#FCFBF7', '#CCC9BE'],
   unclear: ['#7E8287', '#94989E', '#6E7277'],
   emergency: ['#FFB020', '#F28A1B', '#C96A0B'],
+  switching: ['#E3AE2E', '#F5C242', '#D9A62C'], // design-tokens.json drum.switchingGradient (POE gpv-s3)
   stripeDark: 'rgba(26,18,8,0.55)', // #1A1208 at 55 %
   stripeLight: 'rgba(255,176,32,0.85)', // #FFB020 at 85 %
   tick: '#1C1B18',
-  needle: '#0B0B0A',
-  needleHalo: 'rgba(255,255,255,0.85)',
+  // owner, 2026-11-17: the black needle was hard to see; bright yellow with a black outline on every drum
+  needle: '#FFE600',
+  needleOutline: '#000000',
 } as const;
 
 const vGradient = (c: readonly string[]): string => `linear-gradient(to bottom, ${c[0]}, ${c[1]}, ${c[2]})`;
 
-/** One half-hour cell reduced to what is drawn (planned: crimson, emergency: amber stripes, both: crimson + stripes). */
+/** One half-hour cell reduced to what is drawn (planned: crimson, emergency: amber stripes, both: crimson + stripes, switching: yellow cell). */
 export interface DrumCell {
   planned: boolean;
   emergency: boolean;
+  /** POE switching half-hour: never together with `planned`. */
+  switching: boolean;
 }
 
 /** 48 cells from `slots`: 48 half-hour slots, or 24 hourly slots (legacy, each used twice). Anything else: null (grey bar). */
@@ -47,15 +52,21 @@ export function drumCells(slots: readonly BlackoutSlot[]): DrumCell[] | null {
   else return null;
   return src.map((s) => {
     const off = s.status === 'POWER_OFF';
-    return { planned: off && (Boolean(s.isPlanned) || !s.isEmergency), emergency: off && Boolean(s.isEmergency) };
+    const planned = off && (Boolean(s.isPlanned) || !s.isEmergency);
+    return { planned, emergency: off && Boolean(s.isEmergency), switching: Boolean(s.isSwitching) && !planned };
   });
 }
 
-/** The 48 states the main drum and the widgets both draw: "0" on, "1" planned, "2" emergency, "3" both. */
+/**
+ * The 48 states the main drum and the widgets both draw: "0" on, "1" planned, "2" emergency, "3" both,
+ * "4" switching, "5" switching with an emergency (DrumCells.signature on Android).
+ */
 export function drumSignature(slots: readonly BlackoutSlot[]): string {
   const cells = drumCells(slots);
   if (cells === null) return 'UNCLEAR';
-  return cells.map((c) => (c.planned && c.emergency ? '3' : c.emergency ? '2' : c.planned ? '1' : '0')).join('');
+  return cells
+    .map((c) => (c.planned && c.emergency ? '3' : c.planned ? '1' : c.switching && c.emergency ? '5' : c.switching ? '4' : c.emergency ? '2' : '0'))
+    .join('');
 }
 
 /** Reduced-motion preference (decorative motion is skipped when set). */
@@ -82,6 +93,7 @@ export function usePrefersReducedMotion(): boolean {
 const HOUR_GAP = 1.5;
 const CELL_HEIGHT = 32;
 const TRACK_INSET = 8; // 6 slot padding + 2 slot border, like the Compose needle
+const NEEDLE_BELOW_SLOT = 7; // the needle runs past the slot wrapper to the bottom of the hour tick marks
 const STRIPE = 3; // 3 px stripe + 3 px gap, measured across the stripe
 
 const ALL_MARKERS = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24];
@@ -174,17 +186,30 @@ export const DrumChart: React.FC<DrumChartProps> = ({
                   ? vGradient(DRUM_COLORS.unclear)
                   : vGradient(DRUM_COLORS.on);
                 const style: React.CSSProperties = { left, width: w, top: 0, bottom: 0 };
+                // POE switching half-hour: the whole cell, plain yellow, no stripes (spec/UI_DRUM.md 1)
+                const layers: string[] = [];
+                const sizes: string[] = [];
+                const positions: string[] = [];
                 if (cell.emergency) {
                   // An emergency takes the bottom half only (spec/UI_DRUM.md 1): the top half keeps the planned
                   // state. The stripe layer is as wide as the whole drum and shifted by the cell offset, so the
                   // stripes of neighbouring emergency cells continue each other.
-                  style.backgroundImage = `${stripeBackground(false)}, ${vGradient(DRUM_COLORS.emergency)}, ${base}`;
-                  style.backgroundSize = `${width}px 50%, 100% 50%, 100% 100%`;
-                  style.backgroundPosition = `${-left}px 100%, 0 100%, 0 0`;
-                  style.backgroundRepeat = 'no-repeat, no-repeat, no-repeat';
-                } else {
-                  style.backgroundImage = base;
+                  layers.push(stripeBackground(false), vGradient(DRUM_COLORS.emergency));
+                  sizes.push(`${width}px 50%`, '100% 50%');
+                  positions.push(`${-left}px 100%`, '0 100%');
                 }
+                if (cell.switching) {
+                  layers.push(vGradient(DRUM_COLORS.switching));
+                  sizes.push('100% 100%');
+                  positions.push('0 0');
+                }
+                layers.push(base);
+                sizes.push('100% 100%');
+                positions.push('0 0');
+                style.backgroundImage = layers.join(', ');
+                style.backgroundSize = sizes.join(', ');
+                style.backgroundPosition = positions.join(', ');
+                style.backgroundRepeat = layers.map(() => 'no-repeat').join(', ');
                 return <div key={i} className="absolute" style={style} />;
               })}
             </div>
@@ -193,16 +218,17 @@ export const DrumChart: React.FC<DrumChartProps> = ({
 
         {showNeedle && (
           <>
+            {/* 2 px black outline; down past the wrapper to the bottom of the hour tick marks (2 px gap + 5 px marks) */}
             <div
               aria-hidden="true"
               data-testid="drum-needle"
-              className="absolute top-0 bottom-0 rounded-full pointer-events-none"
-              style={{ left: needleLeft - 2.25, width: 4.5, background: DRUM_COLORS.needleHalo }}
+              className="absolute top-0 rounded-full pointer-events-none"
+              style={{ left: needleLeft - 3.5, width: 7, bottom: -NEEDLE_BELOW_SLOT, background: DRUM_COLORS.needleOutline }}
             />
             <div
               aria-hidden="true"
-              className="absolute top-0 bottom-0 rounded-full pointer-events-none"
-              style={{ left: needleLeft - 1.5, width: 3, background: DRUM_COLORS.needle }}
+              className="absolute rounded-full pointer-events-none"
+              style={{ left: needleLeft - 1.5, width: 3, top: 2, bottom: 2 - NEEDLE_BELOW_SLOT, background: DRUM_COLORS.needle }}
             />
           </>
         )}
@@ -275,12 +301,20 @@ export const DrumBitmap: React.FC<DrumBitmapProps> = ({
   const fraction = Math.min(1, Math.max(0, (Math.min(23, Math.max(0, currentHour)) * 60 + Math.min(59, Math.max(0, currentMinute))) / 1440));
   const needleX = trackLeft + trackWidth * fraction;
   const needleTop = contourTop - 8;
-  const needleBottom = contourBottom + 8;
+  const needleBottom = height - 36; // just above the hour labels (baseline height - 16)
   const fontSize = 21 + (height - 132) * 0.1;
-  const labels: [number, string][] = [[0, '00'], [0.25, '06'], [0.5, '12'], [0.75, '18'], [1, '24']];
+  // every 3 hours: 00, 03, 06 ... 21, 24 (owner, 2026-11-17)
+  const labels: [number, string][] = [0, 3, 6, 9, 12, 15, 18, 21, 24].map((h) => [h / 24, String(h).padStart(2, '0')]);
 
   const stops = (id: string, c: readonly string[]) => (
-    <linearGradient id={`${uid}${id}`} x1="0" y1={id === 'amber' ? trackTop + (trackBottom - trackTop) / 2 : trackTop} x2="0" y2={trackBottom} gradientUnits="userSpaceOnUse">
+    <linearGradient
+      id={`${uid}${id}`}
+      x1="0"
+      y1={id === 'amber' ? trackTop + (trackBottom - trackTop) / 2 : trackTop}
+      x2="0"
+      y2={trackBottom}
+      gradientUnits="userSpaceOnUse"
+    >
       <stop offset="0" stopColor={c[0]} />
       <stop offset="0.5" stopColor={c[1]} />
       <stop offset="1" stopColor={c[2]} />
@@ -296,6 +330,10 @@ export const DrumBitmap: React.FC<DrumBitmapProps> = ({
       const right = idx % 2 === 0 ? hLeft + halfWidth : hLeft + hourWidth;
       const fillId = cell.planned ? 'off' : 'on';
       cellEls.push(<rect key={`c${idx}`} x={left} y={trackTop} width={right - left} height={trackH} fill={`url(#${uid}${fillId})`} />);
+      if (cell.switching) {
+        // POE switching half-hour: the whole cell yellow, no stripes (spec/UI_DRUM.md 1)
+        cellEls.push(<rect key={`w${idx}`} x={left} y={trackTop} width={right - left} height={trackH} fill={`url(#${uid}switching)`} />);
+      }
       if (cell.emergency) {
         // The bottom half only (spec/UI_DRUM.md 1): the top half keeps the planned state
         const mid = trackTop + trackH / 2;
@@ -341,6 +379,7 @@ export const DrumBitmap: React.FC<DrumBitmapProps> = ({
         {stops('off', DRUM_COLORS.off)}
         {stops('on', DRUM_COLORS.on)}
         {stops('amber', DRUM_COLORS.emergency)}
+        {stops('switching', DRUM_COLORS.switching)}
         {stops('grey', DRUM_COLORS.unclear)}
       </defs>
       {/* 1. Vintage enamel faceplate with #7A7768 border */}
@@ -368,10 +407,10 @@ export const DrumBitmap: React.FC<DrumBitmapProps> = ({
       ) : (
         cellEls
       )}
-      {/* 5. Black current-time needle with a light halo */}
-      <rect x={needleX - 4.5} y={needleTop} width={9} height={needleBottom - needleTop} rx={4.5} fill={DRUM_COLORS.needleHalo} />
+      {/* 5. Bright yellow current-time needle with a black outline (5 px of the 720 px bitmap = 2 dp), down to the labels */}
+      <rect x={needleX - 8} y={needleTop - 5} width={16} height={needleBottom - needleTop + 10} rx={8} fill={DRUM_COLORS.needleOutline} />
       <rect x={needleX - 3} y={needleTop} width={6} height={needleBottom - needleTop} rx={3} fill={DRUM_COLORS.needle} />
-      {/* 6. Stamped hour markers 00, 06, 12, 18, 24 */}
+      {/* 6. Stamped hour markers every 3 hours: 00, 03 ... 21, 24 */}
       {labels.map(([pos, text]) => (
         <text
           key={text}

@@ -179,6 +179,9 @@ class PoeClientTest {
         assertEquals(PoeMapper.RegistryKind.EMERGENCY, zuivtsi!!.kind)
         assertEquals(PoeMapper.Match.STREET, PoeMapper.registryMatch(zuivtsi.places, "село Зуївці", "вул. Дружби", "3"))
         assertTrue(PoeClient(FakeTransport { ok("oops") }).registry(19, today) is RegistryFetch.Unavailable)
+        // the raw rows are kept so the nearby outages card can store and parse them again
+        assertEquals(r.rows.size, r.raw.size)
+        assertEquals(r.rows, r.raw.mapNotNull { PoeMapper.parseRegistryRow(it) })
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -201,5 +204,75 @@ class PoeClientTest {
         assertEquals(23, index.branch(123)?.registryId)
         assertNull(PoeDirectoryIndex.fromJson("{}"))
         assertNull(PoeDirectoryIndex.fromJson("not json"))
+    }
+
+    private fun bundled(): PoeDirectoryIndex = PoeDirectoryIndex.fromJson(File(repoDir(), "poe_directory.json").readText(Charsets.UTF_8))!!
+
+    @Test
+    fun scopedRefreshAddsAndNeverRemovesAndSurvivesTheJsonRoundTrip() {
+        val index = bundled()
+        val before = index.streetsOf(11389L).size
+        // a new street of Полтава and a new settlement of the branch; known ones gain the branch
+        val merged = index
+            .withStreets(11389L, listOf(999_000_001L to "вул. Нова", index.streetsOf(11389L).first().let { it.id to it.name }))
+            .withBranchSettlements(102, listOf(999_000_002L to "село Нове", 11389L to "місто Полтава"))
+        assertEquals(before + 1, merged.streetsOf(11389L).size)
+        assertTrue(merged.streetsOf(11389L).any { it.name == "вул. Нова" })
+        assertEquals(listOf(102), merged.settlement(999_000_002L)!!.branchCabinetIds)
+        assertTrue(102 in merged.settlement(11389L)!!.branchCabinetIds)
+        assertEquals(index.settlements.size + 1, merged.settlements.size)
+        // unknown settlement: nothing changes
+        assertEquals(index.settlements.size, index.withStreets(1L, listOf(5L to "x")).settlements.size)
+        // a newer crawl that lost the new street and settlement keeps them from the older index
+        val kept = index.keeping(merged)
+        assertEquals(merged.streetsOf(11389L).size, kept.streetsOf(11389L).size)
+        assertEquals(listOf(102), kept.settlement(999_000_002L)!!.branchCabinetIds)
+        assertTrue(102 in kept.settlement(11389L)!!.branchCabinetIds)
+        assertEquals(index.crawledAt, kept.crawledAt)
+        val back = PoeDirectoryIndex.fromJson(merged.toJson())!!
+        assertEquals(merged.crawledAt, back.crawledAt)
+        assertEquals(merged.settlements, back.settlements)
+        assertEquals(merged.branches, back.branches)
+    }
+
+    @Test
+    fun settlementChoicesListTheBranchFirstThenTheWholeOblastOnce() {
+        PoeAddressLookup.useIndex(bundled())
+        try {
+            val choices = PoeAddressLookup.settlementChoices("poltavska", "uk")
+            val own = PoeAddressLookup.getSettlementsForRem("poltavska")
+            assertEquals(own.map { it.id }, choices.take(own.size).map { it.option.id })
+            assertTrue(choices.take(own.size).all { it.inBranch })
+            assertEquals(bundled().settlements.size, choices.size)
+            assertEquals(choices.size, choices.map { it.option.id }.toSet().size)
+            // Зуївці (Миргородська об'єднана філія) is outside the Poltava branch: named with its branch
+            val zuivtsi = choices.first { it.option.nameUk == "село Зуївці" }
+            assertTrue(!zuivtsi.inBranch)
+            assertTrue(zuivtsi.label, zuivtsi.label.startsWith("село Зуївці · "))
+            assertTrue(zuivtsi.option.branchIds.isNotEmpty())
+        } finally {
+            PoeAddressLookup.useIndex(null)
+        }
+    }
+
+    @Test
+    fun refreshStreetsAsksPoeOnceAndAFailureChangesNothing() {
+        val previous = PoeAddressLookup.client
+        PoeAddressLookup.useIndex(bundled())
+        try {
+            val t = FakeTransport { ok("[{\"instance_id\":999000003,\"instance_name\":\"вул. Свіжа\"}]") }
+            PoeAddressLookup.client = PoeClient(t)
+            assertTrue(PoeAddressLookup.refreshStreets("poltavska", "11389"))
+            assertEquals("street", t.calls.single().json.getString("operation_type"))
+            assertEquals("123", t.calls.single().json.getString("filial_id"))
+            assertTrue(PoeAddressLookup.getStreetsForSettlement("11389").any { it.nameUk == "вул. Свіжа" })
+            PoeAddressLookup.client = PoeClient(FakeTransport { PoeHttpResult.Failed("network") })
+            val size = PoeAddressLookup.getStreetsForSettlement("11389").size
+            assertTrue(!PoeAddressLookup.refreshStreets("poltavska", "11389"))
+            assertEquals(size, PoeAddressLookup.getStreetsForSettlement("11389").size)
+        } finally {
+            PoeAddressLookup.client = previous
+            PoeAddressLookup.useIndex(null)
+        }
     }
 }

@@ -31,6 +31,7 @@ import {
 import { HouseKey, StreetKey, TextNorm } from '../src/core/addressKeys';
 import { EmergencyFetch, eventKey, reconcile, type LedgerEntry } from '../src/core/emergencyLedger';
 import { PoeMapper, type Place } from '../src/core/poeMapper';
+import { QueueCatalogue, type CatalogueEntry } from '../src/core/queueCatalogue';
 import { PoeSchedule } from '../src/core/poeSchedule';
 import { FETCH_FAILURES, SITE_STATES, SiteStateResolver, type FetchFailure, type SiteState } from '../src/core/siteState';
 import { extractSiteNotice } from '../src/core/siteNotice';
@@ -301,7 +302,7 @@ function poeApiVectors(): number {
   const v: Json = load('poe_api.json');
   const counts: [string, number][] = [
     ['times', 10], ['eta', 7], ['plannedList', 5], ['queue', 8],
-    ['addressStatus', 11], ['registryReason', 6], ['registryRows', 6], ['registryMatch', 9],
+    ['addressStatus', 12], ['registryReason', 6], ['registryRows', 6], ['registryMatch', 9], ['nearby', 6], ['registryRepairs', 6],
   ];
   for (const [key, min] of counts) assert.ok((v[key] as Json[]).length >= min, `poe_api.json: ${key} must hold at least ${min} cases`);
   let checks = 0;
@@ -330,6 +331,7 @@ function poeApiVectors(): number {
     assert.equal(st.queue, e.queue, `${name}: queue`);
     assert.equal(st.unparsed, e.unparsed, `${name}: unparsed`);
     assert.equal(st.scheduleMirror, e.scheduleMirror, `${name}: scheduleMirror`);
+    assert.equal(st.severalConnections, e.severalConnections, `${name}: severalConnections`);
     if (e.emergency === null) assert.equal(st.emergency, null, `${name}: emergency`);
     else {
       assert.ok(st.emergency !== null, `${name}: emergency expected`);
@@ -376,6 +378,29 @@ function poeApiVectors(): number {
     assert.equal(PoeMapper.registryMatch(row!.places, c.settlement, c.street, c.house), c.out, `registryMatch: ${c.name}`);
     checks++;
   }
+  for (const c of v.nearby as Json[]) {
+    const rows = (c.rows as string[]).map((r) => PoeMapper.parseRegistryRow(r)!);
+    assert.ok(rows.every((r) => r !== null), `${c.name}: rows`);
+    const got = PoeMapper.nearbyOutages(rows, c.settlement, c.street, c.house, parseLocalDateTime(c.now)).map((n) => ({
+      id: n.id,
+      kind: n.kind,
+      start: formatLocalDateTime(n.start),
+      end: dtStr(n.end),
+      reason: n.reason,
+      status: n.status,
+      streets: n.streets,
+      match: n.match,
+    }));
+    assert.deepEqual(got, c.expect, `nearby: ${c.name}`);
+    checks++;
+  }  for (const c of v.registryRepairs as Json[]) {
+    const rows = (c.rows as string[]).map((r) => PoeMapper.parseRegistryRow(r)!);
+    const got = PoeMapper.registryRepairs(rows, c.settlement, c.street, c.house);
+    assert.ok(got.every((o) => o.kind === 'REPAIR'), `registryRepairs: ${c.name}: kind`);
+    assert.deepEqual(got.map((o) => ({ id: o.id, start: formatLocalDateTime(o.start), end: formatLocalDateTime(o.end) })), c.expect, `registryRepairs: ${c.name}`);
+    checks++;
+  }
+
   return checks;
 }
 
@@ -613,6 +638,9 @@ function subscriptionVectors(): number {
         case 'rename': result = Sub.rename(store, s.id, s.label); break;
         case 'move': result = Sub.move(store, s.id, s.toIndex); break;
         case 'setQueueInfo': result = Sub.setQueueInfo(store, s.id, optStr(s, 'queue'), optStr(s, 'statusText'), optStr(s, 'addressText')); break;
+        case 'setAddress':
+          result = Sub.setAddress(store, s.id, Sub.itemFromMap({ id: 'addr0000', address: s.address }).address!, optStr(s, 'queue'), optStr(s, 'statusText'));
+          break;
         default: throw new Error(`unknown op in ${label}`);
       }
       const expectError = optStr(s, 'expectError');
@@ -739,6 +767,9 @@ function subscriptionVectors(): number {
       n++;
     }
   }
+  for (const c of v.widget.widgetStackIds) {
+    assert.deepStrictEqual(Sub.widgetStackIds(storeOf(c.store), c.boundId), c.expect, c.name);
+  }
   for (const c of v.widget.widgetItemIds) {
     assert.deepStrictEqual(Sub.widgetItemIds(storeOf(c.store), c.boundIds), c.expect, c.name);
     n++;
@@ -785,6 +816,37 @@ function coreSourceGate(): number {
 
 // -------------------------------------------------------------------------------------------------
 
+// -------------------------------------------------------------------------------------------------
+// queue_catalogue.json (spec/POE_API.md 8.11)
+// -------------------------------------------------------------------------------------------------
+
+function queueCatalogueVectors(): number {
+  const v = load('queue_catalogue.json');
+  const entries: CatalogueEntry[] = (v.entries as Json[]).map((e) => ({
+    queue: e.q,
+    branch: e.branch,
+    row: e.row,
+    settlement: e.settlement,
+    street: e.street,
+    houses: e.houses,
+    ranges: (e.ranges as [number, number][]).map(([a, b]) => [a, b] as const),
+    whole: e.whole,
+  }));
+  let checks = 0;
+  for (const c of v.cases as Json[]) {
+    const got = QueueCatalogue.lookup(entries, c.settlement, c.branches, c.street, c.house);
+    assert.deepEqual(got, c.expect, `queue_catalogue: ${c.name}`);
+    checks++;
+  }
+  assert.equal(checks, 14, 'queue_catalogue.json case count');
+  for (const c of v.confident as Json[]) {
+    assert.equal(QueueCatalogue.confident(c.hints), c.expect, `queue_catalogue confident: ${c.name}`);
+    checks++;
+  }
+  assert.equal(checks, 20, 'queue_catalogue.json case count with confident');
+  return checks;
+}
+
 const suites: [string, () => number][] = [
   ['outage_engine.json', outageEngineVectors],
   ['emergency_ledger.json', emergencyLedgerVectors],
@@ -795,6 +857,7 @@ const suites: [string, () => number][] = [
   ['site_state.json', siteStateVectors],
   ['site_notice.json', siteNoticeVectors],
   ['subscriptions.json', subscriptionVectors],
+  ['queue_catalogue.json', queueCatalogueVectors],
   ['src/core purity gate', coreSourceGate],
 ];
 

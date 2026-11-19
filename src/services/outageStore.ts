@@ -40,6 +40,14 @@ const reqStr = (v: unknown): string => {
 };
 const optStr = (v: unknown): string | null => (typeof v === 'string' && v.length > 0 ? v : null);
 
+/** Raw rows (`out_text`) of one branch registry (E5) for one day, for the nearby outages card. */
+export interface RegistryCache {
+  readonly date: string;
+  readonly rows: string[];
+  readonly fetchedMs: number;
+  readonly lastOk: boolean;
+}
+
 export class OutageStateStore {
   private readonly prefs: JsonPrefs;
 
@@ -111,7 +119,24 @@ export class OutageStateStore {
   // --- planned repair works from PowerOn (per address) -----------------------------------------
 
   repairs(addressKey: string): Outage[] {
-    return this.readArray(`repair_${addressKey}`, (o) =>
+    return this.readOutages(`repair_${addressKey}`);
+  }
+
+  saveRepairs(addressKey: string, outages: readonly Outage[]): void {
+    this.writeOutages(`repair_${addressKey}`, outages);
+  }
+
+  /** Registry rows (E5) naming the house, as REPAIR outages (PoeMapper.registryRepairs), per address. */
+  registryRepairs(addressKey: string): Outage[] {
+    return this.readOutages(`regrepair_${addressKey}`);
+  }
+
+  saveRegistryRepairs(addressKey: string, outages: readonly Outage[]): void {
+    this.writeOutages(`regrepair_${addressKey}`, outages);
+  }
+
+  private readOutages(key: string): Outage[] {
+    return this.readArray(key, (o) =>
       makeOutage({
         id: reqStr(o.id),
         kind: 'REPAIR',
@@ -122,8 +147,7 @@ export class OutageStateStore {
     );
   }
 
-  saveRepairs(addressKey: string, outages: readonly Outage[]): void {
-    const key = `repair_${addressKey}`;
+  private writeOutages(key: string, outages: readonly Outage[]): void {
     if (outages.length === 0) {
       this.prefs.edit({ [key]: undefined });
       return;
@@ -202,6 +226,63 @@ export class OutageStateStore {
       [`poweron_checked_ms_${addressKey}`]: nowMs,
       ...(ok ? { [`poweron_last_ok_ms_${addressKey}`]: nowMs } : {}),
     });
+  }
+
+  // --- POE extras: measures (E2), the info line of a house (E4 gav_message), branch registry (E5)
+
+  /** Today's active measures as notice lines (ГАВ, ГОП ...), or null; a failed fetch keeps the last answer. */
+  measures(today: string): string | null {
+    const text = this.prefs.getString('poe_measures');
+    return text && text.trim() && this.prefs.getString('poe_measures_date') === today ? text : null;
+  }
+
+  saveMeasures(date: string, text: string | null): void {
+    this.prefs.edit({ poe_measures_date: date, poe_measures: text && text.trim() ? text : undefined });
+  }
+
+  /** POE's info line of one house (`gav_message`: feeder and the schedules it belongs to). */
+  gavMessage(addressKey: string): string | null {
+    const text = this.prefs.getString(`gav_${addressKey}`);
+    return text && text.trim() ? text : null;
+  }
+
+  saveGavMessage(addressKey: string, text: string | null): void {
+    this.prefs.edit({ [`gav_${addressKey}`]: text && text.trim() ? text : undefined });
+  }
+
+  registry(registryId: number): RegistryCache | null {
+    const raw = this.prefs.getString(`registry_${registryId}`);
+    if (raw === null) return null;
+    try {
+      const o = JSON.parse(raw) as Record<string, unknown>;
+      if (typeof o.date !== 'string' || !Array.isArray(o.rows)) return null;
+      return {
+        date: o.date,
+        rows: o.rows.filter((r): r is string => typeof r === 'string'),
+        fetchedMs: typeof o.fetchedMs === 'number' ? o.fetchedMs : 0,
+        lastOk: typeof o.lastOk === 'boolean' ? o.lastOk : true,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /** `date|fetchedMs|lastOk` of a stored registry, read without parsing its rows (the main view asks every second). */
+  registryMeta(registryId: number): string | null {
+    return this.prefs.getString(`registry_meta_${registryId}`);
+  }
+
+  /** A confirmed answer replaces the rows; a failure keeps them and only marks the last attempt. */
+  saveRegistry(registryId: number, date: string, rows: string[] | null, nowMs: number): void {
+    const key = `registry_${registryId}`;
+    const meta = `registry_meta_${registryId}`;
+    if (rows !== null) {
+      this.prefs.edit({ [key]: JSON.stringify({ date, rows, fetchedMs: nowMs, lastOk: true }), [meta]: `${date}|${nowMs}|true` });
+      return;
+    }
+    const prev = this.registry(registryId);
+    if (prev === null) return;
+    this.prefs.edit({ [key]: JSON.stringify({ ...prev, lastOk: false }), [meta]: `${prev.date}|${prev.fetchedMs}|false` });
   }
 
   /** Forgets everything (used by "reset to defaults"). */

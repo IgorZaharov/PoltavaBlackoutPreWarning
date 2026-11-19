@@ -2,11 +2,11 @@
 
 The 48-cell "drum" (an analog electricity-meter dial) that shows one day, the list of outages under it, and how both are fed by `DayView`. Reference rendering: `android/app/src/main/java/ua/blackout/prewarning/ui/components/TimelineBar.kt` (Compose) and `widget/BlackoutGlanceWidget.kt` (`renderAnalogCounterBitmap`, same colours). Values flow from `spec/design-tokens.json` (`drum`). Layout is in dp (Android) or pt (iOS); colours are `#RRGGBB` or `#AARRGGBB`.
 
-Status of this document: the planned/on/unclear cells, the needle and the ticks describe the code as it is. The emergency stripes and the new list-row rules come from the approved 1.4.0 design (plan section 3.3); `TimelineBar.kt` does not draw them yet.
+Status of this document: describes the code as it is. Since P4 of the Poltava port both the main drum (`TimelineBar.kt`, `DrumChart.tsx`) and the widget bitmap draw their cells from one classification (`ui/components/DrumCells.kt`, `drumCells` in `DrumChart.tsx`), whose 48-character signature (`0` on, `1` planned, `2` emergency, `3` both, `4` switching, `5` switching with an emergency) the parity tests compare. The screen-reader sentence names the switching half-hours too ("перемикання: 19:00 – 19:30").
 
 ## 1. Cell states
 
-Input per cell: `SlotState(planned, emergency, switching)` from `dayView` (`planned` is true for `PLANNED` and `REPAIR`; `switching` only for POE tables, `OUTAGE_ENGINE.md` section 3.5, and never together with `planned`). Mapping:
+Input per cell: `SlotState(planned, emergency, switching)` from `dayView` (`planned` is true for `PLANNED` only, `emergency` for `EMERGENCY` and `REPAIR`: repair works are drawn with the amber stripes, owner 2026-11-17; `switching` only for POE tables, `OUTAGE_ENGINE.md` section 3.5, and never together with `planned`). Mapping:
 
 | `planned` | `emergency` | State | Look |
 |---|---|---|---|
@@ -14,7 +14,7 @@ Input per cell: `SlotState(planned, emergency, switching)` from `dayView` (`plan
 | true | false | off, planned | crimson vertical gradient `#9E1E18` -> `#D62E26` -> `#8C1914` |
 | false | true | emergency | top half: on (or the unclear grey); bottom half: amber vertical gradient `#FFB020` -> `#F28A1B` -> `#C96A0B` with dark stripes |
 | true | true | both | top half: the planned crimson; bottom half: amber with dark stripes, as above |
-| switching (`planned` false) | false | may be off | top half: POE yellow vertical gradient `#E3AE2E` -> `#F5C242` -> `#D9A62C` (token `drum.switchingGradient`, POE's own `gpv-s3` colour), no stripes; bottom half: on |
+| switching (`planned` false) | false | may be off | the whole cell: POE yellow vertical gradient `#E3AE2E` -> `#F5C242` -> `#D9A62C` (token `drum.switchingGradient`, POE's own `gpv-s3` colour), no stripes (owner, 2026-11-16: full height, not half) |
 | switching (`planned` false) | true | may be off + emergency | top half: the switching yellow; bottom half: amber with dark stripes |
 
 An emergency takes only the **bottom half** of its cells, so the planned state behind it (a scheduled outage or power on) stays readable in the top half (owner request after 1.4.0; before, the emergency filled the whole cell and hid the schedule).
@@ -32,7 +32,7 @@ An emergency takes only the **bottom half** of its cells, so the planned state b
 
 Implementation note (not in the plan): anchor the stripe phase to the drum, not to each cell, so adjacent emergency cells form continuous stripes.
 
-**Unclear day** (Tomorrow before ztoe publishes, or Today with no valid cache): all 48 cells use the grey style; PowerOn outages already known for that day (emergency, repair) are still drawn on top with their normal states (`REPAIR` as planned crimson, emergency as amber stripes). The explanation lives in a glass notice card under the tabs (`SITE_STATE.md` section 7), not inside the bar. Legacy behaviour of `TimelineBar.kt`: when the slot list is empty the whole bar becomes one grey block 32 dp high with the centred label `outagesUnclear` (`Графіки не діють` / `Outages unclear`, 12 sp, ExtraBold, white).
+**Unclear day** (Tomorrow before ztoe publishes, or Today with no valid cache): all 48 cells use the grey style; PowerOn outages already known for that day (emergency, repair) are still drawn on top with their normal states (`REPAIR` and emergency both as amber stripes). The explanation lives in a glass notice card under the tabs (`SITE_STATE.md` section 7), not inside the bar. Legacy behaviour of `TimelineBar.kt`: when the slot list is empty the whole bar becomes one grey block 32 dp high with the centred label `outagesUnclear` (`Графіки не діють` / `Outages unclear`, 12 sp, ExtraBold, white).
 
 ## 2. Geometry and chrome (as in `TimelineBar.kt`)
 
@@ -52,13 +52,15 @@ Implementation note (not in the plan): anchor the stripe phase to the drum, not 
 
 Ticks: 13 markers for the hours `00, 02, 04, ... 22, 24` laid out with space-between and 2 horizontal padding. Each marker is a 1.5 x 5 bar `#1C1B18` above a label of two digits (`String.format("%02d")`), monospace, bold, `#1C1B18`, 1 top padding. Code size is 10 sp; the 1.4.0 type scale (`design-tokens.json`) raises the floor to 12 sp (role `overline`) and the plan thins the labels to every 4 hours when the font scale is above 1.3.
 
+Widget drums (Android bitmap, web `DrumBitmap`, iOS `WidgetViews.swift`): labels every 3 hours, `00, 03, 06 ... 21, 24` (owner, 2026-11-17; before: every 6 hours), `00` flush with the left end of the track, `24` with the right end, the others centred on their hour.
+
 Needle (**Today only**, never on Tomorrow):
 
 | Property | Value |
 |---|---|
 | Position | `fraction = (hour*60 + minute) / 1440` (hour clamped 0..23, minute 0..59; seconds ignored); `x = 6 + (width - 12) * fraction` (6 = slot padding on each side) |
-| Body | 3 wide, rounded, `#0B0B0A`, full wrapper height (protrudes 4 above and below the slot) |
-| Halo | 4.5 wide, rounded, `#D9FFFFFF`, drawn first, behind the body |
+| Body | 3 wide, rounded, bright yellow `#FFE600`; from the top of the wrapper (4 above the slot) down to the bottom of the hour tick marks under the slot, less the outline |
+| Outline | 2 all round, black `#000000`: a rounded 7 wide bar, drawn first, behind the body (owner, 2026-11-17: the black needle with a light halo was hard to see; the outline 2 and the needle reaching the hour marks asked the same day). The same on the widget drums, where the needle runs down to the top of the hour labels (the 720 px widget bitmap uses a 5 px outline, about 2 dp); a tinted iOS widget keeps a plain white needle |
 | Refresh | when the minute changes |
 
 ## 4. From `DayView` to the screen
@@ -95,7 +97,7 @@ Leading slot: a fixed 20 x 20 box so the text of all rows starts at the same x.
 
 ## 6. Colour usage summary
 
-- Off (planned or repair): crimson. Emergency: amber with stripes. Both: crimson with amber stripes. Switching (POE, may be off): plain yellow in the top half. On: ivory. Unknown: grey.
+- Off (planned or repair): crimson. Emergency: amber with stripes. Both: crimson with amber stripes. Switching (POE, may be off): plain yellow, the whole cell. On: ivory. Unknown: grey.
 - The status dot of the hero is separate: on `#34D399`, off `#FF5E3A`, unclear `#9CA3AF`.
 
 ## Vectors

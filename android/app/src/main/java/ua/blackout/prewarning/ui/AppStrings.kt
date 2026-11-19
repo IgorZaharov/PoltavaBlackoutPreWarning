@@ -30,6 +30,18 @@ object AppStrings {
     fun blackoutHoursForDayHeader(lang: String) = if (lang == "uk") "Години відключень на сьогодні:" else "Blackout hours for today:"
     fun blackoutHoursForTomorrowHeader(lang: String) = if (lang == "uk") "Години відключень на завтра:" else "Blackout hours for tomorrow:"
     fun selectQueueAction(lang: String) = if (lang == "uk") "Виберіть чергу" else "Select queue"
+    /** Tip above the first-launch button, with an animated arrow pointing at it (owner, 2026-11-17). */
+    fun firstStartTip(lang: String) = if (lang == "uk") "Спробуйте вибрати будь-яку адресу або чергу" else "Try selecting any address or queue"
+    // First-run tour (spec/ONBOARDING.md, owner 2026-11-17)
+    fun tourPick(lang: String) = if (lang == "uk") "Тепер виберіть населений пункт, вулицю та будинок" else "Now choose your settlement, street and house"
+    fun tourApply(lang: String) = if (lang == "uk") "Натисніть, щоб обрати чергу" else "Tap to choose the queue"
+    fun tourRename(lang: String) = if (lang == "uk") "Перейменуйте адресу для зручності: «Дім», «Робота»" else "Rename the address for convenience: “Home”, “Work”"
+    fun tourAlerts(lang: String) = if (lang == "uk") "Оберіть, про які відключення сповіщати для цієї адреси: планові чи аварійні" else "Choose which outages to be notified about for this address: planned or emergency"
+    fun tourNext(lang: String) = if (lang == "uk") "Далі" else "Next"
+    fun tourBack(lang: String) = if (lang == "uk") "Поверніться на головний екран" else "Go back to the main screen"
+    fun tourDonate(lang: String) = if (lang == "uk") "Або допоможіть волонтерам, якщо хочете задонатити" else "Or help volunteers if you want to donate"
+    fun tourSkip(lang: String) = if (lang == "uk") "Пропустити підказки" else "Skip tips"
+    fun tourGotIt(lang: String) = if (lang == "uk") "Зрозуміло" else "Got it"
     fun emergencyOutageTitle(lang: String) = if (lang == "uk") "Аварійне відключення!" else "Emergency outage!"
     fun emergencyStartLabel(lang: String) = if (lang == "uk") "Початок:" else "Start:"
     fun emergencyRestoreLabel(lang: String) = if (lang == "uk") "Орієнтовне відновлення:" else "Estimated restoration:"
@@ -43,7 +55,7 @@ object AppStrings {
     fun emergencyOutagesLabel(lang: String) = if (lang == "uk") "Інформація про аварійні відключення:" else "Emergency outages info:"
     const val EMERGENCY_OUTAGES_URL = "https://www.facebook.com/atpoltavaoblenergo"
     fun siteSchedulesLabel(lang: String) = "Графіки відключень на сайті"
-    const val SITE_SCHEDULES_URL = "https://www.ztoe.com.ua/unhooking-search.php"
+    const val SITE_SCHEDULES_URL = "https://www.poe.pl.ua/disconnection/power-outages/"
 
     // Settings Screen Texts
     fun settingsTitle(lang: String) = if (lang == "uk") "Налаштування" else "Settings"
@@ -79,16 +91,16 @@ object AppStrings {
     fun queueHelpManualSearchTitle(lang: String) = if (lang == "uk") "Пошук вручну" else "Manual search"
     fun queueHelpSteps(lang: String): List<String> = if (lang == "uk") {
         listOf(
-            "1. Відкрийте сторінку пошуку черги на сайті https://www.ztoe.com.ua/unhooking-search.php",
-            "2. Оберіть свій РЕМ, населений пункт і вулицю.",
-            "3. У таблиці знайдіть свій будинок і подивіться стовпці «Черга» і «Підчерга». Наприклад, черга 5 і підчерга 2 - це 5.2.",
+            "1. Відкрийте сторінку «Пошук відключення за адресою» на сайті https://www.poe.pl.ua/disconnection/poshuk-vidkliuchennia-za-osobovym-rakhunkom/",
+            "2. Оберіть свою філію або дільницю, населений пункт, вулицю й будинок і натисніть «Знайти».",
+            "3. У відповіді знайдіть запис «ГПВ (черга …)». Наприклад, «ГПВ (черга 5-2)» - це черга 5.2.",
             "4. Виберіть це значення у полі «Черга» у вікні налаштувань (кнопка ⚙)."
         )
     } else {
         listOf(
-            "1. Open the queue lookup page on https://www.ztoe.com.ua/unhooking-search.php",
-            "2. Select your distribution district (РЕМ), settlement, and street.",
-            "3. In the table, find your building and check the «Queue» and «Subqueue» columns. For example, queue 5 and subqueue 2 is 5.2.",
+            "1. Open the «Пошук відключення за адресою» (search by address) page on https://www.poe.pl.ua/disconnection/poshuk-vidkliuchennia-za-osobovym-rakhunkom/",
+            "2. Select your branch or district, settlement, street and building, then press «Знайти» (Find).",
+            "3. In the answer, find the entry «ГПВ (черга …)». For example, «ГПВ (черга 5-2)» is queue 5.2.",
             "4. Select this value in the «Queue» field in the Settings window (⚙ button)."
         )
     }
@@ -100,9 +112,9 @@ object AppStrings {
 
     // About Screen Texts
     fun aboutTitle(lang: String) = "Світло в Полтаві"
-    fun aboutSubtitle(lang: String) = if (lang == "uk") "Завчасне інформування про відключення світла в Житомирі та області" else "Advance blackout alerts for Zhytomyr and region"
+    fun aboutSubtitle(lang: String) = if (lang == "uk") "Завчасне інформування про відключення світла в Полтаві та області" else "Advance blackout alerts for Poltava and region"
     fun aboutDescTitle(lang: String) = if (lang == "uk") "ОПИС ЗАСТОСУНКУ" else "APP DESCRIPTION"
-    fun aboutDescText(lang: String) = if (lang == "uk") "Автоматичний моніторинг графіків відключень електроенергії з офіційного сайту АТ «Житомиробленерго» (ztoe.com.ua). Застосунок своєчасно попереджає про початок відключення за вибраний інтервал часу та об'єднує послідовні години без світла в одне сповіщення." else "Automatic monitoring of blackout schedules from ztoe.com.ua. Alerts in advance before outages and merges consecutive slots into single notification."
+    fun aboutDescText(lang: String) = if (lang == "uk") "Автоматичний моніторинг графіків погодинних відключень електроенергії з офіційного сайту АТ «Полтаваобленерго» (poe.pl.ua). Застосунок своєчасно попереджає про початок відключення за вибраний інтервал часу, об'єднує послідовні години без світла в одне сповіщення та стежить за аварійними відключеннями за вашою адресою." else "Automatic monitoring of hourly blackout schedules from poe.pl.ua. Alerts in advance before outages, merges consecutive slots into a single notification and watches emergency outages at your address."
     fun aboutDesktopNotice(lang: String) = if (lang == "uk") "Застосунок є офіційною Android-версією проєкту UA Blackout Pre-Warning для ПК, оптимізований для автономної роботи у фоні з мінімальним споживанням батареї." else "Official Android version of the desktop UA Blackout Pre-Warning project, optimized for background operation with minimal battery drain."
     fun aboutLinksTitle(lang: String) = if (lang == "uk") "ПОСИЛАННЯ ТА РОЗРОБКА" else "LINKS & DEVELOPMENT"
     fun aboutDonationsTitle(lang: String) = "Charity / Благодійність і Пожертви"
@@ -110,19 +122,19 @@ object AppStrings {
     fun repoIssues(lang: String) = if (lang == "uk") "Повідомити про проблему (Issues)" else "Report an issue (Issues)"
     fun desktopApp(lang: String) = "Світло в Полтаві на Github"
     const val ABOUT_GITHUB_README_URL = "https://github.com/IgorZaharov/PoltavaBlackoutPreWarning/blob/main/README.md"
-    fun disclaimerText(lang: String) = if (lang == "uk") "Дані про графіки завантажуються безпосередньо з сайту ztoe.com.ua. Застосунок не є офіційним сервісом АТ «Житомиробленерго» та не несе відповідальності за раптові зміни або аварійні відключення з боку НЕК «Укренерго»." else "Data loaded directly from ztoe.com.ua. App is not an official service of JSC Zhytomyroblenergo and is not responsible for sudden emergency cuts."
+    fun disclaimerText(lang: String) = if (lang == "uk") "Дані про графіки та відключення завантажуються безпосередньо з сайту poe.pl.ua. Застосунок не є офіційним сервісом АТ «Полтаваобленерго» та не несе відповідальності за раптові зміни або аварійні відключення з боку НЕК «Укренерго»." else "Data loaded directly from poe.pl.ua. App is not an official service of JSC Poltavaoblenergo and is not responsible for sudden emergency cuts."
 
     // =========================================================================================
-    // v1.4.0: ZTOE site status, outage rows, notifications, exact alarms.
+    // v1.4.0: site status (POE since «Світло в Полтаві»), outage rows, notifications, exact alarms.
     // Wording is mirrored in src/services/i18n.ts and listed in spec/NOTIFICATIONS.md and spec/SITE_STATE.md.
     // =========================================================================================
     private const val NBSP = " "
 
-    fun siteStateWithTable(lang: String) = if (lang == "uk") "Сайт ZTOE доступний, графік опубліковано" else "ZTOE site online, schedule published"
-    fun siteStateNoTable(lang: String) = if (lang == "uk") "Сайт ZTOE доступний, але графіка немає" else "ZTOE site online, but no schedule table"
-    fun siteStateUnreachable(lang: String) = if (lang == "uk") "Сайт ZTOE недоступний, інтернет є" else "ZTOE site unreachable, your internet works"
+    fun siteStateWithTable(lang: String) = if (lang == "uk") "Сайт POE доступний, графік опубліковано" else "POE site online, schedule published"
+    fun siteStateNoTable(lang: String) = if (lang == "uk") "Сайт POE доступний, але графіка немає" else "POE site online, but no schedule table"
+    fun siteStateUnreachable(lang: String) = if (lang == "uk") "Сайт POE недоступний, інтернет є" else "POE site unreachable, your internet works"
     fun siteStateNoInternet(lang: String) = if (lang == "uk") "Немає інтернету" else "No internet connection"
-    fun siteStateChecking(lang: String) = if (lang == "uk") "Перевірка сайту ZTOE…" else "Checking the ZTOE site…"
+    fun siteStateChecking(lang: String) = if (lang == "uk") "Перевірка сайту POE…" else "Checking the POE site…"
     fun siteStateHintNoTable(lang: String) = if (lang == "uk") "Графік ще не опубліковано або сторінка змінилась." else "The schedule is not published yet or the page has changed."
     fun siteStateHintUnreachable(lang: String) = if (lang == "uk") "Застосунок повторить спробу сам." else "The app will retry on its own."
     fun siteStateHintNoInternet(lang: String) = if (lang == "uk") "Перевірте з'єднання з Інтернетом." else "Check your internet connection."
@@ -130,9 +142,11 @@ object AppStrings {
     fun tomorrowPublished(lang: String) = if (lang == "uk") "Графік на завтра: опубліковано" else "Tomorrow's schedule: published"
     fun tomorrowNotPublishedShort(lang: String) = if (lang == "uk") "Графік на завтра: ще немає" else "Tomorrow's schedule: not yet"
     fun tomorrowNotPublished(lang: String) = if (lang == "uk") "Графік на завтра ще не опубліковано на сайті" else "Tomorrow's schedule is not published on the site yet"
-    /** Title of the card that repeats the notice ztoe shows instead of the schedule table. */
-    fun siteNoticeTitle(lang: String) = if (lang == "uk") "Повідомлення з сайту ztoe.com.ua" else "Notice from ztoe.com.ua"
-    fun siteNoticeA11y(lang: String) = if (lang == "uk") "Повідомлення Житомиробленерго" else "Zhytomyroblenergo notice"
+    /** Title of the card that repeats the notice the site shows instead of the schedule table. */
+    fun siteNoticeTitle(lang: String) = if (lang == "uk") "Повідомлення з сайту poe.pl.ua" else "Notice from poe.pl.ua"
+    fun siteNoticeA11y(lang: String) = if (lang == "uk") "Повідомлення Полтаваобленерго" else "Poltavaoblenergo notice"
+    /** The same card for today's active measures (E2: ГАВ, ГОП, СГАВ ...), shown whatever the site state. */
+    fun measuresTitle(lang: String) = if (lang == "uk") "Сьогодні діють заходи Полтаваобленерго" else "Poltavaoblenergo measures in force today"
     fun poweronUnavailable(lang: String) = if (lang == "uk") "Аварійні відключення: дані недоступні" else "Emergency outages: data unavailable"
 
     fun kindPlanned(lang: String) = if (lang == "uk") "Планове" else "Planned"
@@ -227,7 +241,7 @@ object AppStrings {
     fun exactAlarmButton(lang: String) = if (lang == "uk") "Відкрити налаштування" else "Open settings"
 
     // --- main screen v1.4.0 ---
-    fun mainUtilityName() = "Житомиробленерго (ZTOE)"
+    fun mainUtilityName() = "Полтаваобленерго (POE)"
     fun mainLangAuto(lang: String) = if (lang == "uk") "Авто" else "Auto"
     fun switchOn(lang: String) = if (lang == "uk") "Увімкнено" else "On"
     fun switchOff(lang: String) = if (lang == "uk") "Вимкнено" else "Off"
@@ -237,6 +251,23 @@ object AppStrings {
     fun drumNoOutages(lang: String) = if (lang == "uk") "відключень немає" else "no outages"
     fun drumPowerOffAt(lang: String, spans: String) = if (lang == "uk") "без світла: $spans" else "no power: $spans"
     fun drumEmergencyMark(lang: String) = if (lang == "uk") "аварійне" else "emergency"
+    fun drumSwitchingMark(lang: String) = if (lang == "uk") "перемикання" else "switching"
+    // --- P4: POE switching half-hour, no-queue card, house info line, nearby outages card ---
+    /** Hero line under the period: power comes back inside POE's switching half-hour (spec/OUTAGE_ENGINE.md 3.5). */
+    fun restoreWindow(lang: String, from: String, to: String) = if (lang == "uk") "Світло повернеться $from–$to" else "Power returns $from–$to"
+    fun gavMessageA11y(lang: String) = if (lang == "uk") "Дані Полтаваобленерго про будинок" else "Poltavaoblenergo data for the house"
+    fun nearbyTitle(lang: String) = if (lang == "uk") "Ремонти й пошкодження поруч" else "Repairs and faults nearby"
+    fun nearbyHint(lang: String) = if (lang == "uk") "З реєстру відключень Полтаваобленерго; списки будинків можуть бути неповними" else "From the Poltavaoblenergo outage registry; house lists may be incomplete"
+    fun nearbyKindEmergency(lang: String) = if (lang == "uk") "пошкодження" else "fault"
+    fun nearbyKindRepair(lang: String) = if (lang == "uk") "планова" else "planned"
+    fun nearbyNow(lang: String) = if (lang == "uk") "зараз" else "now"
+    fun nearbyAt(lang: String, hhmm: String) = if (lang == "uk") "о $hhmm" else "at $hhmm"
+    fun nearbyYourHouse(lang: String) = if (lang == "uk") "Ваш будинок у списку" else "Your house is listed"
+    fun nearbyYourStreet(lang: String) = if (lang == "uk") "Ваша вулиця у списку" else "Your street is listed"
+    fun nearbyWholeStreet(lang: String) = if (lang == "uk") "уся вулиця" else "whole street"
+    fun nearbyStreets(lang: String, n: Int) = if (lang == "uk") "Вулиць: $n" else "Streets: $n"
+    fun nearbyExpand(lang: String) = if (lang == "uk") "Показати вулиці" else "Show streets"
+    fun nearbyCollapse(lang: String) = if (lang == "uk") "Сховати вулиці" else "Hide streets"
     fun tabSelected(lang: String) = if (lang == "uk") "Обрано" else "Selected"
     // --- end main screen v1.4.0 ---
 
@@ -260,11 +291,11 @@ object AppStrings {
 
     // Address lookup modal ("?")
     fun addrFindTitle(lang: String) = if (lang == "uk") "Пошук черги за адресою" else "Find Queue by Address"
-    fun addrRemLabel(lang: String) = if (lang == "uk") "РЕМ" else "District (РЕМ)"
+    fun addrRemLabel(lang: String) = if (lang == "uk") "Філія / дільниця" else "Branch / district"
     fun addrCityLabel(lang: String) = if (lang == "uk") "Населений пункт" else "City / Settlement"
     fun addrStreetLabel(lang: String) = if (lang == "uk") "Вулиця" else "Street"
     fun addrHouseLabel(lang: String) = if (lang == "uk") "Будинок" else "House Number"
-    fun addrRemPlaceholder(lang: String) = if (lang == "uk") "Оберіть РЕМ" else "Select district"
+    fun addrRemPlaceholder(lang: String) = if (lang == "uk") "Оберіть філію або дільницю" else "Select branch or district"
     fun addrCityPlaceholder(lang: String) = if (lang == "uk") "Оберіть населений пункт" else "Select settlement"
     fun addrStreetPlaceholder(lang: String) = if (lang == "uk") "Оберіть вулицю" else "Select street"
     fun addrHousePlaceholder(lang: String) = if (lang == "uk") "Оберіть будинок" else "Select house"
@@ -273,6 +304,35 @@ object AppStrings {
     fun addrCheckFailed(lang: String) = if (lang == "uk") "Не вдалося перевірити адресу на сайті. Показано збережені дані." else "Could not check the address on the site. Showing saved data."
     fun addrConfirm(lang: String) = if (lang == "uk") "Підтвердити вибір" else "Confirm selection"
     fun addrSaved(lang: String) = if (lang == "uk") "Адресу збережено" else "Address saved"
+    // Oblast-wide settlement search and the scoped refresh for a missing address (plan section 4.4)
+    fun addrCityAnyBranchHint(lang: String) = if (lang == "uk") "Можна шукати по всій області: філію буде вибрано сама" else "You can search the whole oblast: the branch is filled in for you"
+    fun addrMissingTitle(lang: String) = if (lang == "uk") "Немає вашої адреси?" else "Address missing?"
+    fun refreshSettlements(lang: String) = if (lang == "uk") "Оновити населені пункти філії" else "Refresh this branch's settlements"
+    fun refreshStreets(lang: String) = if (lang == "uk") "Оновити вулиці цього населеного пункту" else "Refresh this settlement's streets"
+    fun refreshDirectory(lang: String) = if (lang == "uk") "Оновити довідник повністю" else "Update the whole directory"
+    fun refreshListDone(lang: String) = if (lang == "uk") "Список оновлено" else "List updated"
+    fun refreshListFailed(lang: String) = if (lang == "uk") "Не вдалося оновити список" else "Could not update the list"
+    fun directoryUpToDate(lang: String) = if (lang == "uk") "Довідник уже найновіший" else "The directory is already up to date"
+    fun directoryUpdated(lang: String) = if (lang == "uk") "Довідник оновлено" else "Directory updated"
+    // Several connections and the hourly-schedule catalogue (spec/POE_API.md 8.11), company search
+    fun severalConnections(lang: String) = if (lang == "uk") "За цією адресою кілька підключень, тому сайт Полтаваобленерго не називає чергу." else "This address has several connections, so the Poltavaoblenergo site does not name the queue."
+    fun catalogueHintsTitle(lang: String) = if (lang == "uk") "За графіком погодинних відключень (ГПВ) Полтаваобленерго:" else "From Poltavaoblenergo's hourly outage schedule (ГПВ):"
+    fun chooseQueueTitle(lang: String) = if (lang == "uk") "Оберіть свою чергу:" else "Choose your queue:"
+    fun hintHouse(lang: String) = if (lang == "uk") "будинок у списку" else "house listed"
+    fun hintRange(lang: String) = if (lang == "uk") "номер у діапазоні" else "number in a range"
+    fun hintStreet(lang: String) = if (lang == "uk") "уся вулиця" else "whole street"
+    fun hintSettlement(lang: String) = if (lang == "uk") "увесь населений пункт" else "whole settlement"
+    fun companyTitle(lang: String) = if (lang == "uk") "Пошук за підприємством" else "Search by workplace"
+    fun companyLabel(lang: String) = if (lang == "uk") "Підприємство" else "Company"
+    fun companyPlaceholder(lang: String) = if (lang == "uk") "Оберіть підприємство" else "Choose a company"
+    fun companyHint(lang: String) = if (lang == "uk") "Черга підприємства з графіка ГПВ. Аварійні відключення відстежуються лише за адресою." else "The company's queue from the ГПВ schedule. Emergency outages are tracked for addresses only."
+    /** Caption of the matched piece of a company's PDF row in the company search ("у рядку графіка: кафе «Аква»"). */
+    fun companyRowMatch(lang: String) = if (lang == "uk") "у рядку графіка:" else "in the schedule row:"
+    // A settlement without streets, a street without house numbers (spec/POE_API.md 8.11)
+    fun noStreetsHint(lang: String) = if (lang == "uk") "У довіднику Полтаваобленерго немає вулиць цього населеного пункту." else "Poltavaoblenergo's directory lists no streets for this settlement."
+    fun noHousesHint(lang: String) = if (lang == "uk") "Полтаваобленерго не називає номерів будинків на цій вулиці." else "Poltavaoblenergo lists no house numbers for this street."
+    fun placeQueueHint(lang: String) = if (lang == "uk") "Черга з графіка ГПВ для всього населеного пункту чи вулиці. Аварійні відключення відстежуються лише за адресою з номером будинку." else "The queue from the ГПВ schedule for the whole settlement or street. Emergency outages are tracked only for an address with a house number."
+    fun addCompanyQueue(lang: String, queue: String) = if (lang == "uk") "Додати чергу $queue" else "Add queue $queue"
 
     // Settings cards
     fun noQueueNotDisconnected(lang: String) = if (lang == "uk") "Черга відсутня (не вимикається)" else "No queue (not disconnected)"
@@ -325,6 +385,8 @@ object AppStrings {
     fun addressLimitReached(lang: String, max: Int) = if (lang == "uk") "Досягнуто ліміт: $max адрес" else "Limit reached: $max addresses"
     fun addressDuplicate(lang: String) = if (lang == "uk") "Ця адреса вже є у списку" else "This address is already in the list"
     fun addressAdded(lang: String) = if (lang == "uk") "Адресу додано" else "Address added"
+    fun addressChanged(lang: String) = if (lang == "uk") "Адресу змінено" else "Address changed"
+    fun editAddress(lang: String) = if (lang == "uk") "Змінити адресу" else "Change address"
     fun removeAddress(lang: String) = if (lang == "uk") "Видалити" else "Remove"
     fun removeConfirmTitle(lang: String) = if (lang == "uk") "Видалити адресу?" else "Remove this address?"
     fun removeConfirmBody(lang: String, label: String) =

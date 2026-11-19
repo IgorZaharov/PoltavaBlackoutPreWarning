@@ -29,6 +29,8 @@ export interface AddressStatus {
   readonly scheduleMirror: boolean;
   /** The answer names an outage that could not be read: the fetch counts as unavailable. */
   readonly unparsed: boolean;
+  /** No queue because the address has several connections (section 8.5 step 6): unknown, not "no queue". */
+  readonly severalConnections: boolean;
 }
 
 export interface StreetEntry {
@@ -192,7 +194,8 @@ export function addressStatus(result: Readonly<Record<string, unknown>>, today: 
     if (r.start < horizon) addRepair(r.start, r.end);
   }
   const sorted = [...repairs.values()].sort((a, b) => a.start - b.start);
-  return { messageType, queue, emergency, repairs: sorted, scheduleMirror, unparsed };
+  const severalConnections = queue === null && message.includes('декілька підключень');
+  return { messageType, queue, emergency, repairs: sorted, scheduleMirror, unparsed, severalConnections };
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -286,6 +289,24 @@ export function streetKey(name: string): string {
 }
 
 /** Does a registry row name the address? Registry house lists are incomplete, see section 6. */
+/**
+ * Registry rows (8.7) that name the house itself (registryMatch CONFIRMED), as REPAIR outages of the
+ * address (owner, 2026-11-17: a repair or fault listed for the house must reach the drum, the list and the
+ * timer even when the per-house status says nothing). Rows without an end and ГПВ mirror rows are left out;
+ * a row naming only the street never becomes an outage (registry lists are incomplete).
+ */
+export function registryRepairs(rows: readonly RegistryRow[], settlement: string, street: string, house: string): Outage[] {
+  if (street.trim() === '' || house.trim() === '') return [];
+  const out = new Map<string, Outage>();
+  for (const row of rows) {
+    if (row.kind === 'MIRROR' || row.end === null || !(row.end > row.start)) continue;
+    if (registryMatch(row.places, settlement, street, house) !== 'CONFIRMED') continue;
+    const id = `registry_${formatLocalDateTime(row.start)}_${formatLocalDateTime(row.end)}`;
+    if (!out.has(id)) out.set(id, makeOutage({ id, kind: 'REPAIR', start: row.start, end: row.end, label: LABEL_REPAIR }));
+  }
+  return [...out.values()].sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0));
+}
+
 export function registryMatch(places: readonly Place[], settlement: string, street: string, house: string): RegistryMatch {
   const sk = settlementKey(settlement);
   const stk = streetKey(street);
@@ -301,6 +322,79 @@ export function registryMatch(places: readonly Place[], settlement: string, stre
   return streetSeen ? 'STREET' : 'NONE';
 }
 
+// ---------------------------------------------------------------------------------------------
+// Nearby outages card (section 8.10)
+// ---------------------------------------------------------------------------------------------
+
+export type NearbyStatus = 'ACTIVE' | 'UPCOMING' | 'FINISHED';
+const NEARBY_ORDER: Record<NearbyStatus, number> = { ACTIVE: 0, UPCOMING: 1, FINISHED: 2 };
+
+export interface NearbyStreet {
+  name: string;
+  houses: string[];
+  mine: boolean;
+}
+
+export interface NearbyOutage {
+  id: string;
+  kind: 'EMERGENCY' | 'REPAIR';
+  start: LocalDateTime;
+  end: LocalDateTime | null;
+  reason: string;
+  status: NearbyStatus;
+  streets: NearbyStreet[];
+  match: RegistryMatch;
+}
+
+/**
+ * The registry rows of the address's settlement for the card «Ремонти й пошкодження поруч»
+ * (display only: alerts and the timer come from the per-house status). Mirrors PoeMapper.nearbyOutages.
+ */
+export function nearbyOutages(
+  rows: readonly RegistryRow[],
+  settlement: string,
+  street: string,
+  house: string,
+  now: LocalDateTime
+): NearbyOutage[] {
+  const sk = settlementKey(settlement);
+  const userStreet = street.trim() === '' ? null : streetKey(street);
+  const out: NearbyOutage[] = [];
+  for (const row of rows) {
+    if (row.kind === 'MIRROR') continue;
+    const groups = row.places.filter((p) => settlementKey(p.settlement) === sk);
+    if (groups.length === 0) continue;
+    const merged = new Map<string, { name: string; houses: Map<string, string>; whole: boolean }>();
+    for (const g of groups) {
+      for (const s of g.streets) {
+        const key = streetKey(s.street);
+        const prev = merged.get(key) ?? { name: s.street.replace(SPACES, ' ').trim(), houses: new Map<string, string>(), whole: false };
+        for (const h of s.houses) {
+          const t = h.trim();
+          const hk = HouseKey.of(t);
+          if (t !== '' && !prev.houses.has(hk)) prev.houses.set(hk, t);
+        }
+        if (s.houses.length === 0) prev.whole = true;
+        merged.set(key, prev);
+      }
+    }
+    const streets: NearbyStreet[] = [...merged.entries()].map(([key, v]) => ({
+      name: v.name,
+      houses: v.whole ? [] : [...v.houses.values()],
+      mine: userStreet !== null && key === userStreet,
+    }));
+    // only outages on the user's own street (owner, 2026-11-16)
+    if (!streets.some((st) => st.mine)) continue;
+    const status: NearbyStatus = now < row.start ? 'UPCOMING' : row.end !== null && now >= row.end ? 'FINISHED' : 'ACTIVE';
+    const match: RegistryMatch = street.trim() !== '' && house.trim() !== '' ? registryMatch(row.places, settlement, street, house) : 'NONE';
+    const item: NearbyOutage = { id: row.id, kind: row.kind, start: row.start, end: row.end, reason: row.reason, status, streets, match };
+    const same = (a: NearbyOutage) =>
+      a.id === item.id && a.kind === item.kind && a.end === item.end && JSON.stringify(a.streets) === JSON.stringify(item.streets);
+    if (!out.some(same)) out.push(item);
+  }
+  return out.sort((a, b) => NEARBY_ORDER[a.status] - NEARBY_ORDER[b.status] || a.start - b.start || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
 export const PoeMapper = {
   parseTime,
   parseEta,
@@ -313,4 +407,6 @@ export const PoeMapper = {
   settlementKey,
   streetKey,
   registryMatch,
+  registryRepairs,
+  nearbyOutages,
 } as const;

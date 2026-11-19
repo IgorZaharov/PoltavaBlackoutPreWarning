@@ -114,7 +114,7 @@ export default function App() {
     }
   }, [settings.theme]);
 
-  // One refresh pipeline (OutageRepository.refresh): ztoe schedule + PowerOn emergencies/repairs for the selected address.
+  // One refresh pipeline (OutageRepository.refresh): POE schedule + per-house status (emergencies, repairs) for the selected address.
   // A source that fails keeps its previous data; emergency events (start / ETA changed / end) are announced once.
   const skipNextSettingsRefresh = React.useRef(false);
   const loadSchedules = useCallback(async (currentSettings: UserSettings, force = false): Promise<RefreshStatus> => {
@@ -446,13 +446,14 @@ export default function App() {
       selectedAddress:
         settings.selectedAddress ??
         (resolvedLang === 'uk'
-          ? 'Житомирський РЕМ, м. Житомир,\nвул. Київська, буд. 37'
-          : 'Zhytomyr REM, Zhytomyr,\nKyivska St., bldg. 37'),
+          ? 'Полтавська об\'єднана філія, місто Полтава,\nвул. Соборності, буд. 1'
+          : 'Poltava united branch, місто Полтава,\nвул. Соборності, bldg. 1'),
+      // A real POE address (spec/fixtures/poe: Полтава, вул. Соборності 1)
       selectedAddressQuery: settings.selectedAddressQuery ?? {
-        remId: 'zhytomyr',
-        settlementId: 'zt_city',
-        streetId: 'zt_kyivska',
-        house: '37',
+        remId: 'poltavska',
+        settlementId: '11389',
+        streetId: '1227174',
+        house: '1',
       },
     };
     const repo = getOutageRepository();
@@ -517,9 +518,7 @@ export default function App() {
             
             {/* Brand Title */}
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-[#FF5E3A] flex items-center justify-center text-white shadow-md shadow-[#FF5E3A]/30 font-black">
-                <Zap className="w-5 h-5 fill-current" />
-              </div>
+              <img src="/app-logo.png" alt="" aria-hidden="true" className="w-10 h-10 object-contain" />
               <div>
                 <div className="text-sm font-bold tracking-tight text-white flex items-center gap-2">
                   <span>Світло в Полтаві</span>
@@ -528,7 +527,7 @@ export default function App() {
                   </span>
                 </div>
                 <div className="text-[11px] text-[#8E92A0]">
-                  ztoe.com.ua · Житомиробленерго
+                  poe.pl.ua · Полтаваобленерго
                 </div>
               </div>
             </div>
@@ -789,8 +788,8 @@ export default function App() {
                       <Zap className="w-4 h-4 fill-current" />
                       <span>
                         {resolvedLang === 'uk'
-                          ? 'Симулювати аварійне відключення (Житомир, Київська, 37)'
-                          : 'Simulate emergency outage (Zhytomyr, Kyivska St., 37)'}
+                          ? 'Симулювати аварійне відключення (Полтава, Соборності, 1)'
+                          : 'Simulate emergency outage (Poltava, Sobornosti St., 1)'}
                       </span>
                     </button>
                   </div>
@@ -949,6 +948,13 @@ export default function App() {
                 subscriptionStore={subscriptionStore}
                 boundId={widgetBoundId}
                 onBind={setWidgetBoundId}
+                primarySnapshot={snapshot}
+                primarySettings={settings}
+                onOpenPrimary={() => {
+                  setShownSubscriptionId(subscriptionStore.primaryId);
+                  setActiveMode('app');
+                  setPhoneTab('schedule');
+                }}
                 onOpenApp={() => {
                   if (widgetItemId) setShownSubscriptionId(widgetItemId);
                   setActiveMode('app');
@@ -981,8 +987,8 @@ export default function App() {
                 Повідомити про проблему (GitHub Issues)
               </a>
               <span>·</span>
-              <a href="https://www.ztoe.com.ua/unhooking-search.php" target="_blank" rel="noreferrer" className="hover:underline">
-                ztoe.com.ua
+              <a href="https://www.poe.pl.ua/disconnection/power-outages/" target="_blank" rel="noreferrer" className="hover:underline">
+                poe.pl.ua
               </a>
             </div>
           </div>

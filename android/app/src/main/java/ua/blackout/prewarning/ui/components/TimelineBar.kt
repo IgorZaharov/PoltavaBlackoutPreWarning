@@ -27,35 +27,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import ua.blackout.prewarning.data.model.BlackoutSlot
-import ua.blackout.prewarning.data.model.SlotStatus
 import ua.blackout.prewarning.ui.AppStrings
 import ua.blackout.prewarning.ui.theme.ZtColors
 import ua.blackout.prewarning.ui.theme.ZtType
 import kotlin.math.floor
 import kotlin.math.sqrt
 
-/** One half-hour cell of the drum, reduced to what is drawn. */
-private data class DrumCell(val planned: Boolean, val emergency: Boolean)
-
-/**
- * 48 cells from [slots]: 48 half-hour slots, or 24 hourly slots (legacy, each used twice). Anything
- * else yields null and the drum shows the grey "unclear" bar. `isPlanned` and `isEmergency` are
- * separate so a planned outage overlapped by an emergency one shows both (spec/UI_DRUM.md section 1).
- */
-private fun drumCells(slots: List<BlackoutSlot>): List<DrumCell>? {
-    val src = when (slots.size) {
-        48 -> slots
-        24 -> slots.flatMap { listOf(it, it) }
-        else -> return null
-    }
-    return src.map { s ->
-        val off = s.status == SlotStatus.POWER_OFF
-        DrumCell(
-            planned = off && (s.isPlanned || !s.isEmergency),
-            emergency = off && s.isEmergency
-        )
-    }
-}
+// Current-time needle on every drum (main screen and widgets): bright yellow with a black outline.
+internal val NeedleColor = Color(0xFFFFE600)
+internal val NeedleOutline = Color(0xFF000000)
+private val NeedleOutlineWidth = 2.dp
+// The needle runs down to the bottom of the 5 dp hour tick marks right under the slot wrapper
+private val NeedleBelowSlot = 5.dp
 
 // Needle and track share one inset: 6 dp slot padding + 2 dp slot border.
 private val TrackInset = 8.dp
@@ -69,8 +52,10 @@ private val StripePeriod = 6.dp
 /**
  * The 24-hour "analog meter" drum. Planned and repair outages are crimson, emergency outages are amber
  * with 45 degree stripes (second cue besides colour), emergency over planned is crimson with amber
- * stripes. [unclearBase] paints cells without an outage grey (the day's table is not known) while
- * outages that are known (emergency, repair) are still drawn on top.
+ * stripes, and POE's switching half-hour (power may still be off) is yellow over the whole cell.
+ * [unclearBase] paints cells without an outage grey (the day's table is not known) while outages that
+ * are known (emergency, repair) are still drawn on top. Cells come from [DrumCells.of], which the
+ * widget bitmap uses too.
  *
  * The 48 cells are drawn in one Canvas so the stripe pattern is continuous across neighbouring
  * cells; the whole drum is one TalkBack element described by [OutageRowFormat.drumSummary].
@@ -98,7 +83,7 @@ fun TimelineBar(
         Brush.verticalGradient(listOf(Color(0xFF7E8287), Color(0xFF94989E), Color(0xFF6E7277)))
     }
 
-    val cells = remember(slots) { drumCells(slots) }
+    val cells = remember(slots) { DrumCells.of(slots) }
     val summary = remember(slots, lang, unclearBase) { OutageRowFormat.drumSummary(lang, slots, unclearBase) }
     val fontScale = LocalDensity.current.fontScale
     // Tick labels are 12 sp at the least; above 1.3x font scale only every 4 h so they cannot overlap.
@@ -117,7 +102,7 @@ fun TimelineBar(
             .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 10.dp)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            // Wrapper with 4.dp top/bottom padding so the black needle protrudes 4.dp above and below the dark-grey contour
+            // Wrapper with 4.dp top/bottom padding so the needle protrudes 4.dp above and below the dark-grey contour
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -134,20 +119,23 @@ fun TimelineBar(
                             // Exact position inside the hour cell, so the 1.5 dp hour gaps do not skew the needle
                             val centerX = inset + hour * (hourW + gap) + minuteFraction * hourW
                             val needleW = 3.dp.toPx()
-                            val haloW = 4.5.dp.toPx()
+                            val outline = NeedleOutlineWidth.toPx()
+                            val outlineW = needleW + outline * 2f
+                            // 4.dp above the contour, and down past it to the bottom of the hour tick marks
+                            val bottom = size.height + NeedleBelowSlot.toPx()
 
-                            // Subtle light halo so the black needle stands out against both red and dark-grey edges
+                            // Bright yellow needle with a 2 dp black outline (owner, 2026-11-17: the black needle was
+                            // hard to see); drawn past this box, over the gap above the tick row
                             drawRoundRect(
-                                color = Color(0xD9FFFFFF),
-                                topLeft = Offset(centerX - haloW / 2f, 0f),
-                                size = Size(haloW, size.height),
-                                cornerRadius = CornerRadius(haloW / 2f, haloW / 2f)
+                                color = NeedleOutline,
+                                topLeft = Offset(centerX - outlineW / 2f, 0f),
+                                size = Size(outlineW, bottom),
+                                cornerRadius = CornerRadius(outlineW / 2f, outlineW / 2f)
                             )
-                            // Crisp black needle protruding 4.dp above and below the dark-grey contour
                             drawRoundRect(
-                                color = Color(0xFF0B0B0A),
-                                topLeft = Offset(centerX - needleW / 2f, 0f),
-                                size = Size(needleW, size.height),
+                                color = NeedleColor,
+                                topLeft = Offset(centerX - needleW / 2f, outline),
+                                size = Size(needleW, bottom - outline * 2f),
                                 cornerRadius = CornerRadius(needleW / 2f, needleW / 2f)
                             )
                         }
@@ -204,6 +192,13 @@ fun TimelineBar(
                                 startY = mid,
                                 endY = h
                             )
+                            // The switching half-hour fills the cell (spec/UI_DRUM.md 1), plain, no stripes;
+                            // an emergency on it still takes the bottom half
+                            val switchingBrush = Brush.verticalGradient(
+                                listOf(ZtColors.SwitchingStart, ZtColors.SwitchingMid, ZtColors.SwitchingEnd),
+                                startY = 0f,
+                                endY = h
+                            )
                             for (i in 0 until 48) {
                                 val cell = cells[i]
                                 val left = (i / 2) * (hourW + gap) + (i % 2) * halfW
@@ -215,6 +210,9 @@ fun TimelineBar(
                                 // Two 30-min cells of one hour touch (no half-hour separator); +0.5 px hides the seam
                                 val width = halfW + if (i % 2 == 0) 0.5f else 0f
                                 drawRect(brush, topLeft = Offset(left, 0f), size = Size(width, h))
+                                if (cell.switching) {
+                                    drawRect(switchingBrush, topLeft = Offset(left, 0f), size = Size(width, h))
+                                }
                                 if (cell.emergency) {
                                     drawRect(emergencyBrush, topLeft = Offset(left, mid), size = Size(width, h - mid))
                                     drawStripes(

@@ -64,7 +64,8 @@ export type AddressStatusFetch =
   | { kind: 'confirmed'; status: AddressStatus; gavMessage: string | null }
   | { kind: 'unavailable'; reason: string };
 
-export type RegistryFetch = { kind: 'confirmed'; rows: RegistryRow[] } | { kind: 'unavailable'; reason: string };
+/** `raw` keeps each row's `out_text` so the rows can be stored and parsed again later. */
+export type RegistryFetch = { kind: 'confirmed'; rows: RegistryRow[]; raw: string[] } | { kind: 'unavailable'; reason: string };
 
 export interface PoeMeasure {
   readonly type: string;
@@ -232,11 +233,15 @@ export class PoeClient {
     const arr = arrayOf(r.body);
     if (arr === null) return { kind: 'unavailable', reason: 'not_an_array' };
     const rows: RegistryRow[] = [];
+    const raw: string[] = [];
     for (const o of arr) {
-      const row = PoeMapper.parseRegistryRow(isObject(o) && typeof o.out_text === 'string' ? o.out_text : null);
+      const text = isObject(o) && typeof o.out_text === 'string' && o.out_text.trim() !== '' ? o.out_text : null;
+      if (text === null) continue;
+      raw.push(text);
+      const row = PoeMapper.parseRegistryRow(text);
       if (row !== null) rows.push(row);
     }
-    return { kind: 'confirmed', rows };
+    return { kind: 'confirmed', rows, raw };
   }
 
   /**

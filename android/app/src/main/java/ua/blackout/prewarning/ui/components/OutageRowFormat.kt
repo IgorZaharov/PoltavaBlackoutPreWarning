@@ -135,6 +135,22 @@ object OutageRowFormat {
         return out
     }
 
+    /** Runs of drawn switching cells ([DrumCells.cell]) as (first cell, last cell exclusive). */
+    private fun switchingRuns(cells: List<BlackoutSlot>): List<Pair<Int, Int>> {
+        val out = ArrayList<Pair<Int, Int>>()
+        var start = -1
+        for (i in cells.indices) {
+            if (DrumCells.cell(cells[i]).switching) {
+                if (start < 0) start = i
+            } else if (start >= 0) {
+                out.add(start to i)
+                start = -1
+            }
+        }
+        if (start >= 0) out.add(start to cells.size)
+        return out
+    }
+
     private fun cellTime(index: Int): String {
         val minutes = index * 30
         return if (minutes >= 1440) "24:00" else "${p2(minutes / 60)}:${p2(minutes % 60)}"
@@ -159,6 +175,11 @@ object OutageRowFormat {
             parts.add(AppStrings.drumPowerOffAt(lang, spans))
         } else if (!unclearBase) {
             parts.add(AppStrings.drumNoOutages(lang))
+        }
+        // POE switching half-hours (power may still be off), as drawn: never on a planned cell
+        val switching = switchingRuns(cells)
+        if (switching.isNotEmpty()) {
+            parts.add("${AppStrings.drumSwitchingMark(lang)}: " + switching.joinToString(", ") { "${cellTime(it.first)} – ${cellTime(it.second)}" })
         }
         return "$head: ${parts.joinToString("; ")}"
     }

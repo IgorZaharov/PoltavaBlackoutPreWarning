@@ -122,7 +122,7 @@ Reasons seen on 2026-11-16 (28 branches, 1 378 rows, 1.6 MB raw):
 **House lists are incomplete.** Зуївці 2026-11-16: the registry lists вул. Дружби 1, 9, 15, 17, 26, 28, but E4 reports the same emergency for вул. Дружби 3 (E4 resolves the house through its feeder). Therefore:
 
 - E4 is the **primary** emergency and repair source for an address;
-- E5 is a **fallback** (only while E4 is unavailable) and the source of the display-only «Ремонти й пошкодження поруч» card;
+- E5 is a **fallback** (only while E4 is unavailable), the source of the «Ремонти й пошкодження поруч» card, and of the repair outages of a house it names (8.10a);
 - an E5 row whose street matches but whose house list does not contain the house is a *possible* outage on the street, never a confirmed one and never "no outage" (`registryMatch`, section 8).
 
 ## 7. Active measures (E2)
@@ -165,7 +165,7 @@ Trim both. `q1` in `1..6` and `q2` in `1..2` (digits only) gives `"q1.q2"`; anyt
 
 ### 8.5 `addressStatus(result, today) -> AddressStatus`
 
-`result` is the first element of the E4 array (a map). Output: `{ messageType, queue, emergency?, repairs[], scheduleMirror, unparsed }`.
+`result` is the first element of the E4 array (a map). Output: `{ messageType, queue, emergency?, repairs[], scheduleMirror, unparsed, severalConnections }`.
 
 1. `messageType` = `message_type` as an integer (missing or not a number: `-1`). `queue = parseQueue(gp_qnum_1, gp_qnum_2)`.
 2. `start = parseTime(accident_str)`; `eta = parseEta(fn_accident_message)`, kept only if `eta > start`.
@@ -176,6 +176,7 @@ Trim both. `q1` in `1..6` and `q2` in `1..2` (digits only) gives `"q1.q2"`; anyt
    - `3`, and any other value except `0` that is not a schedule mirror (an unknown type is treated as an emergency, the safe side; for example a cut by ГАВ / СГАВ): if `start` is known, `emergency = EmergencyRecord(id, start, estimatedEnd = eta, label)` with `id = "poe_" + accident_id` when `accident_id` is a positive integer, else `"poe_" + start`; `label = "Аварійна перерва"` for type 3, `"Перерва в електропостачанні"` for other types. If `start` is null: `unparsed = true`.
 4. `planned_message`: every pair of `parsePlannedList` with `start < (today + 2 days) 00:00` becomes a repair `{id = "repair_" + start, start, end, label = "Планові роботи"}` (works dated beyond tomorrow are dropped, as in `POWERON_API.md` 5.2). Repairs with the same `id` merge (the later `end` wins). `repairs` is sorted by `start`.
 5. `unparsed = true` makes the adapter report the fetch as `Unavailable("unparsed")`, never as "no outage" (section 9).
+6. `severalConnections = queue == null and fn_accident_message` (lower-cased) contains `декілька підключень`: POE gives no queue because the address has several connections; the queue is unknown, not "none" (8.11).
 
 ### 8.6 `classifyRegistryReason(reason) -> EMERGENCY | REPAIR | MIRROR`
 
@@ -206,6 +207,52 @@ Street names are compared with `streetKey(name)` = insert a space after a leadin
 - else some such street exists (with or without a house list) → `STREET`;
 - else → `NONE`.
 
+### 8.10 `nearbyOutages(rows, settlement, street, house, now) -> [NearbyOutage]`
+
+The card «Ремонти й пошкодження поруч» on the main screen (plan section 5.4, owner decision D9). The card itself is display only; rows that name the address's house also become its repair outages (8.10a). The ledger never reads the registry. Input: the registry rows (8.7) of every branch of the address's settlement for today (rows of several branches may repeat), the address's settlement name, street name and house (street and house may be empty) and the current time.
+
+1. Drop `MIRROR` rows. Keep a row only when one of its groups has `settlementKey(group.settlement) == settlementKey(settlement)`.
+2. `streets`: the streets of those groups, merged by `streetKey` in first-seen order. `name` = the first spelling with whitespace collapsed and trimmed. `houses` = the union of the house lists in first-seen order, each trimmed, duplicates by `HouseKey` dropped; it is empty (the whole street) when any merged entry has no house list. `mine` = street is not empty and `streetKey(name) == streetKey(street)`.
+3. `status` = `UPCOMING` when `now < start`; `FINISHED` when `end` is set and `now >= end`; else `ACTIVE`.
+4. `match` = `registryMatch(places, settlement, street, house)` (8.9) when street and house are both non-empty, else `NONE`.
+5. Keep a row only when one of its streets is `mine` (owner, 2026-11-16: same settlement **and** street). An empty street (a queue-only subscription) therefore gives no items.
+6. Two rows that give the same `id`, `kind`, `end` and `streets` are one item.
+7. Order: `ACTIVE`, then `UPCOMING`, then `FINISHED`; inside each by `start`, then `id`.
+
+Item fields: `id`, `kind` (`EMERGENCY` | `REPAIR`), `start`, `end` (null = open-ended), `reason`, `status`, `streets` (`[{name, houses[], mine}]`), `match`.
+
+## 8.10a Registry rows naming the house become repair outages
+
+Owner, 2026-11-17 (changes D9's "display only"): a registry row (8.7) of today whose house list names the address's house (`registryMatch` = CONFIRMED) becomes a `REPAIR` outage of that address, whatever its reason (planned or «пошкодження»), so it reaches the drum (amber stripes, `OUTAGE_ENGINE.md` 2), the list of hours, the timer and the planned-style pre-warning. `registryRepairs(rows, settlement, street, house)`:
+- ГПВ mirror rows, rows without an end and rows naming only the street give nothing (registry house lists are incomplete, section 6);
+- id `registry_<start>_<end>`, label `Планові роботи`; the same row from several branches is one outage;
+- the apps store them per address key after each registry refresh of the address's branches (every address subscription, not only the one shown); an address whose registries have no answer of today keeps what it had;
+- an E4 repair with the same start and end wins (no duplicate row). They never feed the emergency ledger, so they send no START or END.
+
+Vectors: `poe_api.json` `registryRepairs`.
+
+## 8.11 Queue catalogue from the hourly-schedule PDF (`poe_queues.json`)
+
+The per-house status (E4) has no queue for houses with **several connections**: `gp_qnum_1`/`gp_qnum_2` are empty and `fn_accident_message` starts «Увага! За вказаною адресою зареєстровано декілька підключень…» (seen live on 2026-11-16 for Полтава, Європейська 88 and for 14 of 25 sampled Poltava houses). Such an answer is **not** "no queue".
+
+The queue of those houses is in the PDF linked from https://www.poe.pl.ua/disconnection/hrafik-pohodynnoho-vidkliuchennia-elektroenerhii/ («Графік погодинного відключення електроенергії АТ "ПОЛТАВАОБЛЕНЕРГО" з … по …», an Excel export of about 95 pages, valid for half a year). Layout: headings «Третя черга ІІ підчерга» (queue 3.2), branch headings («… дільниця …», «… об'єднана філія …»), then numbered rows of free text: settlements, streets, house numbers and ranges, whole villages, companies.
+
+`scripts/build_poe_queue_catalogue.py` turns it into `poe_queues.json` (layout in its `_doc` field): `rows` (raw text with queue, branch slug, row number, page), `entries` (settlement, street or null for a whole settlement, houses, ranges, `whole`), `companies` (legal entities named in a row, for a search by workplace: a legal form with a quoted name, also when the PDF never closes the quote; «Філія …»; a sole trader without quotes, «ФОП Ландарь Ю.І.»; a row that names no street of the POE directory and no house number, «М'ясокомбінат»; any other quoted name with the word before it, «кафе «Аква»», unless it is a street of the directory; schools, kindergartens and named institutions, «Школа № 27», «Д/С № 14» → «Дитячий садок № 14», «Медичний фаховий коледж», with `aliases` such as ЗОШ / ДНЗ that the PDF never uses), `source` (PDF URL, `ETag`, `Last-Modified`, SHA-256), `parserVersion`, `period`. A row naming no settlement belongs to the branch's main town (the settlement its rows name most). The text is free form, so a catalogue match is a **hint**: an exact house match ranks before a house range, a whole street and a whole settlement, and one house may sit in several rows (several connections, several queues).
+
+Checked on 2026-11-16 against E4: Європейська 88 → 3.1, Юліана Матвійчука 47 → 5.1, Соборності 1 → 1.1; two random samples of 25 Poltava houses agreed in 21 of 21 cases where E4 gave a queue (the other 28 answered "several connections", one "no queue").
+
+**Several connections** (`AddressStatus.severalConnections`, 8.5 step 6): both queue fields empty and `fn_accident_message` contains `декілька підключень` (seen with `message_type` 0; the type is not checked, so an emergency at such an address does not turn the answer into "no queue"). The queue is then unknown, never "no queue"; the apps keep the queue the user chose and ask the catalogue for candidates.
+
+**`QueueCatalogue.lookup(entries, settlement, branches, street, house) -> [QueueHint]`** (vectors `spec/vectors/queue_catalogue.json`):
+
+1. Keep entries with `settlementKey(entry.settlement) == settlementKey(settlement)` and, when `branches` is not empty, `entry.branch` in `branches`.
+2. Street keys of a name: drop a leading street-type word (`StreetKey.isTypeWord`, with or without a dot, glued or not: `вул.Європейська`), then `full = PoeMapper.streetKey(rest)`, `last` = the part of `full` after its last space or dot. Two names match **exactly** when their `full` keys are equal, **by last word** when only their `last` parts are.
+3. Kind of a matching entry: `street` null → `SETTLEMENT`; a listed house with `HouseKey.of(h) == HouseKey.of(house)` → `HOUSE`; else the house is a plain number (`HouseKey.of(house)` is digits only) inside some `[from, to]` → `RANGE`; else `whole == "street"` → `STREET`; else no match. An empty street matches only `SETTLEMENT`; a street with an empty house matches only `whole == "street"` (`STREET`) and `SETTLEMENT`. The picker uses this for a settlement whose directory has no streets and for a street POE lists no houses for (село Минівка, село Головач вул. Кринична in the PDF of 2026-10-08): the place is then added as a queue-only entry named after it (`spec/SUBSCRIPTIONS.md`), since the per-house status (E4) needs a house.
+4. Order: kind (`HOUSE`, `RANGE`, `STREET`, `SETTLEMENT`), then exact before last-word, then queue, then row. Keep the first hint of each queue. A hint is `{queue, kind, branch, row, exact}` (`exact` is true for `SETTLEMENT`).
+5. `QueueCatalogue.confident(hints)`: the first hint's queue when no other hint has the same `kind` and `exact`, else null. A refresh fills an address without a queue only with this queue; a tie (one house in rows of two queues) is left to the user in the address dialog.
+
+Refresh: `.github/workflows/poe-data.yml` job `queues`, daily: the page is read, the PDF is asked for with `If-None-Match` / `If-Modified-Since` of the last build; nothing is downloaded or committed when it did not change (or when its SHA-256 is the same), unless `PARSER_VERSION` changed. The company search of the apps lists one entry per name and town (a school or kindergarten is named with its town, «Школа № 27, Кременчук»), matches the name, its `aliases` and the words of its rows (`PickerItem.search`), and treats quotes of every kind and «№» as spaces (`PickerSearch`). The apps bundle the catalogue (`public/poe_queues.json`, `android/app/src/main/assets/poe_queues.json`); Android also fetches the CI copy from this repository at most once a week (conditional request) and with «Оновити довідник повністю».
+
 ## 9. Failure semantics
 
 Every fetch yields exactly one of `Confirmed(...)` or `Unavailable(reason)`, as in `POWERON_API.md` section 8:
@@ -224,6 +271,6 @@ Per refresh (default every 30 min): E1 today + E1 tomorrow (gzip about 14 KB eac
 
 ## Vectors
 
-`spec/vectors/poe_schedule.json`: the schedule parser (section 3). `spec/vectors/poe_api.json`: `times`, `eta`, `plannedList`, `queue`, `addressStatus` (the four live E4 samples of 2026-11-16, types 0, 2, 3 and 4, plus edge cases), `registryReason`, `registryRows` (live E5 rows), `registryMatch` (incl. the Зуївці house that the registry omits). `spec/vectors/outage_engine_poe.json`: the switching half-hour (`OUTAGE_ENGINE.md` 3.5).
+`spec/vectors/poe_schedule.json`: the schedule parser (section 3). `spec/vectors/poe_api.json`: `times`, `eta`, `plannedList`, `queue`, `addressStatus` (the four live E4 samples of 2026-11-16, types 0, 2, 3 and 4, plus edge cases), `registryReason`, `registryRows` (live E5 rows), `registryMatch` (incl. the Зуївці house that the registry omits), `nearby` (section 8.10). `spec/vectors/outage_engine_poe.json`: the switching half-hour (`OUTAGE_ENGINE.md` 3.5). `spec/vectors/queue_catalogue.json`: the catalogue lookup (8.11).
 
 Runners: Kotlin `PoeVectorsTest.kt` and TypeScript `tests/spec-vectors.test.ts` run all three files; the clients (`data/poe/PoeClient.kt`, `src/services/poeClient.ts`) are tested against the recorded answers in `spec/fixtures/poe/` (`PoeClientTest.kt`, `tests/poe-client.test.ts`); `scripts/poe-live-probe.ts` reads the live site (daily in `.github/workflows/poe-data.yml`); the iOS XCTest target starts running them in milestone I1 (it loads vector files by name, so the new files do not affect it before that).

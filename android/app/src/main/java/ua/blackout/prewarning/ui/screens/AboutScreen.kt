@@ -4,6 +4,8 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import ua.blackout.prewarning.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -104,20 +106,13 @@ fun AboutScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(60.dp)
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(Color(0xFFFF5E3A)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.Default.Bolt,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(36.dp)
-                    )
-                }
+                // The app logo (owner, 2026-11-16; scripts/build_app_icons.py makes it from public/logo.png)
+                Image(
+                    painter = painterResource(id = R.drawable.app_logo),
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.size(72.dp)
+                )
 
                 Spacer(modifier = Modifier.height(12.dp))
 

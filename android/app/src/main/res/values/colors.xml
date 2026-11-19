@@ -7,5 +7,5 @@
     <color name="power_on">#10B981</color>
     <color name="power_off">#FF5E3A</color>
     <!-- The orange rim of the launcher logo, shown only where a launcher shape reaches past the art -->
-    <color name="ic_launcher_background">#FB3D01</color>
+    <color name="ic_launcher_background">#30000B</color>
 </resources>

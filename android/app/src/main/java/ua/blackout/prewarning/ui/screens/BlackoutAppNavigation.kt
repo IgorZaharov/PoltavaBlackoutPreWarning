@@ -34,6 +34,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -45,6 +48,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.SideEffect
 import kotlinx.coroutines.withContext
 import ua.blackout.prewarning.core.SiteState
 import ua.blackout.prewarning.data.poe.PoeAddressLookup
@@ -63,6 +67,19 @@ import ua.blackout.prewarning.notification.ExactAlarmGate
 import ua.blackout.prewarning.notification.NotificationHelper
 import ua.blackout.prewarning.ui.AppStrings
 import ua.blackout.prewarning.ui.components.glassSurface
+import ua.blackout.prewarning.ui.components.CoachOverlay
+import ua.blackout.prewarning.ui.components.CoachTargets
+import ua.blackout.prewarning.ui.components.CoachTip
+import ua.blackout.prewarning.ui.components.LocalCoachTargets
+import ua.blackout.prewarning.ui.components.OnboardingStore
+import ua.blackout.prewarning.ui.components.OnboardingTour
+import ua.blackout.prewarning.ui.components.TourInput
+import ua.blackout.prewarning.ui.components.TourPage
+import ua.blackout.prewarning.ui.components.TourStep
+import ua.blackout.prewarning.ui.components.coachTarget
+import ua.blackout.prewarning.ui.components.coachOutsideTaps
+import ua.blackout.prewarning.ui.components.TourTap
+import androidx.compose.runtime.CompositionLocalProvider
 import ua.blackout.prewarning.ui.components.PageGlide
 import ua.blackout.prewarning.ui.components.ambientBreath
 import ua.blackout.prewarning.ui.components.ambientDrift
@@ -140,6 +157,20 @@ fun BlackoutAppNavigation(
     var vibrationEnabled by remember { mutableStateOf(initialSettings.vibrationEnabled) }
     var currentLanguage by remember { mutableStateOf(initialSettings.language) }
     var autoOpenQueueHelp by remember { mutableStateOf(false) }
+    // First-run tour (spec/ONBOARDING.md): started by the first-launch button, never shown again once finished
+    val onboarding = remember { OnboardingStore(appContext) }
+    val coachTargets = remember { CoachTargets() }
+    var tourActive by remember { mutableStateOf(false) }
+    var tourReachedRename by remember { mutableStateOf(false) }
+    var tourRenameDone by remember { mutableStateOf(false) }
+    /** What a tap outside the lit controls does on the current tip (null: nothing is shown here). */
+    var tourOutsideTap by remember { mutableStateOf<(() -> Unit)?>(null) }
+    fun endTour() {
+        onboarding.setDone(true)
+        tourActive = false
+        tourReachedRename = false
+        tourRenameDone = false
+    }
     var currentTime by remember { mutableStateOf(LocalTime.now(KYIV_ZONE)) }
 
     // An address counts as a selection even when it has no queue and no emergency right now
@@ -226,7 +257,9 @@ fun BlackoutAppNavigation(
         anyPlannedActive && !ExactAlarmGate.canScheduleExact(appContext)
     }
 
-    val isMainScreenVisible = pagerState.currentPage == 0
+    // settledPage, not currentPage: currentPage flips half way through a swipe, and the work that hangs on it
+    // (countdown on/off, snapshot, the Settings site check, recomposing both pages) made the swipe stutter
+    val isMainScreenVisible = pagerState.settledPage == 0
     val isCountdownScreenActive = isMainScreenVisible && !isQueueUnselected
     var hasCompletedInitialScheduleFetch by remember { mutableStateOf(false) }
 
@@ -287,7 +320,9 @@ fun BlackoutAppNavigation(
     LaunchedEffect(isMainScreenVisible) {
         if (isMainScreenVisible) {
             currentTime = LocalTime.now(KYIV_ZONE)
-            recomputeSnapshot()
+            val settings = currentSettings
+            val key = addressKey
+            snapshot = withContext(Dispatchers.Default) { shownSnapshot(settings, LocalDateTime.now(KYIV_ZONE), key) }
             if (hasCompletedInitialScheduleFetch) {
                 runRefresh(force = false, resolveAddress = true)
             }
@@ -299,8 +334,10 @@ fun BlackoutAppNavigation(
         if (!isCountdownScreenActive) {
             val nowDt = LocalDateTime.now(KYIV_ZONE)
             currentTime = nowDt.toLocalTime()
-            snapshot = shownSnapshot(currentSettings, nowDt, addressKey)
-            statusInfo = snapshot.scheduleStatus()
+            // off the main thread: stores are read and the engine runs, which must not cost a frame of a swipe
+            val fresh = withContext(Dispatchers.Default) { shownSnapshot(currentSettings, nowDt, addressKey) }
+            snapshot = fresh
+            statusInfo = fresh.scheduleStatus()
             return@LaunchedEffect
         }
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
@@ -313,7 +350,7 @@ fun BlackoutAppNavigation(
             while (true) {
                 val nowDt = LocalDateTime.now(KYIV_ZONE)
                 currentTime = nowDt.toLocalTime()
-                val fresh = shownSnapshot(currentSettings, nowDt, addressKey)
+                val fresh = withContext(Dispatchers.Default) { shownSnapshot(currentSettings, nowDt, addressKey) }
                 snapshot = fresh
                 val updatedStatus = fresh.scheduleStatus()
                 statusInfo = updatedStatus
@@ -480,9 +517,11 @@ fun BlackoutAppNavigation(
     val ambient = rememberAmbientSeconds()
     val reduceMotion = remember { reducedMotion(appContext) }
 
+    CompositionLocalProvider(LocalCoachTargets provides coachTargets) {
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .coachOutsideTaps(coachTargets, tourOutsideTap)
             .background(bgColors.primary)
             .drawBehind {
                 val w = size.width.coerceAtLeast(1f)
@@ -581,6 +620,8 @@ fun BlackoutAppNavigation(
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer {
+                    // alpha per draw call instead of an offscreen copy of the whole page every frame
+                    compositingStrategy = CompositingStrategy.ModulateAlpha
                     val away = kotlin.math.abs((pagerState.currentPage - page) + pagerState.currentPageOffsetFraction).coerceIn(0f, 1f)
                     alpha = 1f - 0.35f * away
                     if (!reduceMotion) {
@@ -637,6 +678,11 @@ fun BlackoutAppNavigation(
                         },
                         onOpenQueueSelection = {
                             autoOpenQueueHelp = true
+                            if (!onboarding.isDone()) {
+                                tourActive = true
+                                tourReachedRename = false
+                                tourRenameDone = false
+                            }
                             coroutineScope.launch {
                                 pagerState.animateScrollToPage(1, animationSpec = PageGlide)
                             }
@@ -671,17 +717,27 @@ fun BlackoutAppNavigation(
                         lang = resolvedLang,
                         autoOpenQueueHelp = autoOpenQueueHelp,
                         onAutoOpenQueueHelpHandled = { autoOpenQueueHelp = false },
+                        tourActive = tourActive,
+                        onTourSkip = { endTour() },
+                        onRenameDialogClosed = { if (tourActive && tourReachedRename) tourRenameDone = true },
                         onAddAddress = { resolvedQueue, statusText, addressLabel, query ->
                             val ok = onStoreResult(subscriptionSync.addFromLookup(resolvedQueue, statusText, addressLabel, query))
                             // the user stays in Settings (owner request): the address is added in place
                             if (ok) showAppBanner(AppStrings.addressAdded(resolvedLang))
                         },
                         onAddQueueOnly = { newQueue -> onStoreResult(subscriptionSync.addQueueOnly(newQueue)) },
+                        onAddCompany = { companyQueue, label ->
+                            if (onStoreResult(subscriptionSync.addQueueOnly(companyQueue, label))) showAppBanner(AppStrings.addressAdded(resolvedLang))
+                        },
                         onRemoveSubscription = { id -> onStoreResult(subscriptionSync.change { Subscriptions.remove(it, id) }) },
                         onMakePrimary = { id -> onStoreResult(subscriptionSync.change { Subscriptions.setPrimary(it, id) }) },
                         onSetPlanned = { id, on -> onStoreResult(subscriptionSync.change { Subscriptions.setPlanned(it, id, on) }) },
                         onSetEmergency = { id, on -> onStoreResult(subscriptionSync.change { Subscriptions.setEmergency(it, id, on) }) },
                         onRenameSubscription = { id, label -> onStoreResult(subscriptionSync.change { Subscriptions.rename(it, id, label) }) },
+                        onEditAddress = { id, resolvedQueue, statusText, addressLabel, query ->
+                            val ok = onStoreResult(subscriptionSync.editAddress(id, resolvedQueue, statusText, addressLabel, query))
+                            if (ok) showAppBanner(AppStrings.addressChanged(resolvedLang))
+                        },
                         onMoveSubscription = { id, to -> onStoreResult(subscriptionSync.change { Subscriptions.move(it, id, to) }) },
                         onSiteUrlChanged = { newUrl ->
                             siteUrl = newUrl
@@ -785,7 +841,7 @@ fun BlackoutAppNavigation(
                                 }
                             }
                         },
-                        isVisible = pagerState.currentPage == 1
+                        isVisible = pagerState.settledPage == 1
                     )
                 }
                 2 -> {
@@ -860,68 +916,111 @@ fun BlackoutAppNavigation(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Schedule Tab
-                        val isSchedule = pagerState.currentPage == 0
-                        Box(
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(CircleShape)
-                                .background(if (isSchedule) Color.White else Color.Transparent)
-                                .clickable(enabled = !isQueueUnselected) {
-                                    onDockTap(0)
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Default.Home,
-                                contentDescription = "Графік",
-                                tint = if (isSchedule) Color.Black else Color(0xB3BAE6FD),
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-
-                        // Settings Tab
-                        val isSettings = pagerState.currentPage == 1
-                        Box(
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(CircleShape)
-                                .background(if (isSettings) Color.White else Color.Transparent)
-                                .clickable(enabled = !isQueueUnselected) {
-                                    onDockTap(1)
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Default.Settings,
-                                contentDescription = "Налаштування",
-                                tint = if (isSettings) Color.Black else Color(0xB3BAE6FD),
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-
-                        // About Tab
-                        val isAbout = pagerState.currentPage == 2
-                        Box(
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(CircleShape)
-                                .background(if (isAbout) Color.White else Color.Transparent)
-                                .clickable(enabled = !isQueueUnselected) {
-                                    onDockTap(2)
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Default.Info,
-                                contentDescription = "Про додаток",
-                                tint = if (isAbout) Color.Black else Color(0xB3BAE6FD),
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
+                        // Each tab reads the pager itself, so the live page highlight recomposes only the tab
+                        DockTab(pagerState, 0, Icons.Default.Home, "Графік", !isQueueUnselected, Modifier.coachTarget("dock-home")) { onDockTap(0) }
+                        DockTab(pagerState, 1, Icons.Default.Settings, "Налаштування", !isQueueUnselected) { onDockTap(1) }
+                        DockTab(pagerState, 2, Icons.Default.Info, "Про додаток", !isQueueUnselected, Modifier.coachTarget("dock-about")) { onDockTap(2) }
                     }
                 }
             }
         }
+
+        // First-run tour on the main window: RENAME, ALERTS (Settings) and ABOUT (main screen); the lookup
+        // dialog draws PICK and APPLY in its own window
+        if (tourActive) {
+            val tourPage = when (pagerState.settledPage) {
+                0 -> TourPage.SCHEDULE
+                1 -> TourPage.SETTINGS
+                2 -> TourPage.ABOUT
+                else -> TourPage.OTHER
+            }
+            val step = OnboardingTour.step(
+                TourInput(
+                    active = true,
+                    lookupOpen = false,
+                    resultShown = false,
+                    page = tourPage,
+                    hasAddress = subscriptions.items.isNotEmpty(),
+                    reachedRename = tourReachedRename,
+                    renameDone = tourRenameDone
+                )
+            )
+            LaunchedEffect(step) { if (step == TourStep.RENAME) tourReachedRename = true }
+            // a tap outside the lit controls goes on to the next tip, switching to the main screen for ABOUT
+            val outside: (() -> Unit)? = remember(step) { when (OnboardingTour.outsideTap(step)) {
+                TourTap.RENAME_DONE -> { { tourRenameDone = true } }
+                TourTap.GO_HOME -> { { coroutineScope.launch { pagerState.animateScrollToPage(0, animationSpec = PageGlide) } } }
+                TourTap.FINISH -> { { endTour() } }
+                TourTap.NOTHING -> null
+            } }
+            SideEffect { tourOutsideTap = outside }
+            LaunchedEffect(tourPage, tourReachedRename) {
+                if (OnboardingTour.finishedBy(tourPage, tourReachedRename)) endTour()
+            }
+            when (step) {
+                TourStep.RENAME -> CoachOverlay(
+                    targets = coachTargets,
+                    holes = listOf(listOf("rename")),
+                    tips = listOf(CoachTip(anchor = listOf("rename"), text = AppStrings.tourRename(resolvedLang), next = true, skip = true)),
+                    lang = resolvedLang,
+                    onSkip = { endTour() },
+                    onNext = { tourRenameDone = true }
+                )
+                TourStep.ALERTS -> {
+                    val switches = listOf("alert-planned", "alert-emergency")
+                    CoachOverlay(
+                        targets = coachTargets,
+                        holes = listOf(switches, listOf("dock-home")),
+                        tips = listOf(
+                            CoachTip(anchor = switches, text = AppStrings.tourAlerts(resolvedLang), skip = true),
+                            CoachTip(anchor = listOf("dock-home"), text = AppStrings.tourBack(resolvedLang))
+                        ),
+                        lang = resolvedLang,
+                        onSkip = { endTour() }
+                    )
+                }
+                TourStep.ABOUT -> CoachOverlay(
+                    targets = coachTargets,
+                    holes = listOf(listOf("dock-about")),
+                    tips = listOf(CoachTip(anchor = listOf("dock-about"), text = AppStrings.tourDonate(resolvedLang), done = true)),
+                    lang = resolvedLang,
+                    onSkip = { endTour() },
+                    onDone = { endTour() }
+                )
+                else -> Unit
+            }
+        } else {
+            SideEffect { tourOutsideTap = null }
+        }
+    }
+    }
+}
+
+/** One dock button; reads [PagerState.currentPage] here so a swipe recomposes only this button. */
+@Composable
+private fun DockTab(
+    pagerState: PagerState,
+    page: Int,
+    icon: ImageVector,
+    description: String,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+    onTap: () -> Unit
+) {
+    val selected = pagerState.currentPage == page
+    Box(
+        modifier = modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .background(if (selected) Color.White else Color.Transparent)
+            .clickable(enabled = enabled, onClick = onTap),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            icon,
+            contentDescription = description,
+            tint = if (selected) Color.Black else Color(0xB3BAE6FD),
+            modifier = Modifier.size(20.dp)
+        )
     }
 }

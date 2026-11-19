@@ -36,6 +36,8 @@ export interface ScheduleSyncResult {
   siteState: SiteState;
   /** Active measures (ГАВ, СГАВ, ГОП ...) as one notice text, or null. */
   notice: string | null;
+  /** E2 answered (so a null `notice` means "no measures today", not "unknown"). */
+  measuresKnown?: boolean;
 }
 
 export interface ScheduleSyncOptions {
@@ -83,9 +85,10 @@ export async function syncPoeSchedule(options: ScheduleSyncOptions = {}): Promis
   const tomorrowFetch = await client.schedule(plusDays(today, 1));
   const measures = await client.measures(today);
   const notice = measures.kind === 'ok' ? noticeOf(measures.measures) : null;
+  const measuresKnown = measures.kind === 'ok';
 
   if (todayFetch.kind === 'ok') {
-    if (todayFetch.table.kind !== 'PUBLISHED') return { status: 'NO_QUEUES_FOUND', siteState: 'AVAILABLE_NO_TABLE', notice };
+    if (todayFetch.table.kind !== 'PUBLISHED') return { status: 'NO_QUEUES_FOUND', siteState: 'AVAILABLE_NO_TABLE', notice, measuresKnown };
     let tomorrow: Record<string, readonly ScheduleCell[]> | null = null;
     if (tomorrowFetch.kind === 'ok') {
       tomorrow = tomorrowFetch.table.kind === 'PUBLISHED' ? tomorrowFetch.table.queues : null;
@@ -101,15 +104,15 @@ export async function syncPoeSchedule(options: ScheduleSyncOptions = {}): Promis
       tomorrow = complete ? kept : null;
     }
     cache.saveAllCellsBatch(todayFetch.table.queues, tomorrow, today, nowMs);
-    return { status: 'SUCCESS', siteState: 'AVAILABLE_WITH_TABLE', notice };
+    return { status: 'SUCCESS', siteState: 'AVAILABLE_WITH_TABLE', notice, measuresKnown };
   }
   const networkFailure = todayFetch.reason === 'network' || todayFetch.reason.startsWith('http_');
   if (networkFailure) {
     const state = SiteStateResolver.resolve('OTHER', false, isOnline());
-    return { status: state === 'NO_INTERNET' ? 'NO_INTERNET' : 'NO_QUEUES_FOUND', siteState: state, notice };
+    return { status: state === 'NO_INTERNET' ? 'NO_INTERNET' : 'NO_QUEUES_FOUND', siteState: state, notice, measuresKnown };
   }
   // POE answered, but not with a table we can read (error body, other date, changed layout)
-  return { status: 'NO_QUEUES_FOUND', siteState: 'AVAILABLE_NO_TABLE', notice };
+  return { status: 'NO_QUEUES_FOUND', siteState: 'AVAILABLE_NO_TABLE', notice, measuresKnown };
 }
 
 export interface SiteVerificationResult {

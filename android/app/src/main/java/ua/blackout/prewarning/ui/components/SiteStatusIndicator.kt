@@ -235,7 +235,7 @@ fun SiteStatusChipRow(snapshot: OutageSnapshot, lang: String, modifier: Modifier
 
 /** Information card with the text ztoe publishes in place of the schedule, quoted as is. */
 @Composable
-fun SiteNoticeCard(text: String, lang: String, modifier: Modifier = Modifier) {
+fun SiteNoticeCard(text: String, lang: String, modifier: Modifier = Modifier, title: String = AppStrings.siteNoticeTitle(lang)) {
     GlassCard(
         modifier = modifier
             .fillMaxWidth()
@@ -263,7 +263,7 @@ fun SiteNoticeCard(text: String, lang: String, modifier: Modifier = Modifier) {
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Text(text = AppStrings.siteNoticeTitle(lang), style = ZtType.overline, color = ZtColors.ChipAmberText)
+                Text(text = title, style = ZtType.overline, color = ZtColors.ChipAmberText)
                 text.lines().forEachIndexed { i, line ->
                     Text(
                         text = line,

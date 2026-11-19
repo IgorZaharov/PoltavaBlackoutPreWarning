@@ -28,7 +28,9 @@ object PoeMapper {
         /** The house is off because of the hourly schedule (type 4, spec/POE_API.md 8.5): a mirror of E1, not an emergency. */
         val scheduleMirror: Boolean,
         /** The answer names an outage that could not be read: the fetch counts as unavailable. */
-        val unparsed: Boolean
+        val unparsed: Boolean,
+        /** No queue because the address has several connections (section 8.5 step 6): unknown, not "no queue". */
+        val severalConnections: Boolean = false
     )
 
     data class StreetEntry(val street: String, val houses: List<String>)
@@ -178,7 +180,8 @@ object PoeMapper {
         for (r in parsePlannedList(strOf(result["planned_message"]))) {
             if (r.start.isBefore(horizon)) addRepair(r.start, r.end)
         }
-        return AddressStatus(messageType, queue, emergency, repairs.values.sortedBy { it.start }, scheduleMirror, unparsed)
+        val several = queue == null && message.contains("декілька підключень")
+        return AddressStatus(messageType, queue, emergency, repairs.values.sortedBy { it.start }, scheduleMirror, unparsed, several)
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -260,6 +263,86 @@ object PoeMapper {
         s = BRACKET_TAIL.replace(s, "").trim()
         s = GLUED_ABBREVIATION.replace(s, "$1 ")
         return StreetKey.of(s)
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Nearby outages card (section 8.10)
+    // ---------------------------------------------------------------------------------------------
+
+    enum class NearbyStatus { ACTIVE, UPCOMING, FINISHED }
+
+    data class NearbyStreet(val name: String, val houses: List<String>, val mine: Boolean)
+
+    data class NearbyOutage(
+        val id: String,
+        val kind: RegistryKind,
+        val start: LocalDateTime,
+        val end: LocalDateTime?,
+        val reason: String,
+        val status: NearbyStatus,
+        val streets: List<NearbyStreet>,
+        val match: Match
+    )
+
+    /**
+     * The registry rows of the address's settlement for the card «Ремонти й пошкодження поруч»
+     * (display only: alerts and the timer come from the per-house status).
+     */
+    fun nearbyOutages(rows: List<RegistryRow>, settlement: String, street: String, house: String, now: LocalDateTime): List<NearbyOutage> {
+        val sk = settlementKey(settlement)
+        val userStreet = if (street.isBlank()) null else streetKey(street)
+        val out = ArrayList<NearbyOutage>()
+        for (row in rows) {
+            if (row.kind == RegistryKind.MIRROR) continue
+            val groups = row.places.filter { settlementKey(it.settlement) == sk }
+            if (groups.isEmpty()) continue
+            val merged = LinkedHashMap<String, Triple<String, LinkedHashMap<String, String>, Boolean>>()
+            for (g in groups) for (s in g.streets) {
+                val key = streetKey(s.street)
+                val prev = merged[key]
+                val houses = prev?.second ?: LinkedHashMap()
+                for (h in s.houses) {
+                    val t = h.trim()
+                    if (t.isNotEmpty()) houses.putIfAbsent(HouseKey.of(t), t)
+                }
+                val whole = (prev?.third ?: false) || s.houses.isEmpty()
+                merged[key] = Triple(prev?.first ?: SPACES.replace(s.street, " ").trim(), houses, whole)
+            }
+            val streets = merged.map { (key, v) ->
+                NearbyStreet(v.first, if (v.third) emptyList() else v.second.values.toList(), userStreet != null && key == userStreet)
+            }
+            // only outages on the user's own street (owner, 2026-11-16)
+            if (streets.none { it.mine }) continue
+            val status = when {
+                now.isBefore(row.start) -> NearbyStatus.UPCOMING
+                row.end != null && !now.isBefore(row.end) -> NearbyStatus.FINISHED
+                else -> NearbyStatus.ACTIVE
+            }
+            val match = if (street.isNotBlank() && house.isNotBlank()) registryMatch(row.places, settlement, street, house) else Match.NONE
+            val item = NearbyOutage(row.id, row.kind, row.start, row.end, row.reason, status, streets, match)
+            if (out.none { it.id == item.id && it.kind == item.kind && it.end == item.end && it.streets == item.streets }) out.add(item)
+        }
+        return out.sortedWith(compareBy<NearbyOutage>({ it.status.ordinal }, { it.start }, { it.id }))
+    }
+
+    /**
+     * Registry rows (8.7) that name the house itself ([registryMatch] CONFIRMED), as REPAIR outages of the
+     * address (owner, 2026-11-17: a repair or fault listed for the house must reach the drum, the list and
+     * the timer even when the per-house status says nothing). Rows without an end and ГПВ mirror rows are
+     * left out; a row naming only the street never becomes an outage (registry lists are incomplete).
+     */
+    fun registryRepairs(rows: List<RegistryRow>, settlement: String, street: String, house: String): List<Outage> {
+        if (street.isBlank() || house.isBlank()) return emptyList()
+        val out = LinkedHashMap<String, Outage>()
+        for (row in rows) {
+            if (row.kind == RegistryKind.MIRROR) continue
+            val end = row.end ?: continue
+            if (!end.isAfter(row.start)) continue
+            if (registryMatch(row.places, settlement, street, house) != Match.CONFIRMED) continue
+            val id = "registry_${row.start}_$end"
+            if (id !in out) out[id] = Outage(id = id, kind = OutageKind.REPAIR, start = row.start, end = end, label = LABEL_REPAIR)
+        }
+        return out.values.sortedBy { it.start }
     }
 
     /** Does a registry row name the address? Registry house lists are incomplete, see section 6. */

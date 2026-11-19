@@ -9,9 +9,11 @@
 import {
   ERR_NOT_FOUND,
   add,
+  cleanLabel,
   isValidQueue,
   makeSubscription,
   primaryMirror,
+  setAddress,
   setQueueInfo,
   type LegacyMirror,
   type LegacySettings,
@@ -145,9 +147,31 @@ export class SubscriptionSync {
     return this.change(settings, (s) => add(s, item));
   }
 
-  addQueueOnly(settings: UserSettings, queue: string): SyncResult {
+  /** The user edited the address of item `id` in Settings (`setAddress`, spec/SUBSCRIPTIONS.md section 4). */
+  editAddress(
+    settings: UserSettings,
+    id: string,
+    queue: string,
+    statusText: string | undefined,
+    addressText: string,
+    query: SelectedAddressQuery,
+  ): SyncResult {
     this.ensureReady(settings);
-    const item = makeSubscription(this.repo.newItemId(), { queue, queueSource: 'MANUAL', createdAtMs: Date.now() });
+    const address = {
+      remSlug: query.remId,
+      settlementId: query.settlementId,
+      streetId: query.streetId,
+      streetName: resolveStreetName(query.streetId) ?? '',
+      house: query.house,
+      text: addressText,
+    };
+    return this.change(settings, (s) => setAddress(s, id, address, isValidQueue(queue) ? queue : null, statusText ?? null));
+  }
+
+  /** A queue without an address; [label] names it (a workplace found in the company search). */
+  addQueueOnly(settings: UserSettings, queue: string, label?: string | null): SyncResult {
+    this.ensureReady(settings);
+    const item = makeSubscription(this.repo.newItemId(), { queue, queueSource: 'MANUAL', label: cleanLabel(label), createdAtMs: Date.now() });
     return this.change(settings, (s) => add(s, item));
   }
 

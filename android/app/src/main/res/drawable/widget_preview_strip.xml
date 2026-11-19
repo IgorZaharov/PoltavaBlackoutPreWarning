@@ -52,12 +52,12 @@
         android:fillColor="#1C1B18"
         android:pathData="M24,63 L33,63 L33,68 L24,68 Z M88,63 L97,63 L97,68 L88,68 Z M156,63 L165,63 L165,68 L156,68 Z M224,63 L233,63 L233,68 L224,68 Z M287,63 L296,63 L296,68 L287,68 Z" />
 
-    <!-- Black current-time needle (#0B0B0A) with halo -->
+    <!-- Bright yellow current-time needle (#FFE600) with a black outline -->
     <path
-        android:fillColor="#D9FFFFFF"
-        android:pathData="M145,14 L151,14 L151,60 L145,60 Z" />
+        android:fillColor="#000000"
+        android:pathData="M144.5,12 L151.5,12 L151.5,64 L144.5,64 Z" />
     <path
-        android:fillColor="#0B0B0A"
-        android:pathData="M146.5,14 L149.5,14 L149.5,60 L146.5,60 Z" />
+        android:fillColor="#FFE600"
+        android:pathData="M146.5,14 L149.5,14 L149.5,62 L146.5,62 Z" />
     </group>
 </vector>

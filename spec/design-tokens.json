@@ -22,7 +22,7 @@
     "drum": {
       "off": "#D62E26",
       "switchingGradient": ["#E3AE2E", "#F5C242", "#D9A62C"],
-      "_switchingDoc": "POE switching half-hour (spec/UI_DRUM.md section 1): POE's own yellow #F5C242 (gpv-s3) as a vertical gradient in the top half of the cell, no stripes; lighter than the emergency amber, which keeps its stripes in the bottom half.",
+      "_switchingDoc": "POE switching half-hour (spec/UI_DRUM.md section 1): POE's own yellow #F5C242 (gpv-s3) as a vertical gradient over the whole cell, no stripes; lighter than the emergency amber, which keeps its stripes in the bottom half when both apply.",
       "emergencyGradient": ["#FFB020", "#F28A1B", "#C96A0B"],
       "emergencyStripeDark": "#8C1A1208",
       "emergencyStripeLight": "#D9FFB020",

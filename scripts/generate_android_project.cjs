@@ -32,6 +32,36 @@ while ((match = entryRegex.exec(existingTs)) !== null) {
 
 const additionalFiles = [
   {
+    path: 'app/src/main/java/ua/blackout/prewarning/ui/components/CoachMarks.kt',
+    language: 'kotlin',
+    description: 'First-run tour spotlight overlay: dims the window except the lit controls, arrow and tip',
+  },
+  {
+    path: 'app/src/main/java/ua/blackout/prewarning/ui/components/OnboardingTour.kt',
+    language: 'kotlin',
+    description: 'First-run tour steps (PICK, APPLY, RENAME, ALERTS, ABOUT) and the "done" flag',
+  },
+  {
+    path: 'app/src/main/java/ua/blackout/prewarning/widget/BlackoutMinimalGlanceWidget.kt',
+    language: 'kotlin',
+    description: 'Minimal 2x2 widget: queue, status, countdown and refresh of the primary address',
+  },
+  {
+    path: 'app/src/main/java/ua/blackout/prewarning/core/QueueCatalogue.kt',
+    language: 'kotlin',
+    description: 'Address -> queue lookup in the POE hourly-schedule catalogue (several connections, whole streets and villages)',
+  },
+  {
+    path: 'app/src/main/java/ua/blackout/prewarning/data/poe/PoeQueues.kt',
+    language: 'kotlin',
+    description: 'Bundled queue catalogue (poe_queues.json), weekly refresh, company list',
+  },
+  {
+    path: 'app/src/main/java/ua/blackout/prewarning/ui/components/QueueChoiceChips.kt',
+    language: 'kotlin',
+    description: 'Selectable queue chips for houses with several connections, places and companies',
+  },
+  {
     path: 'app/src/main/java/ua/blackout/prewarning/core/PoeSchedule.kt',
     language: 'kotlin',
     description: 'POE schedule page parser: 12 queues x 48 cells (on / off / switching)',
