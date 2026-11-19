@@ -28,6 +28,9 @@ struct AddressLookupSheet: View {
     let siteUrl: String
     let lang: String
     let saved: SelectedAddressQuery?
+    /// First-run tour (spec/ONBOARDING.md): this cover draws its own PICK and APPLY steps.
+    let tourActive: Bool
+    let onTourSkip: () -> Void
     let onDismiss: () -> Void
     let onApply: (_ queue: String, _ statusText: String?, _ addressLabel: String, _ query: SelectedAddressQuery) -> Void
     let onBanner: (String) -> Void
@@ -69,6 +72,8 @@ struct AddressLookupSheet: View {
     @State private var refreshing: String?
     @State private var placeHints: [QueueCatalogue.Hint] = []
     @State private var placeQueue: String?
+    @State private var coachRects: [String: CGRect] = [:]
+    @State private var sheetHeight: CGFloat = 800
 
     /// The POE page named in step 1 of the queue help (AppStrings.queueHelpSteps), made a link there.
     private static let POE_SEARCH_URL = "https://www.poe.pl.ua/disconnection/poshuk-vidkliuchennia-za-osobovym-rakhunkom/"
@@ -78,6 +83,7 @@ struct AddressLookupSheet: View {
 
     init(
         siteUrl: String, lang: String, saved: SelectedAddressQuery?,
+        tourActive: Bool = false, onTourSkip: @escaping () -> Void = {},
         onDismiss: @escaping () -> Void,
         onApply: @escaping (String, String?, String, SelectedAddressQuery) -> Void,
         onBanner: @escaping (String) -> Void,
@@ -86,6 +92,8 @@ struct AddressLookupSheet: View {
         self.siteUrl = siteUrl
         self.lang = lang
         self.saved = saved
+        self.tourActive = tourActive
+        self.onTourSkip = onTourSkip
         self.onDismiss = onDismiss
         self.onApply = onApply
         self.onBanner = onBanner
@@ -155,6 +163,33 @@ struct AddressLookupSheet: View {
             .compactMap { $0 }.filter { !$0.ktIsBlank }.joined(separator: ", ")
     }
 
+    /// A result card is on screen: a house, or a place without streets or houses.
+    private var resultShown: Bool { placeMode != nil || (!house.ktIsBlank && matchedRecord != nil) }
+
+    /// PICK (settlement, its hint, street and house lit, the next field ringed) or APPLY (the result card, its
+    /// button ringed). PICK and APPLY wait for the address, so a tap outside does nothing here.
+    @ViewBuilder
+    private var tourOverlay: some View {
+        let step = OnboardingTour.step(TourInput(
+            active: tourActive, lookupOpen: true, resultShown: resultShown, page: .settings,
+            hasAddress: false, reachedRename: false, renameDone: false
+        ))
+        if step == .pick {
+            let block = ["settlement", "settlement-hint", "street", "house"]
+            let ring = currentStreet != nil ? "house" : (!settlementId.ktIsBlank ? "street" : "settlement")
+            CoachOverlay(rects: coachRects, holes: [block],
+                         tips: [CoachTip(anchor: block, text: AppStrings.tourPick(lang), ring: ring, skip: true)],
+                         lang: lang, onSkip: onTourSkip)
+        } else if step == .apply {
+            // outside the result card unless the card fills most of the screen; the button is ringed
+            let card = coachRects["result"]
+            let anchor = (card.map { $0.height < sheetHeight * 0.55 } ?? false) ? "result" : "apply"
+            CoachOverlay(rects: coachRects, holes: [["result"]],
+                         tips: [CoachTip(anchor: [anchor], text: AppStrings.tourApply(lang), ring: "apply", skip: true)],
+                         lang: lang, onSkip: onTourSkip)
+        }
+    }
+
     private func clearBelowRem() {
         settlementId = ""
         streetId = ""
@@ -174,6 +209,7 @@ struct AddressLookupSheet: View {
     // MARK: - Body
 
     var body: some View {
+      ScrollViewReader { proxy in
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 header
@@ -201,6 +237,16 @@ struct AddressLookupSheet: View {
             .padding(.vertical, 16)
         }
         .scrollDismissesKeyboard(.interactively)
+        .onPreferenceChange(CoachRectsKey.self) { coachRects = $0 }
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { sheetHeight = $0 }
+        .overlay { tourOverlay }
+        // the tour scrolls the control its tip points at into view: the fields (PICK), the button (APPLY)
+        .task(id: "\(tourActive)|\(resultShown)") {
+            guard tourActive else { return }
+            try? await Task.sleep(for: .milliseconds(400))
+            withAnimation { proxy.scrollTo(resultShown ? "tour-apply" : "tour-pick", anchor: .center) }
+        }
+      }
         .background(ZtColors.cardSolid.ignoresSafeArea())
         .preferredColorScheme(.dark)
         // the hourly-schedule catalogue (about 2 MB) for the company search, read off the main thread
@@ -287,10 +333,13 @@ struct AddressLookupSheet: View {
                     clearBelowSettlement()
                 }
             }
+            .coachTarget("settlement")
+            .id("tour-pick")
             Text(verbatim: AppStrings.addrCityAnyBranchHint(lang))
                 .ztText(ZtType.caption)
                 .foregroundStyle(ZtColors.textTertiary)
                 .padding(.leading, 4)
+                .coachTarget("settlement-hint")
 
             SearchablePickerField(
                 label: AppStrings.addrStreetLabel(lang),
@@ -315,6 +364,7 @@ struct AddressLookupSheet: View {
                     lookup = nil
                 }
             }
+            .coachTarget("street")
 
             SearchablePickerField(
                 label: AppStrings.addrHouseLabel(lang),
@@ -333,6 +383,7 @@ struct AddressLookupSheet: View {
                 house = item.id
                 lookup = nil
             }
+            .coachTarget("house")
 
             if let mode = placeMode {
                 placeCard(mode)
@@ -414,12 +465,15 @@ struct AddressLookupSheet: View {
             }
             .buttonStyle(ZtPressStyle())
             .disabled(!canApply)
+            .coachTarget("apply")
+            .id("tour-apply")
         }
         .padding(16)
         .background {
             RoundedRectangle(cornerRadius: 16).fill(Color(argb: 0xD9141A29))
                 .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.white.opacity(0.25), lineWidth: 2))
         }
+        .coachTarget("result")
         .padding(.top, 6)
     }
 
@@ -457,12 +511,15 @@ struct AddressLookupSheet: View {
             ) {
                 if let q = placeQueue { onAddCompany(q, placeLabel) }
             }
+            .coachTarget("apply")
+            .id("tour-apply")
         }
         .padding(16)
         .background {
             RoundedRectangle(cornerRadius: 16).fill(Color(argb: 0xD9141A29))
                 .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.white.opacity(0.25), lineWidth: 2))
         }
+        .coachTarget("result")
         .padding(.top, 6)
     }
 

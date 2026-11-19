@@ -56,6 +56,32 @@ final class AppModel: ObservableObject {
     }
     /// Main's "Select queue" asks Settings to open the address lookup at once.
     @Published var autoOpenQueueHelp = false
+    // First-run tour (spec/ONBOARDING.md): started by the first-launch button, never shown again once finished
+    @Published private(set) var tourActive = false
+    @Published var tourReachedRename = false
+    @Published var tourRenameDone = false
+
+    /// The first-launch button was tapped: a new user gets the tour.
+    func startTourIfNew() {
+        guard !OnboardingTour.isDone else { return }
+        tourActive = true
+        tourReachedRename = false
+        tourRenameDone = false
+    }
+
+    /// «Зрозуміло», «Пропустити підказки», a tap outside on ABOUT, or About opened after RENAME: never shown again.
+    func endTour() {
+        OnboardingTour.setDone(true)
+        tourActive = false
+        tourReachedRename = false
+        tourRenameDone = false
+    }
+
+    /// The rename dialog was closed (saved or cancelled) during RENAME: the tour goes on to ALERTS.
+    func tourRenameDialogClosed() {
+        if tourActive && tourReachedRename { tourRenameDone = true }
+    }
+
     /// iOS notification permission; `.authorized` until read, so the ask card never flashes.
     @Published private(set) var notificationAuth: UNAuthorizationStatus = .authorized
 

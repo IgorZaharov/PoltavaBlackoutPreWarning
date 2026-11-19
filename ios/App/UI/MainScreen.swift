@@ -650,6 +650,7 @@ private struct FirstLaunchOverlay: View {
         VStack(spacing: 24) {
             FirstStartTip(lang: lang).padding(.bottom, -12)
             Button {
+                model.startTourIfNew()
                 model.autoOpenQueueHelp = true
                 model.go(to: 1)
             } label: {
