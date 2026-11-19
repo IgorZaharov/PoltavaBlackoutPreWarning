@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Loading flags of one level of the REM, settlement, street, house cascade; `retry` re-runs its fetch
-/// with forceRefresh.
+/// Loading flags of one level of the branch, settlement, street, house cascade; `retry` asks POE for
+/// that list again.
 private struct LevelState: Equatable {
     var loading = false
     var failed = false
@@ -9,9 +9,10 @@ private struct LevelState: Equatable {
 }
 
 /// Full-screen queue help and address lookup (the "?" button; port of Android SettingsScreen.kt
-/// `AddressLookupDialog`). The cascade starts from the saved address, or from Zhytomyr city on a first
-/// launch; choosing another REM clears settlement, street and house. Nothing is applied until the user
-/// presses the result button.
+/// `AddressLookupDialog`) on Полтаваобленерго data (`PoeAddressLookup`). The cascade starts from the
+/// saved address, or from Полтава (Полтавська об'єднана філія) on a first launch; choosing another branch
+/// clears settlement, street and house. Settlements and streets come from the bundled directory, houses
+/// and the queue live from POE. Nothing is applied until the user presses the result button.
 struct AddressLookupSheet: View {
     let siteUrl: String
     let lang: String
@@ -25,10 +26,10 @@ struct AddressLookupSheet: View {
     @State private var streetId: String
     @State private var house: String
 
-    @State private var rems: [ZtoeRemOption]
-    @State private var settlements: [ZtoeSettlementOption]
-    @State private var streets: [ZtoeStreetOption]
-    @State private var houses: [ZtoeHouseLookupResult]
+    @State private var rems: [PoeBranchOption]
+    @State private var settlements: [PoeSettlementOption]
+    @State private var streets: [PoeStreetOption]
+    @State private var houses: [PoeHouseLookupResult]
     @State private var remsState = LevelState()
     @State private var settlementsState = LevelState()
     @State private var streetsState = LevelState()
@@ -36,9 +37,13 @@ struct AddressLookupSheet: View {
 
     @State private var checking = false
     @State private var checkFailed = false
-    @State private var lookup: ZtoeHouseLookupResult?
+    @State private var lookup: PoeHouseLookupResult?
 
-    private static let ZTOE_SEARCH_URL = "https://www.ztoe.com.ua/unhooking-search.php"
+    /// The POE page named in step 1 of the queue help (AppStrings.queueHelpSteps), made a link there.
+    private static let POE_SEARCH_URL = "https://www.poe.pl.ua/disconnection/poshuk-vidkliuchennia-za-osobovym-rakhunkom/"
+    private static let DEFAULT_BRANCH = "poltavska"
+    /// місто Полтава (POE city_id).
+    private static let DEFAULT_SETTLEMENT = "11389"
 
     init(
         siteUrl: String, lang: String, saved: SelectedAddressQuery?,
@@ -52,32 +57,32 @@ struct AddressLookupSheet: View {
         self.onDismiss = onDismiss
         self.onApply = onApply
         self.onBanner = onBanner
-        let rem = saved.map { $0.remId.ktIsBlank ? "zhytomyr" : $0.remId } ?? "zhytomyr"
-        let settlement = saved.map { $0.settlementId.ktIsBlank ? "zt_city" : $0.settlementId } ?? "zt_city"
+        let rem = saved.map { $0.remId.ktIsBlank ? Self.DEFAULT_BRANCH : $0.remId } ?? Self.DEFAULT_BRANCH
+        let settlement = saved.map { $0.settlementId.ktIsBlank ? Self.DEFAULT_SETTLEMENT : $0.settlementId } ?? Self.DEFAULT_SETTLEMENT
         let street = saved?.streetId ?? ""
         _remId = State(initialValue: rem)
         _settlementId = State(initialValue: settlement)
         _streetId = State(initialValue: street)
         _house = State(initialValue: saved?.house ?? "")
-        _rems = State(initialValue: ZtoeAddressLookup.getRems())
-        _settlements = State(initialValue: ZtoeAddressLookup.getSettlementsForRem(rem))
-        _streets = State(initialValue: settlement.ktIsBlank ? [] : ZtoeAddressLookup.getStreetsForSettlement(settlement))
-        _houses = State(initialValue: street.ktIsBlank ? [] : ZtoeAddressLookup.getHousesForStreet(street))
+        _rems = State(initialValue: PoeAddressLookup.getRems())
+        _settlements = State(initialValue: PoeAddressLookup.getSettlementsForRem(rem))
+        _streets = State(initialValue: settlement.ktIsBlank ? [] : PoeAddressLookup.getStreetsForSettlement(settlement))
+        _houses = State(initialValue: street.ktIsBlank ? [] : PoeAddressLookup.getHousesForStreet(street))
     }
 
     // MARK: - Derived
 
     private func name(uk: String, en: String) -> String { lang == "uk" ? uk : en }
-    // Settlements and streets keep their Ukrainian names in both languages (SettingsScreen.kt): the live
-    // ztoe lists have no English names, so translating only the built-in ones mixed the two.
-    private var currentRem: ZtoeRemOption? { rems.first { $0.id == remId } }
-    private var currentSettlement: ZtoeSettlementOption? {
-        settlementId.ktIsBlank ? nil : (settlements.first { $0.id == settlementId } ?? ZtoeAddressLookup.findSettlementById(settlementId))
+    // Settlements and streets keep their Ukrainian names in both languages (SettingsScreen.kt): the POE
+    // lists have no English names.
+    private var currentRem: PoeBranchOption? { rems.first { $0.id == remId } }
+    private var currentSettlement: PoeSettlementOption? {
+        settlementId.ktIsBlank ? nil : (settlements.first { $0.id == settlementId } ?? PoeAddressLookup.findSettlementById(settlementId))
     }
-    private var currentStreet: ZtoeStreetOption? {
-        streetId.ktIsBlank ? nil : (streets.first { $0.id == streetId } ?? ZtoeAddressLookup.findStreetById(streetId))
+    private var currentStreet: PoeStreetOption? {
+        streetId.ktIsBlank ? nil : (streets.first { $0.id == streetId } ?? PoeAddressLookup.findStreetById(streetId))
     }
-    private var currentHouseRecord: ZtoeHouseLookupResult? {
+    private var currentHouseRecord: PoeHouseLookupResult? {
         houses.first { $0.house.caseInsensitiveCompare(house) == .orderedSame }
     }
 
@@ -89,7 +94,7 @@ struct AddressLookupSheet: View {
     }
 
     /// The live answer when it is for this house, merged with the indexed row; else the indexed row.
-    private var matchedRecord: ZtoeHouseLookupResult? {
+    private var matchedRecord: PoeHouseLookupResult? {
         let valid = lookup.flatMap { $0.house.caseInsensitiveCompare(house) == .orderedSame ? $0 : nil }
         if var v = valid, let rec = currentHouseRecord {
             if v.queue.isEmpty { v.queue = rec.queue }
@@ -98,7 +103,7 @@ struct AddressLookupSheet: View {
         }
         if let valid { return valid }
         if let rec = currentHouseRecord { return rec }
-        if !house.ktIsBlank { return ZtoeHouseLookupResult(house: house, queue: "", addressLabel: selectedAddressStr) }
+        if !house.ktIsBlank { return PoeHouseLookupResult(house: house, queue: "", addressLabel: selectedAddressStr) }
         return nil
     }
 
@@ -148,15 +153,14 @@ struct AddressLookupSheet: View {
         .scrollDismissesKeyboard(.interactively)
         .background(ZtColors.cardSolid.ignoresSafeArea())
         .preferredColorScheme(.dark)
-        // REM list. A retry forces a fresh fetch; otherwise the in-memory cache is used.
-        .task(id: "\(siteUrl)|\(remsState.retry)") { await loadRems() }
-        // settlements of the REM: never picks one by itself, only drops a choice that no longer exists
-        .task(id: "\(remId)|\(siteUrl)|\(settlementsState.retry)") { await loadSettlements() }
-        // streets (the fetch also bulk-indexes the houses of the whole settlement)
-        .task(id: "\(remId)|\(settlementId)|\(siteUrl)|\(streetsState.retry)") { await loadStreets() }
-        .task(id: "\(remId)|\(settlementId)|\(streetId)|\(siteUrl)|\(housesState.retry)") { await loadHouses() }
-        // asks the site when street and house are chosen
-        .task(id: "\(remId)|\(settlementId)|\(streetId)|\(house)|\(siteUrl)") { await checkAddress() }
+        // settlements of the branch (local; a retry asks POE): never picks one by itself
+        .task(id: "\(remId)|\(settlementsState.retry)") { await loadSettlements() }
+        // streets of the settlement (local; a retry asks POE)
+        .task(id: "\(remId)|\(settlementId)|\(streetsState.retry)") { await loadStreets() }
+        // houses of the street, live from POE
+        .task(id: "\(remId)|\(settlementId)|\(streetId)|\(housesState.retry)") { await loadHouses() }
+        // asks POE for the queue when street and house are chosen
+        .task(id: "\(remId)|\(settlementId)|\(streetId)|\(house)") { await checkAddress() }
     }
 
     private var header: some View {
@@ -243,7 +247,7 @@ struct AddressLookupSheet: View {
                 if item.id != streetId {
                     streetId = item.id
                     house = ""
-                    houses = ZtoeAddressLookup.getHousesForStreet(item.id)
+                    houses = PoeAddressLookup.getHousesForStreet(item.id)
                     lookup = nil
                 }
             }
@@ -277,7 +281,7 @@ struct AddressLookupSheet: View {
         }
     }
 
-    private func resultCard(_ record: ZtoeHouseLookupResult) -> some View {
+    private func resultCard(_ record: PoeHouseLookupResult) -> some View {
         // while the site answers, an address without a known queue cannot be confirmed yet
         let canApply = !(checking && record.queue.ktIsBlank)
         return VStack(alignment: .leading, spacing: 10) {
@@ -369,8 +373,8 @@ struct AddressLookupSheet: View {
 
     static func linked(_ step: String) -> AttributedString {
         var s = AttributedString(step)
-        if let range = s.range(of: ZTOE_SEARCH_URL) {
-            s[range].link = URL(string: ZTOE_SEARCH_URL)
+        if let range = s.range(of: POE_SEARCH_URL) {
+            s[range].link = URL(string: POE_SEARCH_URL)
             // the SwiftUI scope: UIKit has attributes with the same names
             s[range].swiftUI.underlineStyle = Text.LineStyle(pattern: .solid)
             s[range].swiftUI.foregroundColor = ZtColors.accent
@@ -380,26 +384,25 @@ struct AddressLookupSheet: View {
 
     // MARK: - Loading
 
-    private func loadRems() async {
-        remsState.loading = true
-        remsState.failed = false
-        let fetched = await ZtoeAddressLookup.fetchRemsFromZtoe(siteUrl: siteUrl, forceRefresh: remsState.retry > 0)
-        if Task.isCancelled { return }
-        if !fetched.isEmpty { rems = fetched }
-        remsState.failed = rems.isEmpty
-        remsState.loading = false
+    /// The directory may still be loading at the first frame: parse it off the main thread first.
+    private func ensureDirectory() async {
+        await Task.detached(priority: .userInitiated) { PoeAddressLookup.initialize() }.value
     }
 
     private func loadSettlements() async {
-        settlements = ZtoeAddressLookup.getSettlementsForRem(remId)
-        settlementsState.loading = true
-        settlementsState.failed = false
-        let fetched = await ZtoeAddressLookup.fetchSettlementsForRem(remId, siteUrl: siteUrl, forceRefresh: settlementsState.retry > 0)
+        await ensureDirectory()
         if Task.isCancelled { return }
-        if !fetched.isEmpty { settlements = fetched }
+        settlementsState.failed = false
+        if settlementsState.retry > 0 {
+            settlementsState.loading = true
+            _ = await PoeAddressLookup.refreshSettlements(remId)
+            if Task.isCancelled { return }
+            settlementsState.loading = false
+        }
+        settlements = PoeAddressLookup.getSettlementsForRem(remId)
         settlementsState.failed = settlements.isEmpty
-        settlementsState.loading = false
-        if !settlementId.ktIsBlank && !settlements.isEmpty && !settlements.contains(where: { $0.id == settlementId }) {
+        if !settlementId.ktIsBlank && !settlements.isEmpty && !settlements.contains(where: { $0.id == settlementId })
+            && PoeAddressLookup.findSettlementById(settlementId) == nil {
             settlementId = ""
             clearBelowSettlement()
         }
@@ -412,22 +415,17 @@ struct AddressLookupSheet: View {
             streetsState.failed = false
             return
         }
-        streets = ZtoeAddressLookup.getStreetsForSettlement(settlementId)
-        streetsState.loading = true
-        streetsState.failed = false
-        let fetched = await ZtoeAddressLookup.fetchStreetsForSettlement(remId, settlementId, siteUrl: siteUrl, forceRefresh: streetsState.retry > 0)
+        await ensureDirectory()
         if Task.isCancelled { return }
-        if !fetched.isEmpty {
-            streets = fetched
-            rems = ZtoeAddressLookup.getRems()
-            settlements = ZtoeAddressLookup.getSettlementsForRem(remId)
-            if !streetId.ktIsBlank {
-                let indexed = ZtoeAddressLookup.getHousesForStreet(streetId)
-                if !indexed.isEmpty { houses = indexed }
-            }
+        streetsState.failed = false
+        if streetsState.retry > 0 {
+            streetsState.loading = true
+            _ = await PoeAddressLookup.refreshStreets(remId, settlementId)
+            if Task.isCancelled { return }
+            streetsState.loading = false
         }
+        streets = PoeAddressLookup.getStreetsForSettlement(settlementId)
         streetsState.failed = streets.isEmpty
-        streetsState.loading = false
     }
 
     private func loadHouses() async {
@@ -437,12 +435,12 @@ struct AddressLookupSheet: View {
             housesState.failed = false
             return
         }
-        houses = ZtoeAddressLookup.getHousesForStreet(streetId)
+        houses = PoeAddressLookup.getHousesForStreet(streetId)
         housesState.loading = true
         housesState.failed = false
-        let fetched = await ZtoeAddressLookup.fetchHousesForStreet(remId, settlementId, streetId, siteUrl: siteUrl, forceRefresh: housesState.retry > 0)
+        let fetched = await PoeAddressLookup.fetchHousesForStreet(remId, settlementId, streetId)
         if Task.isCancelled { return }
-        if !fetched.isEmpty { houses = fetched }
+        if let fetched, !fetched.isEmpty { houses = fetched }
         housesState.failed = houses.isEmpty
         housesState.loading = false
     }
@@ -455,8 +453,8 @@ struct AddressLookupSheet: View {
             return
         }
         checking = true
-        let res = await ZtoeAddressLookup.checkAddressOnZtoeWebsite(
-            remId: remId, settlementId: settlementId, streetId: streetId, house: house, siteUrl: siteUrl
+        let res = await PoeAddressLookup.checkAddress(
+            SelectedAddressQuery(remId: remId, settlementId: settlementId, streetId: streetId, house: house)
         )
         if Task.isCancelled { return }
         checking = false

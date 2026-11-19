@@ -1,15 +1,15 @@
 import Foundation
 
-// Mirror of android data/model/Models.kt (1.4.0). The retired 1.3.x emergency model
-// (EmergencyOutageInfo, active_emergency_outage_*) is not ported: emergencies come from PowerOn
-// through OutageRepository and the EmergencyLedger.
+// Mirror of android data/model/Models.kt. The retired 1.3.x emergency model
+// (EmergencyOutageInfo, active_emergency_outage_*) is not ported: emergencies come from the POE
+// per-house status through OutageRepository and the EmergencyLedger.
 
 public enum SlotStatus: String, Codable, Hashable, Sendable {
     case POWER_ON
     case POWER_OFF
 }
 
-/// The address chosen in the "?" dialog: ztoe REM slug, settlement option id, street option id, house.
+/// The address chosen in the "?" dialog: POE branch slug, settlement id (POE city_id), street id, house.
 public struct SelectedAddressQuery: Hashable, Sendable {
     public var remId: String
     public var settlementId: String
@@ -36,13 +36,15 @@ public struct BlackoutSlot: Hashable, Identifiable, Sendable {
     public var endTimeStr: String
     public var status: SlotStatus
     public var isEmergency: Bool
-    /// Off because of the planned ztoe schedule (or repair works). With `isEmergency` both overlap on the drum.
+    /// Off because of the planned POE schedule (or repair works). With `isEmergency` both overlap on the drum.
     public var isPlanned: Bool
+    /// POE's switching half-hour (spec/OUTAGE_ENGINE.md 3.5): power may come back inside it; never "off".
+    public var isSwitching: Bool
 
     public init(
         id: String, startHour: Int, endHour: Int, startMinute: Int, endMinute: Int,
         startTimeStr: String, endTimeStr: String, status: SlotStatus,
-        isEmergency: Bool = false, isPlanned: Bool? = nil
+        isEmergency: Bool = false, isPlanned: Bool? = nil, isSwitching: Bool = false
     ) {
         self.id = id
         self.startHour = startHour
@@ -54,6 +56,7 @@ public struct BlackoutSlot: Hashable, Identifiable, Sendable {
         self.status = status
         self.isEmergency = isEmergency
         self.isPlanned = isPlanned ?? (status == .POWER_OFF && !isEmergency)
+        self.isSwitching = isSwitching
     }
 
     public var label: String { "\(startTimeStr) - \(endTimeStr)" }
@@ -61,7 +64,7 @@ public struct BlackoutSlot: Hashable, Identifiable, Sendable {
 
 // CRITICAL CONSTANTS — DO NOT MODIFY DEFAULT VALUES (advanceNoticeMinutes = 15, refreshIntervalMinutes = 30) UNLESS EXPLICITLY REQUESTED
 public struct UserSettings: Hashable, Sendable {
-    public var cityUrl: String = "https://www.ztoe.com.ua/unhooking-search.php"
+    public var cityUrl: String = "https://www.poe.pl.ua/disconnection/power-outages/"
     public var queue: String = ""
     public var customQueueStatusText: String? = nil
     public var selectedAddress: String? = nil

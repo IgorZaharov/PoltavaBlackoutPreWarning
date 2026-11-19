@@ -21,7 +21,7 @@ public enum HttpError: Error, Sendable {
     case status(Int)
 }
 
-/// Seam for tests (mirror of the `HttpGet` interface of android PowerOnClient).
+/// Seam for tests (plain GETs: the directory and catalogue downloads; POE posts go through `PoeTransport`).
 public protocol HttpClient: Sendable {
     func send(_ request: URLRequest) async throws -> HttpResponse
 }
@@ -54,10 +54,6 @@ public struct URLSessionHttp: HttpClient {
 }
 
 public enum Http {
-    /// Same desktop browser identity the Android app sends to ztoe.com.ua.
-    public static let userAgent =
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-
     /// Maps a thrown error to the platform-neutral failure kind of spec/SITE_STATE.md.
     public static func failure(of error: Error) -> FetchFailure {
         if case HttpError.status = error { return .HTTP_ERROR }
@@ -79,42 +75,6 @@ public enum Http {
         default:
             return .OTHER
         }
-    }
-}
-
-/// ztoe.com.ua answers in Windows-1251. The raw bytes are decoded once (never decoded and re-encoded).
-public enum Cp1251 {
-    private static let encoding: String.Encoding = {
-        let cf = CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(CFStringEncodings.windowsCyrillic.rawValue))
-        return String.Encoding(rawValue: cf)
-    }()
-
-    /// Decodes as Windows-1251 unless the server declared UTF-8 (`Content-Type`), like the Android
-    /// parser; falls back to UTF-8 only when the bytes are not valid Windows-1251.
-    public static func decode(_ data: Data, contentType: String? = nil) -> String {
-        if let ct = contentType?.lowercased(), ct.contains("utf-8"), let s = String(data: data, encoding: .utf8) {
-            return s
-        }
-        if let s = String(data: data, encoding: encoding) { return s }
-        return String(decoding: data, as: UTF8.self)
-    }
-
-    /// Encodes a form value for an application/x-www-form-urlencoded body in Windows-1251
-    /// (ztoe expects its own charset in POST bodies).
-    public static func formEncode(_ value: String) -> String {
-        guard let bytes = value.data(using: encoding, allowLossyConversion: true) else { return value }
-        var out = ""
-        for b in bytes {
-            let c = Character(UnicodeScalar(b))
-            if (b >= 0x30 && b <= 0x39) || (b >= 0x41 && b <= 0x5A) || (b >= 0x61 && b <= 0x7A) || "-_.*".contains(c) {
-                out.append(c)
-            } else if b == 0x20 {
-                out.append("+")
-            } else {
-                out += String(format: "%%%02X", b)
-            }
-        }
-        return out
     }
 }
 

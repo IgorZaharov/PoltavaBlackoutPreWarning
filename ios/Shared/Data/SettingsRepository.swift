@@ -7,7 +7,7 @@ public final class SettingsRepository {
 
     public static let KEY_EMERGENCY_ETA_ALERTS = "emergency_eta_alerts"
     public static let KEY_EMERGENCY_END_ALERTS = "emergency_end_alerts"
-    public static let DEFAULT_URL = "https://www.ztoe.com.ua/unhooking-search.php"
+    public static let DEFAULT_URL = "https://www.poe.pl.ua/disconnection/power-outages/"
 
     let prefs: Prefs
     private let lock = NSLock()

@@ -103,6 +103,9 @@ targets:
       - path: ../spec/fixtures/poe
         type: folder
         buildPhase: resources
+      # The branch table PoeBranches.swift must match.
+      - path: ../spec/branches.json
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ua.blackout.prewarning.poltava.tests
