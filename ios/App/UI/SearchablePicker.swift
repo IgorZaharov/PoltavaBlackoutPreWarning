@@ -1,9 +1,14 @@
 import SwiftUI
 
 /// One row of a `SearchablePickerField`. `id` must be unique inside one list; duplicates are dropped.
+/// `search`: the text the picker search matches when it differs from `label` (a company's name and the words
+/// people search for); `context`: text searched only after every label match (a company's PDF row), a hit
+/// shows the piece that matched (Android `PickerItem`).
 struct PickerItem: Hashable, Identifiable {
     let id: String
     let label: String
+    var search: String? = nil
+    var context: String? = nil
 }
 
 /// A read-only field that opens a full-screen searchable list (port of Android
@@ -25,6 +30,8 @@ struct SearchablePickerField: View {
     var disabledHint: String? = nil
     /// CI screenshots only: opens the list as soon as the field appears.
     var autoOpen: Bool = false
+    /// Put before the matched piece of a context hit ("у рядку графіка:").
+    var contextLabel: String? = nil
     let onSelect: (PickerItem) -> Void
 
     @State private var open = false
@@ -69,7 +76,7 @@ struct SearchablePickerField: View {
         .fullScreenCover(isPresented: $open) {
             PickerList(
                 title: label, items: items, selectedId: selectedId, lang: lang,
-                loading: loading, loadFailed: loadFailed, onRetry: onRetry, kind: kind,
+                loading: loading, loadFailed: loadFailed, onRetry: onRetry, kind: kind, contextLabel: contextLabel,
                 onDismiss: { withoutAnimation { open = false } },
                 onSelect: { item in
                     withoutAnimation { open = false }
@@ -97,6 +104,7 @@ private struct PickerList: View {
     let loadFailed: Bool
     let onRetry: (() -> Void)?
     let kind: PickerSearch.Kind
+    let contextLabel: String?
     let onDismiss: () -> Void
     let onSelect: (PickerItem) -> Void
 
@@ -106,7 +114,7 @@ private struct PickerList: View {
     var body: some View {
         // duplicate ids would confuse the lazy list, so the list is made unique once
         let unique = Self.unique(items)
-        let shown = PickerSearch.Index(unique, kind: kind) { $0.label }.search(query)
+        let shown = PickerSearch.Index(unique, kind: kind, context: { $0.context }) { $0.search ?? $0.label }.searchHits(query)
         VStack(spacing: 0) {
             HStack(spacing: 4) {
                 Button(action: onDismiss) {
@@ -165,7 +173,7 @@ private struct PickerList: View {
                     ScrollViewReader { proxy in
                         ScrollView {
                             LazyVStack(spacing: 0) {
-                                ForEach(shown) { item in row(item) }
+                                ForEach(shown, id: \.item.id) { hit in row(hit.item, snippet: hit.snippet) }
                             }
                             .padding(.bottom, 16)
                         }
@@ -198,13 +206,22 @@ private struct PickerList: View {
         .onAppear { focused = true }
     }
 
-    private func row(_ item: PickerItem) -> some View {
+    private func row(_ item: PickerItem, snippet: String?) -> some View {
         let selected = item.id == selectedId
         return Button { onSelect(item) } label: {
             HStack {
-                Text(verbatim: item.label).ztText(ZtType.body).foregroundStyle(Color.white)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.trailing, 12)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(verbatim: item.label).ztText(ZtType.body).foregroundStyle(Color.white)
+                    // found by its context (a company's PDF row): the matched piece under the name
+                    if let snippet {
+                        Text(verbatim: contextLabel.map { "\($0) \(snippet)" } ?? snippet)
+                            .ztText(ZtType.caption)
+                            .foregroundStyle(ZtColors.textSecondary)
+                            .lineLimit(2)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.trailing, 12)
                 if selected {
                     Image(systemName: "checkmark").font(.system(size: 17, weight: .bold)).foregroundStyle(ZtColors.accent)
                         .accessibilityLabel(Text(verbatim: AppStrings.pickerSelected(lang)))

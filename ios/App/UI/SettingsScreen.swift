@@ -195,7 +195,11 @@ struct SettingsScreen: View {
                     model.addAddress(queue: queue, statusText: status, addressLabel: label, query: query)
                     showLookup = false
                 },
-                onBanner: { model.showBanner($0) }
+                onBanner: { model.showBanner($0) },
+                onAddCompany: { queue, label in
+                    model.addCompany(queue: queue, label: label)
+                    showLookup = false
+                }
             )
         }
         .alert(Text(verbatim: AppStrings.removeConfirmTitle(lang)), isPresented: Binding(get: { removeCandidate != nil }, set: { if !$0 { removeCandidate = nil } }), presenting: removeCandidate) { item in

@@ -187,9 +187,11 @@ public final class SubscriptionSync {
     }
 
     @discardableResult
-    public func addQueueOnly(_ queue: String) -> StoreResult {
+    public func addQueueOnly(_ queue: String, label: String? = nil) -> StoreResult {
         ensureReady()
-        let item = Subscription(id: repo.newItemId(), queue: queue, queueSource: .MANUAL, createdAtMs: repo.nowMs())
+        // a company or a place without streets is named after itself (Android `addQueueOnly(queue, label)`)
+        let item = Subscription(id: repo.newItemId(), label: Subscriptions.cleanLabel(label), queue: queue, queueSource: .MANUAL,
+                                createdAtMs: repo.nowMs())
         return change { Subscriptions.add($0, item) }
     }
 

@@ -298,6 +298,11 @@ final class AppModel: ObservableObject {
     }
 
     func addQueueOnly(_ queue: String) { apply(sync.addQueueOnly(queue)) }
+
+    /// A workplace of the company search or a place without streets: a queue-only entry named after it.
+    func addCompany(queue: String, label: String) {
+        if apply(sync.addQueueOnly(queue, label: label)) { showBanner(AppStrings.addressAdded(lang)) }
+    }
     func remove(_ id: String) { apply(sync.change { Subscriptions.remove($0, id: id) }) }
     func makePrimary(_ id: String) { apply(sync.change { Subscriptions.setPrimary($0, id: id) }) }
     func setPlanned(_ id: String, _ on: Bool) { apply(sync.change { Subscriptions.setPlanned($0, id: id, on: on) }) }

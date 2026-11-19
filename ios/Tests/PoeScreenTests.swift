@@ -101,4 +101,37 @@ final class PoeScreenTests: XCTestCase {
         let stale = NearbySnapshot(items: [row], fetchedMs: Int64(at.timeIntervalSince1970 * 1000), complete: false)
         XCTAssertEqual(NearbyFormat.staleChip("uk", stale), "дані за 14:05")
     }
+
+    // MARK: - Company search (port of tests/picker-search.test.ts)
+
+    func testContextIsSearchedAfterLabelsAndShowsTheMatchedPiece() {
+        struct Row { let name: String; let row: String }
+        let items = [
+            Row(name: "КНП «ЛІЛ 1 рівня»", row: "Дніпра 10/13, 12, 14 КНП \"ЛІЛ 1 рівня\" (ЗТП-64); КП ВУВКГ (ПНС Миру 31); кафе \"Аква\"; вул.Миру 18"),
+            Row(name: "кафе «Аква»", row: "кафе \"Аква\"; вул.Миру 18"),
+            Row(name: "ТОВ «Ромашка»", row: "вул. Миру 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, кафешка Світанок, 24"),
+        ]
+        let index = PickerSearch.Index(items, context: { $0.row }) { $0.name }
+        let hits = index.searchHits("кафе")
+        XCTAssertEqual(hits.map(\.item.name), ["кафе «Аква»", "ТОВ «Ромашка»"], "the КНП row only names «кафе \"Аква\"», listed already")
+        XCTAssertEqual(hits.map(\.snippet), [nil, "кафешка Світанок"])
+        let ztp = index.searchHits("ЗТП-64")
+        XCTAssertEqual(ztp.map(\.item.name), ["КНП «ЛІЛ 1 рівня»"])
+        XCTAssertEqual(ztp.first?.snippet, "Дніпра 10/13, 12, 14 КНП \"ЛІЛ 1 рівня\" (ЗТП-64)")
+        XCTAssertEqual(PickerSearch.contextSnippet("вул. Миру 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, Кафе \"Ні пуху, ні пера\", 24", query: "пера"),
+                       "Кафе \"Ні пуху, ні пера\"", "a comma inside quotes does not cut")
+        XCTAssertEqual(PickerSearch.contextSnippet("вул. Миру 1, 2, 3, 4, 5, 6, ТОВ «Татнєфть-АЗС Україна, ПП «Лякун», Кафе «Ні пуху, ні пера», База «Владтранс»", query: "кафе"),
+                       "Кафе «Ні пуху, ні пера»", "unbalanced quotes of the PDF")
+        XCTAssertEqual(index.searchHits("").map(\.snippet), [nil, nil, nil])
+        XCTAssertEqual(PickerSearch.contextSnippet(String(repeating: "a", count: 100), query: "b"), String(repeating: "a", count: 69) + "…")
+    }
+
+    func testQuotesOfEveryKindCountAsSpaces() {
+        let items = ["ТОВ «ГЛОБИНСЬКИЙ БІОЕНЕРГЕТИЧНИЙ КОМПЛЕКС» · 2.1", "КП «Полтавський м'ясокомбінат» · 1.1"]
+        for q in ["ТОВ \"ГЛОБИНСЬКИЙ БІОЕНЕРГЕТИЧНИЙ КОМПЛЕКС", "ТОВ ГЛОБИНСЬКИЙ", "тов «глобинський", "ТОВ „Глобинський“"] {
+            XCTAssertEqual(PickerSearch.filter(items, query: q) { $0 }, [items[0]], q)
+        }
+        XCTAssertEqual(PickerSearch.filter(items, query: "КП \"Полтавський мясокомбінат") { $0 }, [items[1]])
+        XCTAssertEqual(PickerSearch.filter(["Школа № 27 · Кременчук", "Школа № 2 · Кременчук"], query: "школа 27") { $0 }, ["Школа № 27 · Кременчук"])
+    }
 }
