@@ -120,7 +120,7 @@ Two simulator bugs seen on 2026-11-18 matter for I1/I3: a registry row naming th
 1. Identifiers of section 6: **approved 2026-11-19** as proposed.
 2. `.github/workflows/build-ios.yml` may change in I0 (launch step, geo-check, project name): **approved 2026-11-19**. In I2 the ztoe and PowerOn probes leave the geo-check and `poe-data.yml` refreshes the iOS copies of the data files: **approved 2026-11-19**.
 3. App Review outside Ukraine (section 9): **a screen recording made in Ukraine, attached to the submission, and an explanation in the review notes** (2026-11-19). No demo schedule in the app; it stays the fallback if Review insists (`APP_REVIEW_NOTES.md`).
-4. `main` (2026-11-19): created from all the work (Android P4 with the local commits, iOS I0–I4, the I5 documents) and made the default branch; that push is the Android v1.0.0 GitHub release. The release AAB for Google Play is signed with a private upload key from the `UPLOAD_KEYSTORE_*` secrets; the GitHub APKs keep the committed key.
+4. `main` (2026-11-19): created from all the work (Android P4 with the local commits, iOS I0–I4, the I5 documents) and made the default branch; that push is the Android v1.0.0 GitHub release. The release build type (the `.aab` for Google Play and `app-release.apk`) is signed with a private upload key from the `UPLOAD_KEYSTORE_*` secrets; `app-debug-*.apk` of the same release keeps the committed key, so it is the one that updates the P5 test builds in place.
 
 ## 9. Geo-check result (I0, App Review R1)
 
