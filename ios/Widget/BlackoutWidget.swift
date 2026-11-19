@@ -46,7 +46,7 @@ struct BlackoutProvider: AppIntentTimelineProvider {
 /// A tap opens the main screen with the widget's address shown (spec/SUBSCRIPTIONS.md 9 and 10).
 private func openURL(_ itemId: String?) -> URL {
     var c = URLComponents()
-    c.scheme = "svitlozt"
+    c.scheme = "svitlopoltava"
     c.host = "open"
     if let itemId { c.queryItems = [URLQueryItem(name: "item", value: itemId)] }
     return c.url!

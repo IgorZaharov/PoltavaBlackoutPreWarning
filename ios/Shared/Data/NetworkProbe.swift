@@ -17,7 +17,7 @@ public enum NetworkProbe {
             NetworkProbe.lastStatus = path.status
             NetworkProbe.lock.unlock()
         }
-        m.start(queue: DispatchQueue(label: "ua.blackout.prewarning.network-probe"))
+        m.start(queue: DispatchQueue(label: "ua.blackout.prewarning.poltava.network-probe"))
         return m
     }()
 

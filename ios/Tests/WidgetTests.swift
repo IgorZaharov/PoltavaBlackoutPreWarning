@@ -43,6 +43,46 @@ final class WidgetTests: XCTestCase {
         XCTAssertLessThan(WidgetDrum.tintedAlpha(DrumCell(planned: false, emergency: false)), 0.5)
     }
 
+    /// I4: POE's switching half-hour on the widget drums. Planned 08:00-10:00 then switching 10:00-10:30,
+    /// planned 13:00-15:00 then switching 15:00-15:30 with an emergency 15:00-16:00 on top. The widget shows
+    /// the main drum's 48 states (signature codes 4 and 5), and the tinted look keeps switching apart from
+    /// both off and on (spec/UI_DRUM.md, tinted widgets).
+    func testWidgetDrumShowsTheSwitchingHalfHourLikeTheMainDrum() {
+        var cells = [ScheduleCell](repeating: .ON, count: 48)
+        for i in 16..<20 { cells[i] = .OFF }
+        cells[20] = .SWITCHING
+        for i in 26..<30 { cells[i] = .OFF }
+        cells[30] = .SWITCHING
+        let now = at(13, 10, 10)
+        var outages = OutageEngine.buildPlannedCells(today: today, todayCells: cells, tomorrowCells: nil)
+        outages.append(OutageEngine.resolveEmergency(EmergencyRecord(id: "e1", start: at(13, 15), estimatedEnd: at(13, 16)), now: now))
+        var snap = OutageSnapshot(now: now, queue: "3.1", outages: OutageEngine.inWindow(outages, today: today), plannedKnown: true,
+                                  tomorrowPublished: false, site: nil, poweron: nil, hasAddress: true)
+        snap.switching = OutageEngine.switchWindows(today: today, todayCells: cells, tomorrowCells: nil)
+
+        let m = WidgetModelBuilder.build(queue: "3.1", statusText: nil, snapshot: snap, lang: "uk")
+        XCTAssertEqual(m.slots, snap.slotsFor(snap.today))
+        XCTAssertEqual(DrumGeometry.cells(m.slots), DrumGeometry.cells(snap.slotsFor(snap.today)))
+        let expected = String(repeating: "0", count: 16) + "1111" + "4" + "00000" + "1111" + "52" + String(repeating: "0", count: 16)
+        XCTAssertEqual(DrumGeometry.signature(m.slots), expected)
+        XCTAssertEqual(DrumGeometry.cells(m.slots)?[20], DrumCell(planned: false, emergency: false, switching: true))
+
+        // inside the switching half-hour the widget does not say "off" (spec/OUTAGE_ENGINE.md 3.5)
+        XCTAssertFalse(m.isUnclear)
+        XCTAssertFalse(m.isOffNow, "«СВІТЛО Є» while switching")
+        XCTAssertEqual(m.nextOutage, "13:00 – 16:00")
+
+        // tinted: off > switching > on, so the three read apart without colour
+        let off = WidgetDrum.tintedAlpha(DrumCell(planned: true, emergency: false))
+        let switching = WidgetDrum.tintedAlpha(DrumCell(planned: false, emergency: false, switching: true))
+        let on = WidgetDrum.tintedAlpha(DrumCell(planned: false, emergency: false))
+        XCTAssertEqual(off, 1)
+        XCTAssertEqual(switching, 0.6)
+        XCTAssertEqual(on, 0.28)
+        XCTAssertEqual(WidgetDrum.tintedAlpha(DrumCell(planned: false, emergency: true, switching: true)), switching,
+                       "an emergency on a switching half-hour keeps the switching opacity behind its stripes")
+    }
+
     func testCountdownHasNoSeconds() {
         XCTAssertEqual(WidgetModelBuilder.formatCountdown("01:02:03", lang: "uk"), "01г. 02хв.")
         XCTAssertEqual(WidgetModelBuilder.formatCountdown("01:02:03", lang: "en"), "01hr. 02m.")

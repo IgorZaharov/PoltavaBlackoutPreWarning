@@ -75,6 +75,66 @@ final class NotificationPlannerTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(ran, 8)
     }
 
+    /// I4: the POE cases (three-state cells). The switching half-hour is never part of a span and never
+    /// alerts, a block over midnight is one span and one alert; every case with an `alerts` list, empty ones
+    /// included, becomes exactly that pending set.
+    func testPoeVectorAlertPlansBecomeThePendingSet() throws {
+        func scheduleCells(_ day: J?) -> [ScheduleCell]? {
+            guard let day else { return nil }
+            var arr = [ScheduleCell](repeating: .ON, count: 48)
+            func mark(_ ranges: [String]?, _ state: ScheduleCell) {
+                for r in ranges ?? [] {
+                    let ab = r.split(separator: "-").map { $0.split(separator: ":").compactMap { Int($0) } }
+                    for k in ((ab[0][0] * 60 + ab[0][1]) / 30)..<((ab[1][0] * 60 + ab[1][1]) / 30) { arr[k] = state }
+                }
+            }
+            mark(day.strings("off"), .OFF)
+            mark(day.strings("switching"), .SWITCHING)
+            return arr
+        }
+
+        let cases = try Vectors.load("outage_engine_poe.json").objs("cases")
+        var ran = 0
+        var empty = 0
+        for c in cases {
+            guard let expected = c.obj("expect")?["alerts"] as? [Any] else { continue }
+            let name = c.str("name") ?? "?"
+            let today = ld(c.str("today")!)
+            let now = at(c.str("now")!)
+            let cl = c.obj("cells") ?? [:]
+            var outages = OutageEngine.buildPlannedCells(today: today, todayCells: scheduleCells(cl.obj("today")),
+                                                         tomorrowCells: scheduleCells(cl.obj("tomorrow")),
+                                                         yesterdayCells: scheduleCells(cl.obj("yesterday")))
+            for r in c.objs("repair") {
+                outages.append(Outage(id: r.str("id")!, kind: .REPAIR, start: at(r.str("start")!), end: at(r.str("end")!)))
+            }
+            for e in c.objs("emergencies") {
+                let rec = EmergencyRecord(id: e.str("id")!, start: at(e.str("start")!), estimatedEnd: e.str("estimatedEnd").map(at),
+                                          closedAt: e.str("closedAt").map(at), label: e.str("label"))
+                outages.append(OutageEngine.resolveEmergency(rec, now: now))
+            }
+            let window = OutageEngine.inWindow(outages, today: today)
+            let groups = NotificationPlanner.plannedGroups(store: store, master: true, now: now, advanceMinutes: c.int("advanceMinutes") ?? 15) { _ in window }
+            let alerts = NotificationPlanner.plannedAlerts(groups, store: store, lang: "uk", sound: true, notified: { _ in false })
+            let exp = expected.compactMap { $0 as? J }
+            XCTAssertEqual(alerts.count, exp.count, "\(name): pending count")
+            for (a, e) in zip(alerts, exp) {
+                let spanStart = String(e.str("key")!.dropFirst("planned_".count))
+                XCTAssertEqual(a.fireAt?.description, e.str("fireAt"), "\(name): fireAt")
+                // the group key names the span: planned_q<queue>_<spanStart>_<spanEnd>
+                XCTAssertEqual(a.identifier, "planned_q\(item.queue!)_\(spanStart)_\(e.str("spanEnd")!)", "\(name): identifier")
+                XCTAssertEqual(a.category, .planned)
+                let start = at(spanStart)
+                XCTAssertTrue(a.body.contains(String(format: "о %02d:%02d", start.hour, start.minute)), "\(name): \(a.body)")
+            }
+            if exp.isEmpty { empty += 1 }
+            ran += 1
+        }
+        print("[vectors] NotificationPlanner: \(ran) outage_engine_poe cases with alerts (\(empty) with none)")
+        XCTAssertGreaterThanOrEqual(ran, 7)
+        XCTAssertGreaterThanOrEqual(empty, 2, "the cases where nothing may alert must run too")
+    }
+
     func testTextIsThePlannedBodyWithTheAdvanceNotice() {
         let g = PlannedGroup(key: "planned_q5.1_2026-11-13T23:00_2026-11-14T01:00", queue: "5.1",
                              fireAt: at("2026-11-13T22:45"), spanStart: at("2026-11-13T23:00"), spanEnd: at("2026-11-14T01:00"),

@@ -6,6 +6,9 @@ Writes:
   android/app/src/main/res/drawable-nodpi/app_logo.png           About screen logo
   public/favicon.png, public/apple-touch-icon.png, public/app-logo.png  web simulator
   docs/screenshots/app-icon.png                                  README header
+  ios/Resources/Assets.xcassets/AppLogo.imageset/app_logo.png    iPhone About screen logo
+  ios/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png  iPhone app icon (opaque: App Store Connect
+                                                                 rejects transparency; iOS applies its own mask)
 
 The black outside the rounded square becomes transparent; the orange glow around the gold rim is kept
 as partial transparency. In the adaptive foreground the gold rounded square is about 62 dp wide: launchers show
@@ -91,6 +94,18 @@ def main() -> None:
     save(fit(logo, 180, 0.9, background=(10, 5, 6, 255)), os.path.join(ROOT, 'public', 'apple-touch-icon.png'))
     save(fit(logo, 256, 1.0), os.path.join(ROOT, 'public', 'app-logo.png'))
     save(fit(logo, 256, 1.0), os.path.join(ROOT, 'docs', 'screenshots', 'app-icon.png'))
+    save(ios_icon(logo), IOS_ICON)
+    # About screen logo: 72 pt at @3x
+    save(fit(logo, 216, 1.0), IOS_LOGO)
+
+
+IOS_LOGO = os.path.join(ROOT, 'ios', 'Resources', 'Assets.xcassets', 'AppLogo.imageset', 'app_logo.png')
+IOS_ICON = os.path.join(ROOT, 'ios', 'Resources', 'Assets.xcassets', 'AppIcon.appiconset', 'AppIcon-1024.png')
+
+
+def ios_icon(logo: Image.Image) -> Image.Image:
+    """1024 px, no alpha: the logo on its own maroon, the gold square just inside iOS's rounded mask."""
+    return fit(logo, 1024, 0.94, background=MAROON).convert('RGB')
 
 
 if __name__ == '__main__':

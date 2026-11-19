@@ -18,6 +18,8 @@ Input per cell: `SlotState(planned, emergency, switching)` from `dayView` (`plan
 | switching (`planned` false) | true | may be off + emergency | top half: the switching yellow; bottom half: amber with dark stripes |
 
 An emergency takes only the **bottom half** of its cells, so the planned state behind it (a scheduled outage or power on) stays readable in the top half (owner request after 1.4.0; before, the emergency filled the whole cell and hid the schedule).
+
+**iOS tinted and clear widgets** (`widgetRenderingMode` accented / vibrant: the system draws everything in one tint, so no colour survives). The cells are told apart by opacity of the one tint: off (planned) **1.0**, switching **0.6**, on **0.28**; an emergency adds solid stripes on its bottom half over whatever is behind it (iOS I4, 2026-11-19: until then a switching half-hour looked like power on there). Full colour uses the table above unchanged.
 | (day has no valid planned data) | | unclear | grey vertical gradient `#7E8287` -> `#94989E` -> `#6E7277` |
 
 **Emergency stripes** (second cue so the state is not carried by colour alone):

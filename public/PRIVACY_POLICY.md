@@ -4,7 +4,7 @@
 **Last Updated:** November 15, 2026  
 **Application Name:** Світло в Полтаві (PoltavaBlackoutPreWarning)  
 **Package Name / Application ID (Android):** `ua.blackout.prewarning.poltava`  
-**Bundle Identifier (iOS):** `ua.blackout.prewarning` (widget extension `ua.blackout.prewarning.widget`)  
+**Bundle Identifier (iOS):** `ua.blackout.prewarning.poltava` (widget extension `ua.blackout.prewarning.poltava.widget`)  
 **Developer / Publisher:** Igor Zaharov  
 **Open-Source Repository:** [https://github.com/IgorZaharov/PoltavaBlackoutPreWarning](https://github.com/IgorZaharov/PoltavaBlackoutPreWarning)  
 **Contact / Issue Tracker:** [https://github.com/IgorZaharov/PoltavaBlackoutPreWarning/issues](https://github.com/IgorZaharov/PoltavaBlackoutPreWarning/issues)  
@@ -13,7 +13,7 @@
 
 ## 1. Introduction and Scope
 
-This Privacy Policy governs the mobile application **"Світло в Полтаві"** for Android (package name `ua.blackout.prewarning.poltava`) and for iPhone (bundle identifier `ua.blackout.prewarning`, iOS 17.0 or newer), hereinafter referred to as the "Application", "App", "we", "us", or "our", created and maintained by Igor Zaharov as a free, open-source community utility. Both versions handle data in the same way; where they differ, this policy says so (see section 5 for Android and section 5A for iOS).
+This Privacy Policy governs the mobile application **"Світло в Полтаві"** for Android (package name `ua.blackout.prewarning.poltava`) and for iPhone (bundle identifier `ua.blackout.prewarning.poltava`, iOS 17.0 or newer), hereinafter referred to as the "Application", "App", "we", "us", or "our", created and maintained by Igor Zaharov as a free, open-source community utility. Both versions handle data in the same way; where they differ, this policy says so (see section 5 for Android and section 5A for iOS).
 
 The Application is designed to provide residents and organizations in the Zhytomyr region of Ukraine with timely, accurate information regarding scheduled electrical power outages (Графіки погодинних відключень електроенергії) published by **JSC "Zhytomyroblenergo" (АТ «Житомиробленерго»)**.
 
@@ -35,7 +35,7 @@ In strict adherence to the principle of data minimization (Article 5(1)(c) of th
 
 ## 3. Information Processed Locally on the User's Device
 
-All configuration settings and operational data created during application use are retained **strictly on the user's physical device**: on Android within the sandboxed application private storage (`SharedPreferences` under `Context.MODE_PRIVATE`); on iPhone within the application sandbox and the App Group container `group.ua.blackout.prewarning`, which only the Application and its own home-screen widget can read. This information is never transmitted to any external server or third party, except the public street and settlement identifiers described in section 4.
+All configuration settings and operational data created during application use are retained **strictly on the user's physical device**: on Android within the sandboxed application private storage (`SharedPreferences` under `Context.MODE_PRIVATE`); on iPhone within the application sandbox and the App Group container `group.ua.blackout.prewarning.poltava`, which only the Application and its own home-screen widget can read. This information is never transmitted to any external server or third party, except the public street and settlement identifiers described in section 4.
 
 Locally stored parameters include:
 
@@ -96,8 +96,8 @@ The iPhone version uses only the following system capabilities:
 | Capability | Technical Requirement & Justification |
 | :--- | :--- |
 | Notifications (`UserNotifications`) | Local notifications before a scheduled outage and about emergency outages. The Application asks for permission only after the user has chosen a queue or an address, and works fully without it. All notifications are created on the device; there is no push server. |
-| Background App Refresh (`BGAppRefreshTask` `ua.blackout.prewarning.sync`, background mode `fetch`) | Refreshing the schedule and emergency outages from time to time while the Application is closed, so that warnings and widgets stay current. iOS decides how often this runs; the user can turn it off in iOS Settings. |
-| Home-Screen Widgets (`WidgetKit`) and App Group `group.ua.blackout.prewarning` | Sharing the saved addresses and the cached schedule between the Application and its own widgets. |
+| Background App Refresh (`BGAppRefreshTask` `ua.blackout.prewarning.poltava.sync`, background mode `fetch`) | Refreshing the schedule and emergency outages from time to time while the Application is closed, so that warnings and widgets stay current. iOS decides how often this runs; the user can turn it off in iOS Settings. |
+| Home-Screen Widgets (`WidgetKit`) and App Group `group.ua.blackout.prewarning.poltava` | Sharing the saved addresses and the cached schedule between the Application and its own widgets. |
 
 The Privacy Manifest (`PrivacyInfo.xcprivacy`) of the Application and of its widget declares no tracking, no collected data types, and one required-reason API: `UserDefaults` (reasons `CA92.1` and `1C8F.1`, settings read only by the Application and its App Group). The cache files in the App Group container are excluded from iCloud and device backups.
 
@@ -168,12 +168,12 @@ If you have questions, feedback, or legal inquiries concerning this Privacy Poli
 **Останнє оновлення:** 15 листопада 2026 року  
 **Назва додатку:** Світло в Полтаві (PoltavaBlackoutPreWarning)  
 **Ідентифікатор пакета Android (Package Name):** `ua.blackout.prewarning.poltava`  
-**Ідентифікатор iPhone (Bundle Identifier):** `ua.blackout.prewarning` (віджет `ua.blackout.prewarning.widget`)  
+**Ідентифікатор iPhone (Bundle Identifier):** `ua.blackout.prewarning.poltava` (віджет `ua.blackout.prewarning.poltava.widget`)  
 **Розробник:** Ігор Захаров (Igor Zaharov)  
 **Репозиторій проєкту:** [https://github.com/IgorZaharov/PoltavaBlackoutPreWarning](https://github.com/IgorZaharov/PoltavaBlackoutPreWarning)  
 
 ### 1. Загальні положення
-Ця Політика конфіденційності регулює використання мобільного додатку **«Світло в Полтаві»** для Android (`ua.blackout.prewarning.poltava`) та для iPhone (`ua.blackout.prewarning`, iOS 17.0 або новіша), розробленого як безкоштовний некомерційний інструмент для жителів міста Житомира та Житомирської області для оперативного відстеження графіків погодинних відключень електроенергії (ГПВ) АТ «Житомиробленерго».
+Ця Політика конфіденційності регулює використання мобільного додатку **«Світло в Полтаві»** для Android (`ua.blackout.prewarning.poltava`) та для iPhone (`ua.blackout.prewarning.poltava`, iOS 17.0 або новіша), розробленого як безкоштовний некомерційний інструмент для жителів міста Житомира та Житомирської області для оперативного відстеження графіків погодинних відключень електроенергії (ГПВ) АТ «Житомиробленерго».
 
 ### 2. Повна відсутність збору персональних даних
 - Додаток **не збирає**, не реєструє, не передає та не продає персональні дані користувачів.
@@ -182,7 +182,7 @@ If you have questions, feedback, or legal inquiries concerning this Privacy Poli
 - Додаток не відстежує геопозицію користувача (GPS чи дані мережі).
 
 ### 3. Локальні дані на пристрої
-Усі налаштування користувача (до п'яти збережених адрес або черг від 1.1 до 6.2 з їхніми назвами та перемикачами, час завчасного попередження, рівень звуку, збережений графік, на Android також локальні бали мінігри) зберігаються **виключно локально** у захищеному сховищі пристрою (`SharedPreferences` на Android; пісочниця застосунку та контейнер App Group `group.ua.blackout.prewarning`, доступний лише застосунку та його віджетам, на iPhone) і ніколи не передаються стороннім особам чи серверам, крім публічних кодів населеного пункту й вулиці, описаних нижче. На iPhone мінігри немає.
+Усі налаштування користувача (до п'яти збережених адрес або черг від 1.1 до 6.2 з їхніми назвами та перемикачами, час завчасного попередження, рівень звуку, збережений графік, на Android також локальні бали мінігри) зберігаються **виключно локально** у захищеному сховищі пристрою (`SharedPreferences` на Android; пісочниця застосунку та контейнер App Group `group.ua.blackout.prewarning.poltava`, доступний лише застосунку та його віджетам, на iPhone) і ніколи не передаються стороннім особам чи серверам, крім публічних кодів населеного пункту й вулиці, описаних нижче. На iPhone мінігри немає.
 
 ### 4. Мережеві запити
 Додаток звертається через захищене з'єднання виключно до:
@@ -201,8 +201,8 @@ If you have questions, feedback, or legal inquiries concerning this Privacy Poli
 
 ### 5А. Можливості iPhone (iOS)
 - **Сповіщення** (`UserNotifications`): локальні попередження перед плановим відключенням і про аварійні відключення. Дозвіл запитується лише після вибору черги або адреси; без нього додаток повністю працює. Усі сповіщення створюються на пристрої, push-сервера немає.
-- **Фонове оновлення** (`BGAppRefreshTask` `ua.blackout.prewarning.sync`, фоновий режим `fetch`): час від часу оновлює графік і аварійні відключення, коли додаток закрито. Як часто це відбувається, вирішує iOS; користувач може вимкнути це в налаштуваннях iOS.
-- **Віджети** (`WidgetKit`) та App Group `group.ua.blackout.prewarning`: спільні збережені адреси й графік для додатку та його віджетів.
+- **Фонове оновлення** (`BGAppRefreshTask` `ua.blackout.prewarning.poltava.sync`, фоновий режим `fetch`): час від часу оновлює графік і аварійні відключення, коли додаток закрито. Як часто це відбувається, вирішує iOS; користувач може вимкнути це в налаштуваннях iOS.
+- **Віджети** (`WidgetKit`) та App Group `group.ua.blackout.prewarning.poltava`: спільні збережені адреси й графік для додатку та його віджетів.
 - Маніфест конфіденційності (`PrivacyInfo.xcprivacy`) додатку та віджета: без відстеження, без зібраних типів даних; єдиний API з обов'язковою причиною — `UserDefaults` (причини `CA92.1` і `1C8F.1`). Файли кешу в контейнері App Group не потрапляють до резервних копій iCloud і пристрою.
 - Додаток не запитує доступ до контактів, фото, камери, мікрофона, геопозиції, Bluetooth, даних здоров'я чи рекламного ідентифікатора. Посилання на пожертви, Facebook і сайти відкриваються в Safari, поза додатком; додаток не обробляє платежі.
 

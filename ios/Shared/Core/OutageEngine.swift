@@ -27,20 +27,71 @@ public enum OutageEngine {
         tomorrowOff: [Bool]?,
         yesterdayOff: [Bool]? = nil
     ) -> [Outage] {
+        runs(today: today, todayFlags: todayOff, tomorrowFlags: tomorrowOff, yesterdayFlags: yesterdayOff).map { r in
+            Outage(id: "planned_\(r.start)", kind: .PLANNED, start: r.start, end: r.end, mayContinue: r.mayContinue)
+        }
+    }
+
+    /// POE day tables (spec/OUTAGE_ENGINE.md section 3.5): `buildPlanned` over the OFF cells. The
+    /// switching half-hour counts as on, so a block closes where switching starts.
+    public static func buildPlannedCells(
+        today: LocalDate,
+        todayCells: [ScheduleCell]?,
+        tomorrowCells: [ScheduleCell]?,
+        yesterdayCells: [ScheduleCell]? = nil
+    ) -> [Outage] {
+        buildPlanned(
+            today: today,
+            todayOff: flags(todayCells, .OFF),
+            tomorrowOff: flags(tomorrowCells, .OFF),
+            yesterdayOff: flags(yesterdayCells, .OFF)
+        )
+    }
+
+    /// The runs of SWITCHING cells of POE day tables, built like the OFF runs (section 3.5).
+    public static func switchWindows(
+        today: LocalDate,
+        todayCells: [ScheduleCell]?,
+        tomorrowCells: [ScheduleCell]?,
+        yesterdayCells: [ScheduleCell]? = nil
+    ) -> [SwitchWindow] {
+        runs(
+            today: today,
+            todayFlags: flags(todayCells, .SWITCHING),
+            tomorrowFlags: flags(tomorrowCells, .SWITCHING),
+            yesterdayFlags: flags(yesterdayCells, .SWITCHING)
+        ).map { SwitchWindow(start: $0.start, end: $0.end) }
+    }
+
+    private static func flags(_ cells: [ScheduleCell]?, _ state: ScheduleCell) -> [Bool]? {
+        cells?.map { $0 == state }
+    }
+
+    private typealias Run = (start: LocalDateTime, end: LocalDateTime, mayContinue: Bool)
+
+    /// Maximal runs of true cells over the known days (yesterday, today, tomorrow) in chronological
+    /// order. A run continues into the next day only when that day is known; at the end of the last
+    /// known day it closes at midnight with mayContinue = true.
+    private static func runs(
+        today: LocalDate,
+        todayFlags: [Bool]?,
+        tomorrowFlags: [Bool]?,
+        yesterdayFlags: [Bool]?
+    ) -> [Run] {
         let days: [(LocalDate, [Bool])] = [
-            (today.minusDays(1), normalizeSlots(yesterdayOff)),
-            (today, normalizeSlots(todayOff)),
-            (today.plusDays(1), normalizeSlots(tomorrowOff))
+            (today.minusDays(1), normalizeSlots(yesterdayFlags)),
+            (today, normalizeSlots(todayFlags)),
+            (today.plusDays(1), normalizeSlots(tomorrowFlags))
         ].compactMap { d, s in s.map { (d, $0) } }
         if days.isEmpty { return [] }
 
         let knownDates = Set(days.map { $0.0 })
-        var out: [Outage] = []
+        var out: [Run] = []
         var runStart: LocalDateTime?
 
         func close(_ end: LocalDateTime, mayContinue: Bool) {
             guard let s = runStart else { return }
-            out.append(Outage(id: "planned_\(s)", kind: .PLANNED, start: s, end: end, mayContinue: mayContinue))
+            out.append((start: s, end: end, mayContinue: mayContinue))
             runStart = nil
         }
 
@@ -156,7 +207,8 @@ public enum OutageEngine {
         _ outages: [Outage],
         date: LocalDate,
         now: LocalDateTime,
-        zone: TimeZone = KyivTime.zone
+        zone: TimeZone = KyivTime.zone,
+        switching: [SwitchWindow] = []
     ) -> DayView {
         let dayStart = date.atStartOfDay()
         let dayEnd = date.plusDays(1).atStartOfDay()
@@ -168,7 +220,10 @@ public enum OutageEngine {
             return SlotState(
                 // repair works are drawn like emergencies (owner, 2026-11-17); they still alert like planned outages
                 planned: relevant.contains { $0.kind == .PLANNED && $0.start.isBefore(e) && $0.end.isAfter(s) },
-                emergency: relevant.contains { $0.kind != .PLANNED && $0.start.isBefore(e) && $0.end.isAfter(s) }
+                emergency: relevant.contains { $0.kind != .PLANNED && $0.start.isBefore(e) && $0.end.isAfter(s) },
+                // planned outages and repair works both hide a switching half-hour (spec section 3.5)
+                switching: !relevant.contains { $0.isPlannedLike && $0.start.isBefore(e) && $0.end.isAfter(s) }
+                    && switching.contains { $0.start.isBefore(e) && $0.end.isAfter(s) }
             )
         }
 
@@ -219,7 +274,16 @@ public enum OutageEngine {
     }
 
     /// Power state, countdown and next/current period from `now`. Stale emergencies never count as off.
-    public static func status(_ outages: [Outage], now: LocalDateTime, zone: TimeZone = KyivTime.zone) -> StatusInfo {
+    public static func status(
+        _ outages: [Outage],
+        now: LocalDateTime,
+        zone: TimeZone = KyivTime.zone,
+        switching: [SwitchWindow] = []
+    ) -> StatusInfo {
+        // POE: the switching half-hour right after the shown span is when power is back at the latest.
+        func restoreFor(_ span: Span) -> LocalDateTime? {
+            span.mayContinue ? nil : switching.first(where: { $0.start == span.end })?.end
+        }
         // An overdue emergency has no known end: treat it as lasting just past now so it is "current".
         let openEnd = now.plusSeconds(1)
         let effective = outages
@@ -246,12 +310,14 @@ public enum OutageEngine {
             }
             let secs = secondsBetween(now, current.end, zone: zone)
             return StatusInfo(isOffNow: true, countdownSeconds: secs, countdownText: formatCountdown(secs),
-                              nextSlotTime: formatSpan(current), currentSpan: current, nextSpan: nil)
+                              nextSlotTime: formatSpan(current), currentSpan: current, nextSpan: nil,
+                              restoreUntil: restoreFor(current))
         }
         if let next = all.first(where: { $0.start.isAfter(now) }) {
             let secs = secondsBetween(now, next.start, zone: zone)
             return StatusInfo(isOffNow: false, countdownSeconds: secs, countdownText: formatCountdown(secs),
-                              nextSlotTime: formatSpan(next), currentSpan: nil, nextSpan: next)
+                              nextSlotTime: formatSpan(next), currentSpan: nil, nextSpan: next,
+                              restoreUntil: restoreFor(next))
         }
         return StatusInfo(isOffNow: false, countdownSeconds: nil, countdownText: "--:--:--",
                           nextSlotTime: "Відключень немає", currentSpan: nil, nextSpan: nil)

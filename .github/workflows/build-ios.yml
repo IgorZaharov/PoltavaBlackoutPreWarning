@@ -41,23 +41,30 @@ jobs:
       - run: npm test
 
   geo-check:
-    # App Review item R1: the reviewer is outside Ukraine. Records whether both data hosts answer a US address.
+    # App Review item R1: the reviewer is outside Ukraine. Records whether the data hosts answer a non-Ukrainian address.
+    # www.poe.pl.ua is the Poltava data source (spec/POE_API.md); the app has no other data host since I2
+    # (docs/ios/POLTAVA_IOS_PLAN.md section 9 has the first result: POE times out outside Ukraine).
     name: Data hosts reachable from outside Ukraine
     runs-on: ubuntu-latest
     steps:
-      - name: Probe ztoe.com.ua and PowerOn
+      - name: Probe www.poe.pl.ua
         run: |
           probe() {
-            local name="$1" url="$2" accept="$3" data="$4"
-            local args=(-sS -o body.bin -w '%{http_code} %{size_download} %{time_total}' --max-time 30 -A 'Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X)')
+            local name="$1" url="$2" accept="$3" data="$4" form="$5"
+            local args=(-sS --compressed -o body.bin -w '%{http_code} %{size_download} %{time_total}' --max-time 30 -A 'Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X)')
             [ -n "$accept" ] && args+=(-H "Accept: $accept")
             [ -n "$data" ] && args+=(--data "$data")
+            # POE: one form field whose value is a JSON string (spec/POE_API.md 1)
+            [ -n "$form" ] && args+=(-H 'Content-Type: application/x-www-form-urlencoded; charset=UTF-8' --data-urlencode "$form")
             local out
             out=$(curl "${args[@]}" "$url" 2>&1) || true
             local marker="-"
             if [ -s body.bin ]; then
-              if iconv -f WINDOWS-1251 -t UTF-8 body.bin 2>/dev/null | grep -q 'Графіки погодинних'; then marker="schedule-marker"; fi
-              if grep -q '"hydra:member"\|"member"' body.bin; then marker="json-members"; fi
+              if grep -q 'gpv-table' body.bin; then marker="poe-schedule-table"; fi
+              if grep -q '"instance_id"' body.bin; then marker="poe-directory"; fi
+              if grep -q '"message_type"' body.bin; then marker="poe-house-status"; fi
+              if grep -q '"out_text"' body.bin; then marker="poe-registry"; fi
+              if [ "$(tr -d '[:space:]' < body.bin)" = "[]" ]; then marker="empty-list"; fi
             fi
             echo "| $name | \`$url\` | $out | $marker |" >> "$GITHUB_STEP_SUMMARY"
             echo "$name -> $out ($marker)"
@@ -65,10 +72,13 @@ jobs:
           echo "### Geo-check from $(curl -s --max-time 10 https://ipinfo.io/country || echo '?') runner" >> "$GITHUB_STEP_SUMMARY"
           echo "| Host | URL | HTTP code, bytes, seconds | Content |" >> "$GITHUB_STEP_SUMMARY"
           echo "|---|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
-          probe "ztoe schedule (GET)" "https://www.ztoe.com.ua/unhooking-search.php" "" ""
-          probe "ztoe streets of Zhytomyr (POST all=1)" "https://www.ztoe.com.ua/unhooking-search.php" "" "rem_id=7&naspunkt_id=16657&all=1"
-          probe "PowerOn REM list" "https://api-ztoe-poweron.inneti.net/api/pw_otgs?pagination=false" "application/ld+json" ""
-          probe "PowerOn accidents, one street" "https://api-ztoe-poweron.inneti.net/api/pw_accidents?street.id%5B%5D=4757&switchSubReason%5B%5D=0&switchSubReason%5B%5D=1&switchSubReason%5B%5D=3&pagination=false" "application/ld+json" ""
+          POE=https://www.poe.pl.ua/customs
+          TODAY=$(TZ=Europe/Kyiv date +%d-%m-%Y)
+          # Sample address as in scripts/poe-live-probe.ts: місто Полтава 11389, вул. Соборності 1227174, house 1, branch 123/23
+          probe "POE schedule today (E1)" "$POE/newgpv-info.php" "" "" "seldate={\"date_in\":\"$TODAY\"}"
+          probe "POE settlements of branch 123 (E3)" "$POE/search-disconnection-cabinet.php" "" "" 'disconn={"operation_type":"city","filial_id":"123","city_id":"","street_id":""}'
+          probe "POE house status, Полтава, Соборності 1 (E4)" "$POE/disconnectinforesult-cabinet.php" "" "" 'disconn={"cityid":"11389","streerid":"1227174","house":"1"}'
+          probe "POE registry of branch 23 (E5)" "$POE/disconnection-gavapi.php" "" "" "disconngav={\"filialid\":\"23\",\"date_in\":\"$TODAY\"}"
 
   build-test:
     name: Build, unit tests, simulator screenshot (Xcode 26)
@@ -100,13 +110,14 @@ jobs:
       - name: Build and run unit tests
         working-directory: ios
         env:
-          # LiveFetchTests talk to ztoe.com.ua and PowerOn only when this is set (xcodebuild passes TEST_RUNNER_* to the tests)
+          # LiveFetchTests ask www.poe.pl.ua only when this is set (xcodebuild passes TEST_RUNNER_* to the tests);
+          # they skip when POE cannot be reached from the runner
           TEST_RUNNER_ZT_LIVE: "1"
         run: |
           set -o pipefail
           mkdir -p build
           xcodebuild test \
-            -project SvitloZhytomyr.xcodeproj \
+            -project SvitloPoltava.xcodeproj \
             -scheme ZTPreBlackout \
             -destination "id=${{ steps.sim.outputs.udid }}" \
             -derivedDataPath build/DD \
@@ -126,7 +137,10 @@ jobs:
           xcrun simctl bootstatus "$UDID" -b
           xcrun simctl status_bar "$UDID" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 || true
           xcrun simctl install "$UDID" "$APP"
-          xcrun simctl launch "$UDID" ua.blackout.prewarning
+          # the bundle id comes from the built app (ios/project.yml), so an id change needs no edit here
+          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")
+          echo "Launching $BUNDLE_ID"
+          xcrun simctl launch "$UDID" "$BUNDLE_ID"
           sleep 20
           xcrun simctl io "$UDID" screenshot build/screenshots/main-launch.png
           plutil -p "$APP/Info.plist" | grep -E 'CFBundle(ShortVersionString|Version|DisplayName)'
@@ -154,8 +168,8 @@ jobs:
             fi
           done
           echo "== Extension compilation conditions (WIDGET_EXTENSION makes the buttons interactive)"
-          xcodebuild -project SvitloZhytomyr.xcodeproj -target BlackoutWidgetExtension -configuration Debug -showBuildSettings 2>/dev/null | grep -E 'SWIFT_ACTIVE_COMPILATION_CONDITIONS|OTHER_SWIFT_FLAGS'
-          xcodebuild -project SvitloZhytomyr.xcodeproj -target BlackoutWidgetExtension -configuration Release -showBuildSettings 2>/dev/null | grep -E 'SWIFT_ACTIVE_COMPILATION_CONDITIONS'
+          xcodebuild -project SvitloPoltava.xcodeproj -target BlackoutWidgetExtension -configuration Debug -showBuildSettings 2>/dev/null | grep -E 'SWIFT_ACTIVE_COMPILATION_CONDITIONS|OTHER_SWIFT_FLAGS'
+          xcodebuild -project SvitloPoltava.xcodeproj -target BlackoutWidgetExtension -configuration Release -showBuildSettings 2>/dev/null | grep -E 'SWIFT_ACTIVE_COMPILATION_CONDITIONS'
           echo "== App Intents lines of the build log"
           grep -iE 'appintents|ExtractAppIntentsMetadata|intent.*(warning|error)' build/xcodebuild-test.log | grep -viE '^\s*cd |export ' | head -60 || true
           grep -q ToggleAlertsIntent "$EXT/Metadata.appintents/extract.actionsdata"
@@ -221,7 +235,7 @@ jobs:
           xcodegen generate
           mkdir -p build
           xcodebuild build \
-            -project SvitloZhytomyr.xcodeproj \
+            -project SvitloPoltava.xcodeproj \
             -scheme ZTPreBlackout \
             -destination "id=${{ steps.sim.outputs.udid }}" \
             -derivedDataPath build/DD \
@@ -295,7 +309,7 @@ jobs:
           xcodegen generate
           mkdir -p build
           xcodebuild build \
-            -project SvitloZhytomyr.xcodeproj \
+            -project SvitloPoltava.xcodeproj \
             -scheme ZTPreBlackout \
             -destination "id=${{ steps.sim.outputs.udid }}" \
             -derivedDataPath build/DD \
@@ -362,7 +376,7 @@ jobs:
           printf '%s' "$ASC_KEY_P8" > "$KEY_PATH"
           echo "KEY_PATH=$KEY_PATH" >> "$GITHUB_ENV"
           xcodebuild archive \
-            -project SvitloZhytomyr.xcodeproj \
+            -project SvitloPoltava.xcodeproj \
             -scheme ZTPreBlackout \
             -configuration Release \
             -destination "generic/platform=iOS" \

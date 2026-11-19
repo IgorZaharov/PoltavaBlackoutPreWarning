@@ -105,15 +105,35 @@ public struct Span: Hashable, Sendable {
     }
 }
 
-/// State of one half-hour cell of a day on the drum chart.
+/// State of one half-hour cell of a day on the drum chart. `switching` (POE only, spec/OUTAGE_ENGINE.md
+/// section 3.5) marks the half-hour in which power comes back; it is never set together with `planned`
+/// and never counts as off.
 public struct SlotState: Hashable, Sendable {
     public var planned: Bool
     public var emergency: Bool
+    public var switching: Bool
     public var off: Bool { planned || emergency }
 
-    public init(planned: Bool, emergency: Bool) {
+    public init(planned: Bool, emergency: Bool, switching: Bool = false) {
         self.planned = planned
         self.emergency = emergency
+        self.switching = switching
+    }
+}
+
+/// One cell of a POE day table (spec/POE_API.md section 3): gpv-s1, gpv-s2, gpv-s3.
+public enum ScheduleCell: String, Hashable, Sendable {
+    case ON, OFF, SWITCHING
+}
+
+/// A run of `ScheduleCell.SWITCHING` cells: power may still be off until `end`.
+public struct SwitchWindow: Hashable, Sendable {
+    public var start: LocalDateTime
+    public var end: LocalDateTime
+
+    public init(start: LocalDateTime, end: LocalDateTime) {
+        self.start = start
+        self.end = end
     }
 }
 
@@ -148,6 +168,8 @@ public struct StatusInfo: Hashable, Sendable {
     public var nextSlotTime: String
     public var currentSpan: Span?
     public var nextSpan: Span?
+    /// End of the switching half-hour right after the shown span (POE): power is back by then at the latest.
+    public var restoreUntil: LocalDateTime? = nil
 }
 
 public struct AlertSpec: Hashable, Sendable {

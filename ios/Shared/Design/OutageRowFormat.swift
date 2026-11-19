@@ -149,6 +149,28 @@ public enum OutageRowFormat {
         } else if !unclearBase {
             parts.append(AppStrings.drumNoOutages(lang))
         }
+        // POE switching half-hours (power may still be off), as drawn: never on a planned cell
+        let switching = switchingRuns(cells)
+        if !switching.isEmpty {
+            parts.append("\(AppStrings.drumSwitchingMark(lang)): "
+                + switching.map { "\(cellTime($0.from)) – \(cellTime($0.to))" }.joined(separator: ", "))
+        }
         return "\(head): \(parts.joined(separator: "; "))"
+    }
+
+    /// Runs of drawn switching cells (`DrumGeometry.cell`) as first cell and last cell exclusive.
+    static func switchingRuns(_ cells: [BlackoutSlot]) -> [(from: Int, to: Int)] {
+        var out: [(from: Int, to: Int)] = []
+        var start = -1
+        for (i, c) in cells.enumerated() {
+            if DrumGeometry.cell(c).switching {
+                if start < 0 { start = i }
+            } else if start >= 0 {
+                out.append((from: start, to: i))
+                start = -1
+            }
+        }
+        if start >= 0 { out.append((from: start, to: cells.count)) }
+        return out
     }
 }

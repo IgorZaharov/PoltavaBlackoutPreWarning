@@ -12,10 +12,35 @@ struct Rx {
 
     let re: NSRegularExpression
 
-    init(_ pattern: String, ignoreCase: Bool = false) {
+    init(_ pattern: String, ignoreCase: Bool = false, dotAll: Bool = false) {
         // Patterns are compile-time constants; a bad one is a programming error caught by the tests.
-        re = try! NSRegularExpression(pattern: pattern, options: ignoreCase ? [.caseInsensitive] : [])
+        var options: NSRegularExpression.Options = []
+        if ignoreCase { options.insert(.caseInsensitive) }
+        // Kotlin RegexOption.DOT_MATCHES_ALL
+        if dotAll { options.insert(.dotMatchesLineSeparators) }
+        re = try! NSRegularExpression(pattern: pattern, options: options)
     }
+
+    /// Every match, in order (Kotlin `Regex.findAll`).
+    func allMatches(in s: String) -> [NSTextCheckingResult] {
+        re.matches(in: s, options: [], range: Rx.full(s))
+    }
+
+    /// Kotlin `CharSequence.split(regex)`: the pieces between matches, empty pieces (also a trailing one) kept.
+    func split(_ s: String) -> [String] {
+        let ns = s as NSString
+        var out: [String] = []
+        var cursor = 0
+        for m in allMatches(in: s) {
+            out.append(ns.substring(with: NSRange(location: cursor, length: m.range.location - cursor)))
+            cursor = m.range.location + m.range.length
+        }
+        out.append(ns.substring(from: cursor))
+        return out
+    }
+
+    /// Kotlin `Regex.containsMatchIn`.
+    func containsMatch(in s: String) -> Bool { firstMatch(in: s) != nil }
 
     private static func full(_ s: String) -> NSRange { NSRange(location: 0, length: (s as NSString).length) }
 

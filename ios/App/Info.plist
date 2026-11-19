@@ -31,16 +31,16 @@
 	<string>public.app-category.utilities</string>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
-		<string>ua.blackout.prewarning.sync</string>
+		<string>ua.blackout.prewarning.poltava.sync</string>
 	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>ua.blackout.prewarning.widget</string>
+			<string>ua.blackout.prewarning.poltava.widget</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>svitlozt</string>
+				<string>svitlopoltava</string>
 			</array>
 		</dict>
 	</array>

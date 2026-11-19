@@ -1,7 +1,7 @@
 # XcodeGen spec for the iOS app "Світло в Полтаві".
 # Generate with `xcodegen generate` inside ios/ (CI does this; the .xcodeproj is not committed).
 # Plan: docs/ios/IOS_PORT_PLAN.md. Built with Xcode 26 (iOS 26 SDK), runs on iOS 17.0+.
-name: SvitloZhytomyr
+name: SvitloPoltava
 options:
   bundleIdPrefix: ua.blackout
   deploymentTarget:
@@ -45,7 +45,7 @@ targets:
     settings:
       base:
         PRODUCT_NAME: ZTPreBlackout
-        PRODUCT_BUNDLE_IDENTIFIER: ua.blackout.prewarning
+        PRODUCT_BUNDLE_IDENTIFIER: ua.blackout.prewarning.poltava
         # iPhone only (R10). Must be set per target: XcodeGen's iOS target preset sets "1,2", which overrides
         # the project-level value, so builds up to 1.4.0 (52) were universal and App Store Connect asked for
         # 13-inch iPad screenshots.
@@ -81,7 +81,7 @@ targets:
     settings:
       base:
         PRODUCT_NAME: BlackoutWidgetExtension
-        PRODUCT_BUNDLE_IDENTIFIER: ua.blackout.prewarning.widget
+        PRODUCT_BUNDLE_IDENTIFIER: ua.blackout.prewarning.poltava.widget
         TARGETED_DEVICE_FAMILY: "1"
         INFOPLIST_FILE: Widget/Info.plist
         CODE_SIGN_ENTITLEMENTS: Widget/Widget.entitlements
@@ -99,9 +99,16 @@ targets:
       - path: ../spec/vectors
         type: folder
         buildPhase: resources
+      # Recorded POE answers (poe_schedule.json names the schedule fixture), read in place like the vectors.
+      - path: ../spec/fixtures/poe
+        type: folder
+        buildPhase: resources
+      # The branch table PoeBranches.swift must match.
+      - path: ../spec/branches.json
+        buildPhase: resources
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: ua.blackout.prewarning.tests
+        PRODUCT_BUNDLE_IDENTIFIER: ua.blackout.prewarning.poltava.tests
         GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: ZTPreBlackout

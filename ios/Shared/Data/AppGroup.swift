@@ -1,7 +1,7 @@
 import Foundation
 
 /// Storage shared by the app and the widget extension through the App Group
-/// `group.ua.blackout.prewarning` (spec/PERSISTENCE.md).
+/// `group.ua.blackout.prewarning.poltava` (spec/PERSISTENCE.md).
 ///
 /// - Small key/value stores (Android SharedPreferences files) live in the App Group UserDefaults suite.
 ///   Android keeps each store in its own file; here every store except the user settings prefixes its
@@ -10,7 +10,7 @@ import Foundation
 /// - Large data (address index, ledgers) are versioned JSON files in the container
 ///   (spec/PERSISTENCE.md section 6), written atomically and excluded from device backups.
 public enum AppGroup {
-    public static let id = "group.ua.blackout.prewarning"
+    public static let id = "group.ua.blackout.prewarning.poltava"
 
     /// The shared suite; falls back to the app's own defaults when the entitlement is missing
     /// (unsigned simulator builds in CI), which keeps the app working without widget sharing.

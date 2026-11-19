@@ -3,7 +3,7 @@ import UserNotifications
 
 /// Main page (port of Android ui/screens/MainScreen.kt 1.4.0): header with the notification bell,
 /// banners, address switcher, hero countdown, Today/Tomorrow, the drum with the day's outages, last
-/// update and site chips, the Facebook and ztoe links. With no queue and no address the page is dimmed
+/// update and site chips, the Facebook and POE links. With no queue and no address the page is dimmed
 /// and only "Select queue" and the language switch work (first launch).
 struct MainScreen: View {
     @ObservedObject var model: AppModel
@@ -24,7 +24,7 @@ struct MainScreen: View {
         let today = snapshot.today
         let activeDate = isTomorrow ? today.plusDays(1) : today
         let activeView = snapshot.dayView(activeDate)
-        // the ztoe table of the shown day is not known: the drum is grey, known emergency/repair outages are drawn on top
+        // the POE table of the shown day is not known: the drum is grey, known emergency/repair outages are drawn on top
         let isTodayUnclear = !hasCustomNoQueueStatus && !queue.ktIsBlank && !snapshot.plannedKnown
         let isTomorrowUnclear = !hasCustomNoQueueStatus && !queue.ktIsBlank && !snapshot.tomorrowPublished
         let activeUnclear = isTomorrow ? isTomorrowUnclear : isTodayUnclear
@@ -35,12 +35,15 @@ struct MainScreen: View {
         let switcher = Subscriptions.switcherItems(model.subscriptions)
         let siteBanner = SiteStatusModel.banner(snapshot, lang)
         let siteNotice = SiteStatusModel.notice(snapshot)
+        let gavMessage = snapshot.gavMessage
+        let nearby: NearbySnapshot? = snapshot.nearby.flatMap { n -> NearbySnapshot? in n.items.isEmpty ? nil : n }
 
         ZStack {
             ScrollView {
               ScrollViewReader { proxy in
                 VStack(spacing: 16) {
-                    header(queue: queue, hideQueue: isQueueUnselected || hasCustomNoQueueStatus || queue.ktIsBlank, address: formattedAddress, interactive: !isQueueUnselected)
+                    header(queue: queue, hideQueue: isQueueUnselected || hasCustomNoQueueStatus || queue.ktIsBlank, address: formattedAddress,
+                           gavMessage: gavMessage, interactive: !isQueueUnselected)
 
                     if !isQueueUnselected && Subscriptions.noAlertsCaption(master: model.alertsMaster, store: model.subscriptions) {
                         noAlertsCaption
@@ -69,15 +72,26 @@ struct MainScreen: View {
                             EmergencyBanner(outage: featured, now: snapshot.now, lang: lang)
                         }
                     }
+                    // no-queue card: the house is in no queue of the hourly schedule (spec/SUBSCRIPTIONS.md, POE)
                     if !isQueueUnselected && !statusText.ktIsBlank {
                         ZtGlassCard {
                             VStack(alignment: .leading, spacing: 4) {
+                                Text(verbatim: AppStrings.noQueueNotDisconnected(lang)).ztText(ZtType.overline).foregroundStyle(ZtChipTone.green.text)
                                 if let formattedAddress {
                                     Text(verbatim: formattedAddress).ztText(ZtType.caption).foregroundStyle(UiColors.textSecondaryHi)
                                 }
                                 Text(verbatim: statusText).ztText(ZtType.subhead).foregroundStyle(Color.white)
+                                if let gavMessage, queue.ktIsBlank {
+                                    GavMessageLine(text: gavMessage, lang: lang)
+                                }
                             }
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
+                    }
+
+                    // «Ремонти й пошкодження поруч», directly above the hero card (owner decision D9)
+                    if !isQueueUnselected, let nearby {
+                        NearbyOutagesCard(nearby: nearby, lang: lang)
                     }
 
                     hero(customNoQueue: hasCustomNoQueueStatus && !hasEmergency, isStatusUnclear: isStatusUnclear)
@@ -141,6 +155,12 @@ struct MainScreen: View {
                     }
                     .id("main-status")
 
+                    // today's POE measures (ГАВ, ГОП, СГАВ ...) whatever the site state (spec/POE_API.md section 7),
+                    // under the schedule, right before the links (owner, 2026-11-16)
+                    if !isQueueUnselected, let measures = snapshot.measures, !measures.ktIsBlank {
+                        SiteNoticeCard(text: measures, lang: lang, title: AppStrings.measuresTitle(lang))
+                    }
+
                     LinkCard(title: AppStrings.emergencyOutagesLabel(lang), url: AppStrings.EMERGENCY_OUTAGES_URL, tile: Color(argb: 0xFF1877F2), enabled: !isQueueUnselected, lang: lang) {
                         Text(verbatim: "f").font(.system(size: 24, weight: .black, design: .rounded)).foregroundStyle(Color.white)
                     }
@@ -173,7 +193,7 @@ struct MainScreen: View {
 
     // MARK: - Pieces
 
-    private func header(queue: String, hideQueue: Bool, address: String?, interactive: Bool) -> some View {
+    private func header(queue: String, hideQueue: Bool, address: String?, gavMessage: String?, interactive: Bool) -> some View {
         HStack(alignment: .center) {
             if hideQueue {
                 Color.clear.frame(height: ZtMinTouch).frame(maxWidth: .infinity)
@@ -184,6 +204,10 @@ struct MainScreen: View {
                         .ztText(ZtType.caption)
                         .foregroundStyle(UiColors.textSecondaryHi)
                         .lineLimit(3)
+                    // POE's own line about the house: feeder and the schedules it belongs to
+                    if let gavMessage {
+                        GavMessageLine(text: gavMessage, lang: lang)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.trailing, 12)
@@ -280,6 +304,11 @@ struct MainScreen: View {
                                 .background { RoundedRectangle(cornerRadius: ZtRadius.badge).fill(Color(argb: 0x26FFFFFF)) }
                         }
                     }
+                    // POE: power comes back inside the switching half-hour after the span (spec/OUTAGE_ENGINE.md 3.5)
+                    if !isStatusUnclear, let window = snapshot.restoreWindow() {
+                        Spacer().frame(height: 8)
+                        RestoreWindowLine(from: window.start, to: window.end, lang: lang)
+                    }
                 }
                 .accessibilityElement(children: .combine)
             }
@@ -287,6 +316,40 @@ struct MainScreen: View {
     }
 
     // MARK: - Helpers
+
+    /// "Світло повернеться 19:00–19:30" with a yellow swatch: the colour of the switching cells of the drum.
+    private struct RestoreWindowLine: View {
+        let from: LocalDateTime
+        let to: LocalDateTime
+        let lang: String
+
+        var body: some View {
+            HStack(spacing: 8) {
+                RoundedRectangle(cornerRadius: 2).fill(ZtDrumColors.switchingMid).frame(width: 14, height: 10)
+                    .accessibilityHidden(true)
+                Text(verbatim: AppStrings.restoreWindow(lang, String(format: "%02d:%02d", from.hour, from.minute),
+                                                        String(format: "%02d:%02d", to.hour, to.minute)))
+                    .ztText(ZtType.caption.weight(.bold))
+                    .foregroundStyle(ZtDrumColors.switchingMid)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    /// POE's `gav_message` of the house (feeder, ГАВ / АЧР / ГПВ queues): an info line, never parsed.
+    private struct GavMessageLine: View {
+        let text: String
+        let lang: String
+
+        var body: some View {
+            Text(verbatim: text)
+                .ztText(ZtType.caption)
+                .foregroundStyle(ZtColors.textTertiary)
+                .lineLimit(4)
+                .padding(.top, 2)
+                .accessibilityLabel(Text(verbatim: AppStrings.gavMessageA11y(lang) + ". " + text))
+        }
+    }
 
     /// "Житомир, вул. Київська, 1" -> city line and street line.
     static func formatAddressAfterCity(_ address: String?) -> String? {
@@ -587,6 +650,7 @@ private struct FirstLaunchOverlay: View {
         VStack(spacing: 24) {
             FirstStartTip(lang: lang).padding(.bottom, -12)
             Button {
+                model.startTourIfNew()
                 model.autoOpenQueueHelp = true
                 model.go(to: 1)
             } label: {
@@ -612,7 +676,7 @@ private struct FirstLaunchOverlay: View {
 
             LanguageSwitch(selected: model.settings.language, lang: lang) { model.setLanguage($0) }
 
-            // not an official service, data from ztoe.com.ua: shown here once and in About (App Review item R2)
+            // not an official service, data from poe.pl.ua: shown here once and in About (App Review item R2)
             Text(verbatim: AppStrings.disclaimerText(lang))
                 .ztText(ZtType.caption)
                 .foregroundStyle(ZtColors.textSecondary)

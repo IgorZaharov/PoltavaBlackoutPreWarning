@@ -222,64 +222,6 @@ final class SpecVectorsTests: XCTestCase {
         report("address_keys.json", "all groups", ran: ran, atLeast: 8 + 5 + 6 + 5 + 9)
     }
 
-    // MARK: - poweron_api.json
-
-    private func row(_ o: J) -> PowerOnRow {
-        PowerOnRow(
-            id: (o["id"] as! NSNumber).int64Value,
-            cityId: o.int("cityId"),
-            cityName: o.str("cityName") ?? "",
-            streetId: o.int("streetId"),
-            streetName: o.str("streetName") ?? "",
-            dateEvent: o.str("dateEvent") ?? "",
-            datePlanIn: o.str("datePlanIn") ?? "",
-            koment: o.str("koment"),
-            switchSubReason: o.int("switchSubReason"),
-            typeOff: o.int("typeOff"),
-            buildingNames: o.str("buildingNames") ?? ""
-        )
-    }
-
-    func testPowerOnVectors() throws {
-        let v = try Vectors.load("poweron_api.json")
-        var ts = 0, em = 0, rp = 0
-        for t in v.objs("timestamps") {
-            let parsed = PowerOnMapper.parseTime(t.str("in"))
-            XCTAssertEqual(t.str("out"), parsed?.description, "timestamp '\(t.str("in") ?? "nil")'")
-            ts += 1
-        }
-        for c in v.objs("emergencyMapping") {
-            let name = c.str("name") ?? "?"
-            let got = PowerOnMapper.emergencyRecordsFor(c.objs("rows").map(row), house: c.str("house")!)
-            let exp = c.objs("expect")
-            XCTAssertEqual(exp.count, got.count, "\(name): count")
-            for (i, e) in exp.enumerated() where i < got.count {
-                XCTAssertEqual(e.str("id"), got[i].id, "\(name): id")
-                XCTAssertEqual(e.str("start"), got[i].start.description, "\(name): start")
-                XCTAssertEqual(e.str("estimatedEnd"), got[i].estimatedEnd?.description, "\(name): estimatedEnd")
-                XCTAssertEqual(e.str("label"), got[i].label, "\(name): label")
-            }
-            em += 1
-        }
-        for c in v.objs("repairMapping") {
-            let name = c.str("name") ?? "?"
-            let got = PowerOnMapper.repairOutagesFor(c.objs("rows").map(row), house: c.str("house")!, today: ld(c.str("today")!))
-            let exp = c.objs("expect")
-            XCTAssertEqual(exp.count, got.count, "\(name): count")
-            for (i, e) in exp.enumerated() where i < got.count {
-                XCTAssertEqual(e.str("id"), got[i].id, "\(name): id")
-                XCTAssertEqual(.REPAIR, got[i].kind, "\(name): kind")
-                XCTAssertEqual(e.str("start"), got[i].start.description, "\(name): start")
-                XCTAssertEqual(e.str("end"), got[i].end.description, "\(name): end")
-                XCTAssertEqual(e.str("label"), got[i].label, "\(name): label")
-            }
-            rp += 1
-        }
-        report("poweron_api.json", "timestamps", ran: ts, atLeast: 9)
-        report("poweron_api.json", "emergencyMapping", ran: em, atLeast: 7)
-        report("poweron_api.json", "repairMapping", ran: rp, atLeast: 2)
-    }
-
     // MARK: - site_state.json
 
     func testSiteStateVectors() throws {

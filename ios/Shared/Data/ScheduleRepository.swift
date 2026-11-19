@@ -1,9 +1,9 @@
 import Foundation
 
-/// Cache of the ztoe hourly tables (mirror of android data/repository/ScheduleRepository.kt,
-/// spec/PERSISTENCE.md section 2): today's and tomorrow's off-cells of every queue as "0"/"1" strings
-/// with the date they were fetched for, plus yesterday's cells for the tail past midnight.
-/// A failed fetch never clears it.
+/// Cache of the POE queue tables (mirror of android data/repository/ScheduleRepository.kt,
+/// spec/PERSISTENCE.md section 2): today's and tomorrow's cells of every queue as "0"/"1"/"2" strings
+/// (on, off, switching) with the date they were fetched for, plus yesterday's cells for the tail past
+/// midnight. A failed fetch never clears it.
 ///
 /// Not ported (dead code in the Android 1.4.0 app, superseded by core/OutageEngine): the 1.3.x status
 /// and countdown calculator, the emergency overlay and the interval helpers.
@@ -26,31 +26,30 @@ public final class ScheduleRepository {
         self.nowMs = nowMs
     }
 
-    private static func encode(_ cells: [Bool]) -> String { String(cells.map { $0 ? "1" : "0" }) }
-
     private static func decode(_ encoded: String?) -> [Bool]? {
         guard let encoded, encoded.count >= 24 else { return nil }
         return encoded.map { $0 == "1" }
     }
 
-    /// Saves all queues of one fetch in one go. `schedules[queue] = (todayOff, tomorrowOff)`.
-    public func saveAllSchedulesBatch(_ schedules: [String: (today: [Bool], tomorrow: [Bool]?)], activeQueue: String) {
-        if schedules.isEmpty { return }
+    /// POE tables (spec/POE_API.md section 3): all 12 queues of today and, when published, tomorrow in one
+    /// go. Cells are stored as '0' on, '1' off, '2' switching, so every reader of the boolean form
+    /// ('1' = off) keeps working and the switching half-hour is never "off".
+    public func saveAllCellsBatch(today todayCells: [String: [ScheduleCell]], tomorrow: [String: [ScheduleCell]]?) {
+        if todayCells.isEmpty { return }
         lock.lock(); defer { lock.unlock() }
         let t = today()
         let todayStr = t.description
         let tomorrowStr = t.plusDays(1).description
         let yesterdayStr = t.minusDays(1).description
         prefs.set("cache_today_date", todayStr)
-        prefs.set("cache_today_queue", activeQueue)
         prefs.set("cache_last_sync_ms", nowMs())
-        for (queue, pair) in schedules {
+        for (queue, cells) in todayCells {
             archiveYesterday(queue, yesterdayStr)
             prefs.set("cache_today_date_\(queue)", todayStr)
-            prefs.set("cache_today_slots_\(queue)", Self.encode(pair.today))
-            if let tomorrow = pair.tomorrow, !tomorrow.isEmpty {
+            prefs.set("cache_today_slots_\(queue)", Self.encodeCells(cells))
+            if let next = tomorrow?[queue] {
                 prefs.set("cache_tomorrow_date_\(queue)", tomorrowStr)
-                prefs.set("cache_tomorrow_slots_\(queue)", Self.encode(tomorrow))
+                prefs.set("cache_tomorrow_slots_\(queue)", Self.encodeCells(next))
                 prefs.set("cache_has_tomorrow_\(queue)", true)
             } else {
                 prefs.remove("cache_tomorrow_date_\(queue)")
@@ -58,6 +57,43 @@ public final class ScheduleRepository {
                 prefs.set("cache_has_tomorrow_\(queue)", false)
             }
         }
+    }
+
+    static func encodeCells(_ cells: [ScheduleCell]) -> String {
+        String(cells.map { c -> Character in
+            switch c {
+            case .ON: return "0"
+            case .OFF: return "1"
+            case .SWITCHING: return "2"
+            }
+        })
+    }
+
+    static func decodeCells(_ encoded: String?) -> [ScheduleCell]? {
+        guard let encoded, encoded.count == OutageConfig.SLOTS_PER_DAY else { return nil }
+        return encoded.map { (c: Character) -> ScheduleCell in
+            switch c {
+            case "1": return .OFF
+            case "2": return .SWITCHING
+            default: return .ON
+            }
+        }
+    }
+
+    /// Three-state cells of today's table, or nil when there is no valid cache for today.
+    public func todayCells(_ queue: String) -> [ScheduleCell]? {
+        guard todayOffCells(queue) != nil else { return nil }
+        return Self.decodeCells(prefs.string("cache_today_slots_\(queue)"))
+    }
+
+    public func tomorrowCells(_ queue: String) -> [ScheduleCell]? {
+        guard tomorrowOffCells(queue) != nil else { return nil }
+        return Self.decodeCells(prefs.string("cache_tomorrow_slots_\(queue)"))
+    }
+
+    public func yesterdayCells(_ queue: String) -> [ScheduleCell]? {
+        guard yesterdayOffCells(queue) != nil else { return nil }
+        return Self.decodeCells(prefs.string("cache_yesterday_slots_\(queue)"))
     }
 
     public func isCacheFresh(refreshIntervalMinutes: Int) -> Bool {
@@ -99,7 +135,7 @@ public final class ScheduleRepository {
         }
     }
 
-    /// True where power is off per the ztoe table; nil when there is no valid cache for today.
+    /// True where power is off per the POE table; nil when there is no valid cache for today.
     public func todayOffCells(_ queue: String) -> [Bool]? {
         if queue.ktIsBlank { return nil }
         let t = today()
@@ -133,11 +169,5 @@ public final class ScheduleRepository {
     public func clearScheduleCache() {
         lock.lock(); defer { lock.unlock() }
         prefs.clear()
-    }
-
-    /// The saved ETag of the schedule page (sent as If-None-Match).
-    public var etag: String? {
-        get { prefs.string("ztoe_last_etag").flatMap { $0.ktIsBlank ? nil : $0 } }
-        set { prefs.set("ztoe_last_etag", newValue) }
     }
 }

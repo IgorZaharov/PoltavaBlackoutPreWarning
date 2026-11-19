@@ -4,7 +4,7 @@ name: POE data (live probe, address directory, queue catalogue)
 # - probe: every day, reads the live POE endpoints through the web client and fails loudly when
 #   today's schedule or a per-house status can not be read (site format change);
 # - directory: every week, re-crawls the address directory and commits poe_directory.json (and its
-#   synced copies) to main when it changed. The commit is made by github-actions[bot], for which
+#   synced copies in public/, the Android assets and ios/Resources) to main when it changed. The commit is made by github-actions[bot], for which
 #   build-apk.yml skips its "Publish GitHub Release" step;
 # - queues: every day, checks the hourly-schedule PDF (графік погодинних відключень) on
 #   www.poe.pl.ua and rebuilds poe_queues.json (address and company -> queue) only when the PDF or
@@ -59,6 +59,7 @@ jobs:
         run: |
           cp poe_directory.json public/poe_directory.json
           cp poe_directory.json android/app/src/main/assets/poe_directory.json
+          cp poe_directory.json ios/Resources/poe_directory.json
       - name: Commit when the directory changed (ignoring the crawl time stamp)
         run: |
           git show HEAD:poe_directory.json > "$RUNNER_TEMP/old.json"
@@ -68,7 +69,7 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add poe_directory.json public/poe_directory.json android/app/src/main/assets/poe_directory.json
+          git add poe_directory.json public/poe_directory.json android/app/src/main/assets/poe_directory.json ios/Resources/poe_directory.json
           python3 scripts/build_android_zip.py
           git add public/PoltavaBlackoutPreWarning.zip
           git commit -m "Update the POE address directory snapshot"
@@ -98,7 +99,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           cp poe_queues.json public/poe_queues.json
           cp poe_queues.json android/app/src/main/assets/poe_queues.json
-          git add poe_queues.json public/poe_queues.json android/app/src/main/assets/poe_queues.json
+          cp poe_queues.json ios/Resources/poe_queues.json
+          git add poe_queues.json public/poe_queues.json android/app/src/main/assets/poe_queues.json ios/Resources/poe_queues.json
           python3 scripts/build_android_zip.py
           git add public/PoltavaBlackoutPreWarning.zip
           git commit -m "Update the POE queue catalogue from the hourly-schedule PDF"

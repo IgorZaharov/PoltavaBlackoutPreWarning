@@ -1,6 +1,6 @@
 # First-run tour
 
-Owner request, 2026-11-17. Android (`ui/components/OnboardingTour.kt`, `CoachMarks.kt`) and the web simulator (`src/services/onboarding.ts`, `src/components/CoachTour.tsx`) follow this file. The step cases are in `OnboardingTourTest.kt` and `tests/onboarding.test.ts`. iOS gets the tour together with the POE address picker (milestone I2). Until then it only has the first-launch tip (step 0).
+Owner request, 2026-11-17. Android (`ui/components/OnboardingTour.kt`, `CoachMarks.kt`), the web simulator (`src/services/onboarding.ts`, `src/components/CoachTour.tsx`) and iOS (`ios/App/UI/OnboardingTour.swift`, since milestone I3) follow this file. The step cases are in `OnboardingTourTest.kt`, `tests/onboarding.test.ts` and `ios/Tests/OnboardingTourTests.swift`.
 
 ## Steps
 
@@ -22,9 +22,9 @@ Steps PICK to ABOUT come from `tourStep(active, lookupOpen, resultShown, page, h
 
 ## Rules
 
-- **Start and end.** The tour starts when the first-launch «Виберіть чергу» button is tapped, unless it was finished before. It ends with «Зрозуміло», with «Пропустити підказки» (in the first tip of every step), or when About is opened after RENAME. It is then never shown again. Android keeps the flag in the `onboarding` preferences; the web keeps it in `localStorage` `onboarding_done`, cleared by the simulator's reset.
+- **Start and end.** The tour starts when the first-launch «Виберіть чергу» button is tapped, unless it was finished before. It ends with «Зрозуміло», with «Пропустити підказки» (in the first tip of every step), or when About is opened after RENAME. It is then never shown again. Android keeps the flag in the `onboarding` preferences, iOS in `UserDefaults` `onboarding_done`, the web in `localStorage` `onboarding_done` (cleared by the simulator's reset).
 - **Dim layer.** The dim layer is `#05080F` at 78 %. Holes are 6 dp larger than the lit controls, with a 14 dp radius. Touches on the lit controls (inside the holes) and on the tips go through, so the user works with the lit controls directly.
 - **A tap outside goes on** (owner, 2026-11-17; `outsideTap(step)` / `tourOutsideTap`). From RENAME on, a tap anywhere else is taken (nothing underneath reacts, not even a scroll) and goes to the next tip: RENAME → ALERTS, ALERTS → the app switches to the main screen (ABOUT), ABOUT → the tour ends. In PICK and APPLY the next tip needs the address, so such a tap does nothing there.
 - **Scrolling.** The control a tip points at is scrolled into view (PICK and APPLY in the lookup dialog, RENAME and ALERTS in Settings).
 - **Tip placement.** A tip goes above its anchor when the anchor's centre is in the lower 55 % of the screen, otherwise below it. The arrow (accent, 32 dp) sits between tip and anchor and nudges 8 dp towards the anchor; it stands still when system animations are off or under reduced motion.
-- **Dialogs.** A dialog is its own window on Android, so the lookup dialog draws PICK and APPLY in its own overlay, and the main window draws RENAME, ALERTS and ABOUT.
+- **Dialogs.** A dialog is its own window on Android (a full-screen cover on iOS), so the lookup dialog draws PICK and APPLY in its own overlay, and the main window draws RENAME, ALERTS and ABOUT.

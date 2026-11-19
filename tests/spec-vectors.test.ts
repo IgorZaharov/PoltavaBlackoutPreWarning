@@ -283,8 +283,7 @@ function addressKeyVectors(): number {
   return checks + 4;
 }
 
-// poweron_api.json is the inherited Zhytomyr source: the Poltava app has no PowerOn mapper any more. The
-// file stays for the iOS target until milestone I2 (it loads vector files by name).
+// poweron_api.json (the inherited Zhytomyr source) was removed with the iOS PowerOn adapter in I2.
 
 // -------------------------------------------------------------------------------------------------
 // poe_api.json (spec/POE_API.md section 8)

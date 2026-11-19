@@ -8,7 +8,7 @@ import WidgetKit
 /// Planned pre-warnings do not depend on it: they are scheduled ahead as local notifications.
 enum BackgroundRefresh {
     /// Listed in `BGTaskSchedulerPermittedIdentifiers` (ios/App/Info.plist).
-    static let identifier = "ua.blackout.prewarning.sync"
+    static let identifier = "ua.blackout.prewarning.poltava.sync"
 
     /// Asks iOS for the next run, no earlier than one refresh interval from now (at least 15 minutes,
     /// like WorkManager's floor on Android). Called on launch, when the app goes to the background and
@@ -25,19 +25,12 @@ enum BackgroundRefresh {
     /// the warnings are planned from the latest stored state anyway.
     static func run() async {
         schedule()
-        ZtoeAddressLookup.initDiskCache()
-        let settings = SettingsRepository.shared.getSettings()
+        PoeAddressLookup.initialize()
 
-        // A house without a queue may be given one by the site later. Only the fields of this check are
-        // written, through the store, so a setting the user changes meanwhile is never reverted.
-        if let q = settings.selectedAddressQuery, settings.queue.ktIsBlank,
-           let lookup = await ZtoeAddressLookup.checkAddressOnZtoeWebsite(
-               remId: q.remId, settlementId: q.settlementId, streetId: q.streetId, house: q.house, siteUrl: settings.cityUrl
-           ),
-           lookup.queue != settings.queue || lookup.statusText != settings.customQueueStatusText {
-            SubscriptionSync.shared.assignPrimaryQueue(queue: lookup.queue, statusText: lookup.statusText, addressText: nil)
-        }
-
+        // The queue of every address is re-read from POE inside the refresh (per-house status, E4, written
+        // back through the subscription store), so a house that gets a queue later, or changes it, is updated
+        // without a separate check, as Android `ScheduleSyncWorker` does since P3; a second E4 request per
+        // run would only cost time and traffic in the short background window.
         if !Task.isCancelled {
             let outcome = await OutageRepository.shared.refresh(SettingsRepository.shared.getSettings(),
                                                                 widgetItemIds: await WidgetBindings.shownItemIds())
