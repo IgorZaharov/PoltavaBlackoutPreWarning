@@ -63,8 +63,11 @@ struct AboutScreen: View {
 
     private var identity: some View {
         VStack(spacing: 0) {
-            RoundedRectangle(cornerRadius: 18).fill(ZtColors.accent).frame(width: 60, height: 60)
-                .overlay { Image(systemName: "bolt.fill").font(.system(size: 30, weight: .bold)).foregroundStyle(Color.white) }
+            // the app logo (owner, 2026-11-16; scripts/build_app_icons.py makes it from public/logo.png)
+            Image("AppLogo")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 72, height: 72)
                 .accessibilityHidden(true)
             Spacer().frame(height: 12)
             Text(verbatim: AppStrings.aboutTitle(lang)).ztText(ZtType.heading.weight(.bold)).foregroundStyle(Color.white)
