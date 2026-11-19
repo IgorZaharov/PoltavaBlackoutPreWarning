@@ -100,157 +100,192 @@
 <body>
   <div class="container">
     <div class="card">
-      <h1>Privacy Policy / Політика конфіденційності</h1>
-
-      <div class="meta-box">
-        <p><strong>Application Name / Назва додатку:</strong> Світло в Полтаві (PoltavaBlackoutPreWarning)</p>
-        <p><strong>Package Name / Application ID (Android):</strong> <code>ua.blackout.prewarning.poltava</code></p>
-        <p><strong>Bundle Identifier (iOS):</strong> <code>ua.blackout.prewarning.poltava</code> (widget <code>ua.blackout.prewarning.poltava.widget</code>)</p>
-        <p><strong>Developer / Publisher:</strong> Igor Zaharov</p>
-        <p><strong>Effective Date / Дата набрання чинності:</strong> November 9, 2026</p>
-        <p><strong>Last Updated / Останнє оновлення:</strong> November 15, 2026</p>
-        <p><strong>Open-Source Repository:</strong> <a href="https://github.com/IgorZaharov/PoltavaBlackoutPreWarning" target="_blank" rel="noopener noreferrer">https://github.com/IgorZaharov/PoltavaBlackoutPreWarning</a></p>
-      </div>
-
-      <h2>1. Introduction and Scope</h2>
-      <p>This Privacy Policy governs the mobile application <strong>"Світло в Полтаві"</strong> for Android (package name <code>ua.blackout.prewarning.poltava</code>) and for iPhone (bundle identifier <code>ua.blackout.prewarning.poltava</code>, iOS 17.0 or newer), created and maintained by Igor Zaharov as a free, open-source utility. Both versions handle data in the same way; where they differ, this policy says so (section 5 for Android, section 5A for iOS).</p>
-      <p>The Application is designed to provide residents and organizations in the Zhytomyr region of Ukraine with timely, accurate information regarding scheduled electrical power outages published by <strong>JSC "Zhytomyroblenergo" (АТ «Житомиробленерго»)</strong>.</p>
-      <p>We are strictly committed to user privacy. This document outlines our data handling practices in accordance with the <strong>Google Play Developer Program Policies</strong>, the <strong>Apple App Store Review Guidelines (section 5.1, Privacy)</strong>, the <strong>General Data Protection Regulation (GDPR) (EU) 2016/679</strong>, and the <strong>Law of Ukraine "On Protection of Personal Data" (Закон України «Про захист персональних даних» № 2297-VI)</strong>.</p>
-
-      <h2>2. Principle of Zero Data Collection (Data Minimization)</h2>
-      <ul>
-        <li><strong>No Personal Data Collected:</strong> The Application does not collect, solicit, aggregate, record, store, sell, lease, or monetize any Personally Identifiable Information (PII).</li>
-        <li><strong>No User Accounts:</strong> There is no registration, login, profile creation, or authentication required to use the Application.</li>
-        <li><strong>No Advertising or Behavioral Profiling:</strong> The Application contains no advertising frameworks, ad-tracking SDKs, or commercial behavioral profiling mechanisms. It does not access the Android Advertising ID (AAID) or the Apple Identifier for Advertisers (IDFA), and it does not track users across apps or websites.</li>
-        <li><strong>No Analytics or Telemetry:</strong> The Application does not integrate third-party analytics services (e.g., Google Analytics, Firebase SDK, AppsFlyer, Facebook SDK). We do not collect telemetry, diagnostic crash reports containing device IDs, or usage statistics.</li>
-        <li><strong>No Location Tracking:</strong> The Application does not request or access GPS, coarse location, Wi-Fi SSID information, or cellular network data.</li>
-      </ul>
-
-      <h2>3. Information Processed Locally on the User's Device</h2>
-      <p>All configuration settings and operational data created during application use are retained <strong>strictly on the user's physical device</strong>: on Android within the sandboxed application private storage (<code>SharedPreferences</code> under <code>Context.MODE_PRIVATE</code>); on iPhone within the application sandbox and the App Group container <code>group.ua.blackout.prewarning.poltava</code>, which only the Application and its own widgets can read. This information is never transmitted to any external server or third party, except the public street and settlement identifiers described in section 4.</p>
-      <ul>
-        <li><strong>Saved Addresses and Queues:</strong> Up to five addresses or queues (district, settlement, street, house number, the queue found for it, an optional custom name) with their notification switches.</li>
-        <li><strong>Notification & Pre-Warning Settings:</strong> The user's chosen pre-warning lead time (e.g., 15 or 30 minutes in advance), sound toggles, and vibration toggles.</li>
-        <li><strong>Audio Preferences:</strong> Sound effects and music volume sliders.</li>
-        <li><strong>Offline Cache:</strong> Cached electricity outage schedule tables and the emergency outages last seen for each saved address, to enable offline viewing when network access is unavailable.</li>
-      </ul>
-
-      <h2>4. Network Connections and Data Sources</h2>
-      <p>The Application requires internet access exclusively to fetch publicly accessible data necessary for its primary utility function:</p>
-      <ul>
-        <li><strong>JSC "Zhytomyroblenergo" Schedule Server:</strong> (<code>https://www.ztoe.com.ua/unhooking-search.php</code>) &mdash; Retrieving publicly published hourly power outage schedule HTML tables. When you look up an address in Settings, the public ids of the chosen district, settlement and street are sent as form fields to find the matching queue. No user credentials, cookies, device identifiers, or personal parameters are sent.</li>
-        <li><strong>JSC "Zhytomyroblenergo" Emergency Outage Service (PowerOn):</strong> (<code>https://api-ztoe-poweron.inneti.net/api/</code>) &mdash; Retrieving publicly published emergency outages and planned repair works for the street you selected. Only the public identifiers of the selected settlement and street are sent as query filters; the house number is matched on your device and never sent. No user credentials, cookies, device identifiers, or personal parameters are sent.</li>
-        <li><strong>Static Configuration File (GitHub Raw):</strong> (<code>https://raw.githubusercontent.com/IgorZaharov/PoltavaBlackoutPreWarning/main/donations.json</code>) &mdash; Periodically retrieving optional community donation URLs and official information links using standard conditional HTTP headers (<code>ETag</code> / <code>If-Modified-Since</code>).</li>
-        <li><strong>Website Icons of the Donation Links:</strong> (<code>https://icons.duckduckgo.com/ip3/</code> and the <code>/favicon.ico</code> file of each donation website) &mdash; Showing the small website icon next to each donation link. The request names only the donation website's domain.</li>
-      </ul>
-      <p>As with any internet request, the operators of these servers can see the device's IP address. We do not receive, store, or combine these addresses with anything.</p>
-
-      <h2>5. Android Device Permissions and Technical Justification</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Permission</th>
-            <th>Technical Requirement & Justification</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><code>android.permission.INTERNET</code></td>
-            <td>Required to communicate via HTTPS with the public servers of JSC "Zhytomyroblenergo" (schedule site and emergency outage service) and retrieve blackout schedules and emergency outages.</td>
-          </tr>
-          <tr>
-            <td><code>android.permission.ACCESS_NETWORK_STATE</code></td>
-            <td>Required to verify whether an active Wi-Fi or cellular network connection is available prior to initiating network queries, and to tell "no internet" apart from "the power company's site is not responding". Only the status the operating system already reports is used; no third-party host is contacted.</td>
-          </tr>
-          <tr>
-            <td><code>android.permission.POST_NOTIFICATIONS</code></td>
-            <td>Required on Android 13+ (API 33+) to present local notifications warning the user of imminent electrical outages according to their configured preference.</td>
-          </tr>
-          <tr>
-            <td><code>android.permission.SCHEDULE_EXACT_ALARM</code></td>
-            <td>Required to schedule exact, time-critical local alarms using Android <code>AlarmManager</code> so pre-warnings trigger at the precise minute chosen by the user even in Doze mode. On Android 12+ the user grants it in the system setting "Alarms &amp; reminders"; the Application explains this in Settings and opens the system screen on request. Without it, warnings are still delivered but may be a few minutes late.</td>
-          </tr>
-          <tr>
-            <td><code>android.permission.RECEIVE_BOOT_COMPLETED</code></td>
-            <td>Required to automatically restore and reschedule the user's configured local outage warning alarms following a device reboot or system time adjustment.</td>
-          </tr>
-          <tr>
-            <td><code>android.permission.VIBRATE</code></td>
-            <td>Required to deliver haptic vibration feedback alongside notifications if enabled in the user's settings.</td>
-          </tr>
-          <tr>
-            <td><code>android.permission.WAKE_LOCK</code></td>
-            <td>Required momentarily during exact alarm broadcasts to guarantee that the notification dispatch routine completes successfully before the device returns to sleep.</td>
-          </tr>
-        </tbody>
-      </table>
-
-      <h2>5A. iPhone (iOS) Capabilities and Technical Justification</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Capability</th>
-            <th>Technical Requirement & Justification</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>Notifications (<code>UserNotifications</code>)</td>
-            <td>Local notifications before a scheduled outage and about emergency outages. Permission is asked only after the user has chosen a queue or an address; the Application works fully without it. All notifications are created on the device; there is no push server.</td>
-          </tr>
-          <tr>
-            <td>Background App Refresh (<code>BGAppRefreshTask</code> <code>ua.blackout.prewarning.poltava.sync</code>, background mode <code>fetch</code>)</td>
-            <td>Refreshing the schedule and emergency outages from time to time while the Application is closed, so warnings and widgets stay current. iOS decides how often this runs; the user can turn it off in iOS Settings.</td>
-          </tr>
-          <tr>
-            <td>Home-Screen Widgets (<code>WidgetKit</code>) and App Group <code>group.ua.blackout.prewarning.poltava</code></td>
-            <td>Sharing the saved addresses and the cached schedule between the Application and its own widgets.</td>
-          </tr>
-        </tbody>
-      </table>
-      <p>The Privacy Manifest (<code>PrivacyInfo.xcprivacy</code>) of the Application and of its widget declares no tracking, no collected data types, and one required-reason API: <code>UserDefaults</code> (reasons <code>CA92.1</code> and <code>1C8F.1</code>). Cache files in the App Group container are excluded from iCloud and device backups. The iPhone version does not request access to contacts, photos, camera, microphone, location, Bluetooth, health data, or the advertising identifier. Donation, Facebook, and website links open in Safari, outside the Application; the Application does not process payments.</p>
-
-      <h2>6. Third-Party Links and External Services</h2>
-      <p>The Application contains hyperlinks to external third-party platforms (e.g., JSC "Zhytomyroblenergo" website, official Facebook page, Monobank voluntary donation jar, "Come Back Alive" foundation donation page, and GitHub repository). We do not control or assume responsibility for external privacy practices.</p>
-
-      <h2>7. Children's Privacy (COPPA & GDPR Compliance)</h2>
-      <p>The Application does not target, knowingly interact with, or collect information from children under the age of 13 (or under 16 within the European Economic Area). Because the Application collects no personal data whatsoever, it is fully compliant with COPPA, Google Play Families Policy, and the App Store Review Guidelines for apps rated for all ages.</p>
-
-      <h2>8. Data Storage, Security, and Retention</h2>
-      <p>All settings are stored exclusively in the private sandboxed storage on the user's device. Users retain 100% control over their data and can clear all data at any time with the reset button in the Application's own Settings (Android and iPhone), via Android Settings (<strong>Settings &gt; Apps &gt; Світло в Полтаві &gt; Storage &gt; Clear Data</strong>), or by uninstalling the Application (on iPhone, deleting the app also deletes its widgets and its App Group data).</p>
-
-      <h2>9. Contact Information</h2>
-      <p>If you have questions or legal inquiries concerning this Privacy Policy, please contact the developer through our public issue tracker:</p>
-      <ul>
-        <li><strong>Lead Developer:</strong> Igor Zaharov</li>
-        <li><strong>GitHub Issues:</strong> <a href="https://github.com/IgorZaharov/PoltavaBlackoutPreWarning/issues" target="_blank" rel="noopener noreferrer">https://github.com/IgorZaharov/PoltavaBlackoutPreWarning/issues</a></li>
-        <li><strong>Repository:</strong> <a href="https://github.com/IgorZaharov/PoltavaBlackoutPreWarning" target="_blank" rel="noopener noreferrer">https://github.com/IgorZaharov/PoltavaBlackoutPreWarning</a></li>
-      </ul>
-
-      <hr />
-
-      <h1>Політика конфіденційності (Українська версія)</h1>
-      <p><strong>Дата набрання чинності:</strong> 9 листопада 2026 року<br />
-      <strong>Назва додатку:</strong> Світло в Полтаві (PoltavaBlackoutPreWarning)<br />
-      <strong>Останнє оновлення:</strong> 15 листопада 2026 року<br />
-      <strong>Ідентифікатор пакета Android (Package Name):</strong> <code>ua.blackout.prewarning.poltava</code><br />
-      <strong>Ідентифікатор iPhone (Bundle Identifier):</strong> <code>ua.blackout.prewarning.poltava</code><br />
-      <strong>Розробник:</strong> Ігор Захаров (Igor Zaharov)</p>
-
-      <h3>1. Загальні положення та відсутність збору даних</h3>
-      <p>Ця Політика регулює використання додатку «Світло в Полтаві» для Android та iPhone. Додаток <strong>не збирає</strong>, не реєструє, не передає та не продає персональні дані користувачів. Реєстрація відсутня. Трекінгові або рекламні модулі відсутні.</p>
-
-      <h3>2. Локальне збереження</h3>
-      <p>Усі налаштування (до п'яти адрес або черг, час нагадування, налаштування звуку, збережений графік) зберігаються <strong>виключно на вашому телефоні</strong> (у SharedPreferences на Android; у пісочниці застосунку та контейнері App Group, доступному лише застосунку та його віджетам, на iPhone) і нікуди не передаються, крім публічних кодів населеного пункту й вулиці. Для іконок посилань на пожертви додаток звертається до <code>icons.duckduckgo.com</code> і до самих сайтів пожертв; запит містить лише домен сайту.</p>
-
-      <h3>3. Дозволи Android</h3>
-      <p>Дозволи використовуються виключно для технічного функціонування (завантаження графіка з сайту ztoe.com.ua та аварійних відключень зі служби ztoe-poweron.inneti.net (надсилаються лише публічні коди вибраного населеного пункту й вулиці), надсилання локальних сповіщень та точний таймер попередження (дозвіл «Будильники й нагадування»)).</p>
-
-      <h3>3А. Можливості iPhone</h3>
-      <p>Локальні сповіщення (дозвіл запитується лише після вибору черги або адреси, push-сервера немає), фонове оновлення <code>ua.blackout.prewarning.poltava.sync</code> (частоту визначає iOS, його можна вимкнути в налаштуваннях iOS) та віджети через App Group <code>group.ua.blackout.prewarning.poltava</code>. Маніфест конфіденційності: без відстеження й без зібраних даних; єдиний API з обов'язковою причиною — <code>UserDefaults</code>. Посилання відкриваються в Safari; додаток не обробляє платежі.</p>
-
-      <h3>4. Видалення даних</h3>
-      <p>Користувач може будь-коли стерти всі налаштування кнопкою скидання в налаштуваннях додатку, через «Налаштування &gt; Програми &gt; Світло в Полтаві &gt; Очистити дані» на Android або просто видаливши додаток.</p>
+<h1>Privacy Policy / Політика конфіденційності</h1>
+<p><strong>Effective Date:</strong> November 9, 2026<br />
+<strong>Last Updated:</strong> November 19, 2026<br />
+<strong>Application Name:</strong> Світло в Полтаві (PoltavaBlackoutPreWarning)<br />
+<strong>Package Name / Application ID (Android):</strong> <code>ua.blackout.prewarning.poltava</code><br />
+<strong>Bundle Identifier (iOS):</strong> <code>ua.blackout.prewarning.poltava</code> (widget extension <code>ua.blackout.prewarning.poltava.widget</code>)<br />
+<strong>Developer / Publisher:</strong> Igor Zaharov<br />
+<strong>Open-Source Repository:</strong> <a href="https://github.com/IgorZaharov/PoltavaBlackoutPreWarning" target="_blank" rel="noopener noreferrer">https://github.com/IgorZaharov/PoltavaBlackoutPreWarning</a><br />
+<strong>Contact / Issue Tracker:</strong> <a href="https://github.com/IgorZaharov/PoltavaBlackoutPreWarning/issues" target="_blank" rel="noopener noreferrer">https://github.com/IgorZaharov/PoltavaBlackoutPreWarning/issues</a></p>
+<p>The iPhone app also has its own shorter policy, <a href="PRIVACY_POLICY_IOS.md" target="_blank" rel="noopener noreferrer">PRIVACY_POLICY_IOS.md</a>, used for the App Store listing. Both say the same.</p>
+<hr />
+<h2>1. Introduction and Scope</h2>
+<p>This Privacy Policy governs the mobile application <strong>"Світло в Полтаві"</strong> for Android (package name <code>ua.blackout.prewarning.poltava</code>) and for iPhone (bundle identifier <code>ua.blackout.prewarning.poltava</code>, iOS 17.0 or newer), hereinafter the "Application", created and maintained by Igor Zaharov ("we", "us") as a free, open-source community utility. Both versions handle data in the same way; where they differ, this policy says so (section 5 for Android, section 5A for iPhone).</p>
+<p>The Application gives residents of the Poltava region of Ukraine timely information about scheduled power outages (графіки погодинних відключень), emergency outages and planned repair works published by <strong>JSC "Poltavaoblenergo" (АТ «Полтаваобленерго»)</strong> on its public website. The Application is not made by, endorsed by or affiliated with JSC "Poltavaoblenergo".</p>
+<p>This document describes our data handling in accordance with the <strong>Google Play Developer Program Policies</strong>, the <strong>Apple App Store Review Guidelines (section 5.1, Privacy)</strong>, the <strong>General Data Protection Regulation (GDPR) (EU) 2016/679</strong>, and the <strong>Law of Ukraine "On Protection of Personal Data" (Закон України «Про захист персональних даних» № 2297-VI)</strong>.</p>
+<hr />
+<h2>2. What We Collect: Nothing</h2>
+<ul>
+<li><strong>No data reaches the developer.</strong> We have no server. We do not collect, receive, store, sell or share any personal data.</li>
+<li><strong>No user accounts:</strong> no registration, login or profile.</li>
+<li><strong>No advertising or profiling:</strong> no advertising frameworks or ad-tracking SDKs. The Application does not access the Android Advertising ID (AAID) or the Apple Identifier for Advertisers (IDFA) and does not track users across apps or websites, so no App Tracking Transparency prompt is shown.</li>
+<li><strong>No analytics or telemetry:</strong> no third-party analytics or crash-reporting services (for example Google Analytics for Firebase, Firebase Crashlytics, AppsFlyer, Mixpanel or the Facebook SDK), no usage statistics.</li>
+<li><strong>No location:</strong> the Application does not request GPS, coarse location, Wi-Fi or cell data. An address is chosen from lists.</li>
+</ul>
+<p>What the Application does send, and to whom, is described in section 4: to look up the status of a saved house, it sends that address (including the house number) <strong>directly from the device to the power company's public website</strong>, the same input that website's own search form takes.</p>
+<hr />
+<h2>3. Information Kept on the User's Device</h2>
+<p>All settings and operational data stay <strong>on the device</strong>: on Android in the application's private storage (<code>SharedPreferences</code>, <code>Context.MODE_PRIVATE</code>); on iPhone in the application sandbox and the App Group container <code>group.ua.blackout.prewarning.poltava</code>, which only the Application and its own widgets can read.</p>
+<p>Stored on the device:</p>
+<ol>
+<li><strong>Saved addresses and queues:</strong> up to five addresses or queues (branch (філія), settlement, street, house number, the queue found for it from 1.1 to 6.2, an optional custom name), with the per-address notification switches.</li>
+<li><strong>Notification settings:</strong> the pre-warning lead time, sound and vibration switches, refresh interval, language.</li>
+<li><strong>Offline cache:</strong> the last downloaded schedule of all queues, the emergency outages and repair works last seen for each saved address, the outages listed for the address's settlement, and house lists already looked up, so the Application and its widgets work without a connection.</li>
+<li><strong>Reference lists:</strong> the list of settlements and streets of the Poltava region and the address-to-queue catalogue. Both ship with the Application and can be refreshed from this project's repository (section 4).</li>
+</ol>
+<p><strong>Backups.</strong> On Android, if the user has turned on device backup, Android's own Auto Backup includes the settings and saved addresses in the user's Google Account backup, so they come back on a new phone; the caches are excluded (<code>data_extraction_rules.xml</code>, <code>backup_rules.xml</code>). That backup is run by Android and Google for the user; we never receive it. On iPhone, the cache files in the App Group are excluded from iCloud and device backups.</p>
+<hr />
+<h2>4. Network Connections and Data Sources</h2>
+<p>The Application uses the internet only for its utility function, always over HTTPS:</p>
+<ol>
+<li><strong>JSC "Poltavaoblenergo" public outage pages</strong> (<code>https://www.poe.pl.ua</code>, the public endpoints under <code>/customs/</code> that the company's own pages use):
+<ul>
+<li><strong>Schedule</strong> of all 12 queues for today and tomorrow, and the <strong>active measures</strong> (ГАВ, ГОП): only the date is sent.</li>
+<li><strong>Houses of a street</strong> (when the user picks an address): the public ids of the branch, settlement and street.</li>
+<li><strong>Status of a house</strong> (its queue, an emergency outage, planned repair works), for each saved address: the public ids of the settlement and street <strong>and the house number</strong>. This is the only request that carries a house number, and it goes only to this website, which needs it to answer for that house.</li>
+<li><strong>Outages of a branch</strong> (the "Ремонти й пошкодження поруч" card): the branch id and the date.</li>
+<li>No name, account, cookie or device identifier is sent.</li>
+</ul></li>
+<li><strong>This project's public repository</strong> (<code>https://raw.githubusercontent.com/IgorZaharov/PoltavaBlackoutPreWarning/main/…</code>):
+<ul>
+<li><code>donations.json</code>: the donation links of the About screen, with conditional requests (<code>ETag</code> / <code>If-Modified-Since</code>);</li>
+<li><code>poe_directory.json</code> and <code>poe_queues.json</code>: newer copies of the settlement and street list and the address-to-queue catalogue, at most once a week or when the user taps the refresh button in the address picker.</li>
+<li>Plain file requests; nothing about the user is sent.</li>
+</ul></li>
+<li><strong>Website icons of the donation links:</strong> <code>https://icons.duckduckgo.com/ip3/</code>, on Android also <code>https://www.google.com/s2/favicons</code>, and the <code>/favicon.ico</code> file of each donation website. The request names only the donation website's domain.</li>
+</ol>
+<p>As with any internet request, the operators of these servers can see the device's IP address. We do not receive, store or combine these addresses with anything. How JSC "Poltavaoblenergo" handles requests to its website is governed by its own policies.</p>
+<p><strong>Google Play Data safety and App Store label.</strong> Because the house address leaves the device in request 1, the Google Play Data safety form declares "Personal info → Address" as collected for app functionality, processed ephemerally, optional, and not shared. The App Store label is "Data Not Collected", because Apple counts only data that the developer or its partners keep, and we keep nothing.</p>
+<hr />
+<h2>5. Android Device Permissions and Technical Justification</h2>
+<p>The Application requests only the permissions its core function needs:</p>
+<table>
+<thead><tr><th>Permission</th><th>Technical Requirement &amp; Justification</th></tr></thead>
+<tbody>
+<tr><td><code>android.permission.INTERNET</code></td><td>To reach the public website of JSC "Poltavaoblenergo" (schedule, house status, outages) and this project's repository (section 4).</td></tr>
+<tr><td><code>android.permission.ACCESS_NETWORK_STATE</code></td><td>To check whether a network is available before a request, and to tell "no internet" apart from "the power company's site is not responding". It uses only the status the operating system reports; no extra host is contacted.</td></tr>
+<tr><td><code>android.permission.POST_NOTIFICATIONS</code></td><td>On Android 13 (API level 33) and higher, to show local notifications before a scheduled outage and about emergency outages.</td></tr>
+<tr><td><code>android.permission.SCHEDULE_EXACT_ALARM</code></td><td>To schedule exact local alarms with Android <code>AlarmManager</code>, so a pre-warning arrives at the minute the user chose (for example exactly 15 minutes before an outage), also in Doze mode. On Android 12 and newer the user grants it in the system setting "Alarms &amp; reminders"; the Application explains this in Settings and opens the system screen on request. Without it, warnings still arrive but may be a few minutes late.</td></tr>
+<tr><td><code>android.permission.RECEIVE_BOOT_COMPLETED</code></td><td>To reschedule the pre-warning alarms after a reboot or a change of the system time or time zone.</td></tr>
+<tr><td><code>android.permission.VIBRATE</code></td><td>To vibrate with a notification when the user turned vibration on.</td></tr>
+<tr><td><code>android.permission.WAKE_LOCK</code></td><td>Held briefly while an exact alarm posts its notification, so it completes before the device sleeps again.</td></tr>
+</tbody></table>
+<p>The Application does <strong>not</strong> request access to contacts, camera, microphone, location, phone state, shared storage, SMS or sensors.</p>
+<hr />
+<h2>5A. iPhone (iOS) Capabilities and Technical Justification</h2>
+<table>
+<thead><tr><th>Capability</th><th>Technical Requirement &amp; Justification</th></tr></thead>
+<tbody>
+<tr><td>Notifications (<code>UserNotifications</code>)</td><td>Local notifications before a scheduled outage and about emergency outages. Permission is asked only after the user has chosen a queue or an address; the Application works fully without it. All notifications are created on the device; there is no push server.</td></tr>
+<tr><td>Background App Refresh (<code>BGAppRefreshTask</code> <code>ua.blackout.prewarning.poltava.sync</code>, background mode <code>fetch</code>)</td><td>Refreshing the schedule and the status of the saved addresses from time to time while the Application is closed. iOS decides how often; the user can turn it off in iOS Settings.</td></tr>
+<tr><td>Home-screen widgets (<code>WidgetKit</code>) and App Group <code>group.ua.blackout.prewarning.poltava</code></td><td>Sharing the saved addresses and the cached schedule between the Application and its widgets.</td></tr>
+</tbody></table>
+<p>The privacy manifest (<code>PrivacyInfo.xcprivacy</code>) of the Application and of its widget declares no tracking, no tracking domains, no collected data types, and one required-reason API: <code>UserDefaults</code> (reasons <code>CA92.1</code> and <code>1C8F.1</code>). The iPhone version does <strong>not</strong> request access to contacts, photos, camera, microphone, location, Bluetooth, health data or the advertising identifier.</p>
+<hr />
+<h2>6. Third-Party Links</h2>
+<p>The Application links to:</p>
+<ul>
+<li><strong>JSC "Poltavaoblenergo" (АТ «Полтаваобленерго»):</strong> <a href="https://www.poe.pl.ua" target="_blank" rel="noopener noreferrer">https://www.poe.pl.ua</a> and its official Facebook page <a href="https://www.facebook.com/atpoltavaoblenergo" target="_blank" rel="noopener noreferrer">https://www.facebook.com/atpoltavaoblenergo</a>, for official announcements;</li>
+<li><strong>voluntary donations</strong> (a Monobank charity jar, the "Come Back Alive" foundation <code>savelife.in.ua</code>);</li>
+<li><strong>this project on GitHub.</strong></li>
+</ul>
+<p>They open in the browser or the banking app, outside the Application. The Application takes no payments, stores no banking details and learns nothing about what the user does on those sites. Their own privacy policies apply there.</p>
+<hr />
+<h2>7. Children's Privacy</h2>
+<p>The Application is a utility for general audiences. It has no account, chat, user content or advertising, and it does not target children. We collect no data from anyone, including children under 13 (or under 16 in the European Economic Area).</p>
+<hr />
+<h2>8. Storage, Security and Deletion</h2>
+<ul>
+<li><strong>Storage:</strong> user settings and caches stay in the sandbox of the operating system on the device (section 3). We operate no databases or sync servers.</li>
+<li><strong>Security:</strong> Android and iOS sandboxing and file-system encryption protect the data; every network request uses HTTPS.</li>
+<li><strong>Deletion:</strong> the user can delete everything at any time:
+<ol>
+<li>the reset button in the Application's Settings (Android and iPhone) removes the saved addresses and settings;</li>
+<li>on Android, <strong>Settings &gt; Apps &gt; Світло в Полтаві &gt; Storage &gt; Clear data</strong>;</li>
+<li>uninstalling the Application (on iPhone, together with its widgets and App Group data). An Android backup in the user's Google Account is managed in the device's backup settings.</li>
+</ol></li>
+</ul>
+<hr />
+<h2>9. User Rights Under GDPR and Ukrainian Law</h2>
+<p>Under Chapter III of the GDPR and Article 8 of the Law of Ukraine "On Protection of Personal Data", users have rights of access, rectification, erasure and restriction of processing. Because we process no personal data on any server, these rights are exercised directly on the device (section 8). For requests to the website of JSC "Poltavaoblenergo", contact that company.</p>
+<hr />
+<h2>10. Changes</h2>
+<p>Changes to this policy are published in this file with a new "Last Updated" date; the full history is in the public repository.</p>
+<hr />
+<h2>11. Contact</h2>
+<ul>
+<li><strong>Developer:</strong> Igor Zaharov</li>
+<li><strong>GitHub Issues:</strong> <a href="https://github.com/IgorZaharov/PoltavaBlackoutPreWarning/issues" target="_blank" rel="noopener noreferrer">https://github.com/IgorZaharov/PoltavaBlackoutPreWarning/issues</a></li>
+<li><strong>Repository:</strong> <a href="https://github.com/IgorZaharov/PoltavaBlackoutPreWarning" target="_blank" rel="noopener noreferrer">https://github.com/IgorZaharov/PoltavaBlackoutPreWarning</a></li>
+</ul>
+<hr />
+<h1>Політика конфіденційності (українська версія)</h1>
+<p><strong>Дата набрання чинності:</strong> 9 листопада 2026 року<br />
+<strong>Останнє оновлення:</strong> 19 листопада 2026 року<br />
+<strong>Назва додатку:</strong> Світло в Полтаві (PoltavaBlackoutPreWarning)<br />
+<strong>Ідентифікатор пакета Android:</strong> <code>ua.blackout.prewarning.poltava</code><br />
+<strong>Ідентифікатор iPhone (Bundle ID):</strong> <code>ua.blackout.prewarning.poltava</code> (віджет <code>ua.blackout.prewarning.poltava.widget</code>)<br />
+<strong>Розробник:</strong> Ігор Захаров (Igor Zaharov)<br />
+<strong>Репозиторій проєкту:</strong> <a href="https://github.com/IgorZaharov/PoltavaBlackoutPreWarning" target="_blank" rel="noopener noreferrer">https://github.com/IgorZaharov/PoltavaBlackoutPreWarning</a></p>
+<h3>1. Загальні положення</h3>
+<p>Ця політика стосується мобільного додатку <strong>«Світло в Полтаві»</strong> для Android (<code>ua.blackout.prewarning.poltava</code>) та iPhone (<code>ua.blackout.prewarning.poltava</code>, iOS 17.0 або новіша) — безкоштовного неофіційного інструмента з відкритим кодом для жителів Полтавщини, який показує графіки погодинних відключень, аварійні відключення й планові ремонти з публічного сайту АТ «Полтаваобленерго». Додаток не створений, не схвалений і не пов'язаний з АТ «Полтаваобленерго». Політика відповідає GDPR (ЄС) 2016/679 і Закону України «Про захист персональних даних» № 2297-VI.</p>
+<h3>2. Розробник нічого не збирає</h3>
+<ul>
+<li>Сервера розробника немає; розробник не отримує, не зберігає, не продає й не передає персональних даних.</li>
+<li>Немає реєстрації, входу, реклами, аналітики, звітів про збої (Firebase, Facebook SDK тощо), рекламних ідентифікаторів (AAID, IDFA) і відстеження в інших застосунках.</li>
+<li>Геопозиція не запитується; адресу вибирають зі списків.</li>
+</ul>
+<p>Щоб дізнатися стан збереженого будинку, додаток надсилає цю адресу (разом із номером будинку) <strong>напряму з пристрою на публічний сайт обленерго</strong> — те саме, що ви вводите в пошук на самому сайті (розділ 4).</p>
+<h3>3. Дані на пристрої</h3>
+<p>На пристрої зберігаються (на Android у приватному сховищі <code>SharedPreferences</code>; на iPhone у пісочниці та контейнері App Group <code>group.ua.blackout.prewarning.poltava</code>, доступному лише додатку та його віджетам):</p>
+<ol>
+<li>до п'яти адрес або черг: філія, населений пункт, вулиця, номер будинку, черга від 1.1 до 6.2, власна назва, перемикачі сповіщень;</li>
+<li>налаштування: час завчасного попередження, звук і вібрація, інтервал оновлення, мова;</li>
+<li>кеш: графік усіх черг, аварійні відключення й ремонти для кожної адреси, відключення в її населеному пункті, уже завантажені списки будинків;</li>
+<li>довідники: перелік населених пунктів і вулиць Полтавщини та каталог «адреса → черга».</li>
+</ol>
+<p><strong>Резервні копії.</strong> На Android, якщо користувач увімкнув резервне копіювання пристрою, система Android додає налаштування й збережені адреси до резервної копії в обліковому записі Google користувача (кеш не копіюється). Цю копію робить Android для користувача; розробник її не отримує. На iPhone файли кешу в App Group не потрапляють до резервних копій iCloud і пристрою.</p>
+<h3>4. Мережеві запити</h3>
+<p>Лише через HTTPS до:</p>
+<ol>
+<li><strong>Сайту АТ «Полтаваобленерго»</strong> <code>https://www.poe.pl.ua</code> (публічні сторінки в <code>/customs/</code>, якими користується сам сайт):
+<ul>
+<li>графік усіх черг на сьогодні й завтра та діючі заходи (ГАВ, ГОП) — надсилається лише дата;</li>
+<li>список будинків вулиці — публічні коди філії, населеного пункту й вулиці;</li>
+<li>стан будинку (черга, аварійне відключення, ремонти) для кожної збереженої адреси — публічні коди населеного пункту й вулиці <strong>та номер будинку</strong>; це єдиний запит із номером будинку, і він іде лише на цей сайт;</li>
+<li>відключення у філії (картка «Ремонти й пошкодження поруч») — код філії й дата.</li>
+</ul></li>
+<li><strong>Публічного репозиторію проєкту</strong> на <code>raw.githubusercontent.com</code>: <code>donations.json</code> (посилання на пожертви), <code>poe_directory.json</code> і <code>poe_queues.json</code> (новіші довідники, не частіше ніж раз на тиждень або за кнопкою оновлення у виборі адреси).</li>
+<li><strong>Сервісів іконок сайтів</strong> <code>icons.duckduckgo.com</code>, на Android також <code>www.google.com/s2/favicons</code>, і файлів <code>/favicon.ico</code> сайтів пожертв — запит містить лише домен сайту пожертв.</li>
+</ol>
+<p>Імен, облікових даних, cookies чи ідентифікаторів пристрою не надсилається. Як і під час будь-якого запиту в інтернеті, власники серверів бачать IP-адресу; розробник її не отримує. У формі Google Play «Безпека даних» адреса вказана як «Особиста інформація → Адреса»: для роботи додатку, обробляється тимчасово, необов'язкова, не передається третім особам. Позначка App Store — «Дані не збираються».</p>
+<h3>5. Дозволи Android</h3>
+<ul>
+<li><code>android.permission.INTERNET</code> та <code>ACCESS_NETWORK_STATE</code>: запити до сайту обленерго й репозиторію та перевірка з'єднання.</li>
+<li><code>android.permission.POST_NOTIFICATIONS</code>: локальні сповіщення перед плановим відключенням і про аварійні відключення.</li>
+<li><code>SCHEDULE_EXACT_ALARM</code>: попередження у точно вибрану хвилину. На Android 12 і новіше дозвіл «Будильники й нагадування» вмикають у системних налаштуваннях; додаток підказує це й відкриває потрібний екран. Без дозволу попередження приходять, але можуть запізнюватися на кілька хвилин.</li>
+<li><code>RECEIVE_BOOT_COMPLETED</code>: відновлення запланованих попереджень після перезавантаження або зміни часу.</li>
+<li><code>VIBRATE</code> та <code>WAKE_LOCK</code>: вібрація й коректне доставлення сповіщення.</li>
+</ul>
+<h3>5А. Можливості iPhone</h3>
+<ul>
+<li><strong>Сповіщення:</strong> локальні; дозвіл запитується лише після вибору черги або адреси; push-сервера немає.</li>
+<li><strong>Фонове оновлення</strong> (<code>BGAppRefreshTask</code> <code>ua.blackout.prewarning.poltava.sync</code>, режим <code>fetch</code>): час від часу оновлює графік і стан адрес; частоту визначає iOS.</li>
+<li><strong>Віджети</strong> і App Group <code>group.ua.blackout.prewarning.poltava</code>: спільні адреси й графік.</li>
+<li>Маніфест конфіденційності: без відстеження, без зібраних типів даних; єдиний API з обов'язковою причиною — <code>UserDefaults</code> (<code>CA92.1</code>, <code>1C8F.1</code>).</li>
+</ul>
+<h3>6. Посилання</h3>
+<p>Сайт <a href="https://www.poe.pl.ua" target="_blank" rel="noopener noreferrer">poe.pl.ua</a> і <a href="https://www.facebook.com/atpoltavaoblenergo" target="_blank" rel="noopener noreferrer">сторінка Facebook</a> обленерго, пожертви (банка Monobank, фонд «Повернись живим»), проєкт на GitHub — відкриваються в браузері, поза додатком. Додаток не приймає платежів.</p>
+<h3>7. Діти</h3>
+<p>Додаток для загальної аудиторії, без облікового запису, чату й реклами; він не збирає даних ні в кого, зокрема в дітей.</p>
+<h3>8. Видалення даних</h3>
+<p>Кнопка скидання в налаштуваннях додатку (Android і iPhone), «Налаштування &gt; Додатки &gt; Світло в Полтаві &gt; Сховище &gt; Очистити дані» на Android або видалення додатку. Резервною копією Android в обліковому записі Google керують у налаштуваннях резервного копіювання пристрою.</p>
+<h3>9. Ваші права</h3>
+<p>Розробник не обробляє персональних даних на серверах, тож права на доступ, виправлення й видалення ви здійснюєте на пристрої (розділ 8). Щодо запитів до сайту АТ «Полтаваобленерго» звертайтеся до цієї компанії.</p>
+<h3>10. Контакти</h3>
+<p><a href="https://github.com/IgorZaharov/PoltavaBlackoutPreWarning/issues" target="_blank" rel="noopener noreferrer">https://github.com/IgorZaharov/PoltavaBlackoutPreWarning/issues</a></p>
     </div>
   </div>
 </body>
