@@ -958,6 +958,12 @@ function runUnitTestG_IosPort() {
     const widgetTarget = projectYml.slice(projectYml.indexOf('BlackoutWidgetExtension:'), projectYml.indexOf('ZTPreBlackoutTests:'));
     assert.ok(!widgetTarget.includes('poe_directory.json') && !widgetTarget.includes('poe_queues.json'), 'the widget extension must not bundle the POE directory or catalogue');
     assert.ok(!/- path: Resources\s*\n\s*buildPhase/.test(widgetTarget), 'the widget extension bundles single resource files, never the whole Resources folder');
+    // the weekly and daily data jobs refresh the iOS copies too, and the iOS geo-check probes POE only
+    const poeData = read('.github/workflows/poe-data.yml');
+    for (const name of ['poe_directory.json', 'poe_queues.json']) {
+      assert.ok(poeData.includes(`cp ${name} ios/Resources/${name}`) && poeData.includes(`ios/Resources/${name}`), `poe-data.yml must update ios/Resources/${name}`);
+    }
+    assert.ok(!/ztoe\.com\.ua|api-ztoe-poweron/.test(read('.github/workflows/build-ios.yml')), 'build-ios.yml must not probe ztoe or PowerOn any more');
   }
 
   // Invariants shared with Android and web.

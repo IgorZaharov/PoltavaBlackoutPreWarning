@@ -90,6 +90,7 @@ First version line of «Світло в Полтаві», built from «Світ�
 
 ### Removed (iOS milestone I2)
 - The Zhytomyr data layer of the iPhone app: `ZtoeParser.swift`, `ZtoeAddressLookup.swift`, `ZtoeStaticDirectory.swift`, `PowerOnClient.swift`, `Core/PowerOnMapper.swift`, the `Cp1251` helper, `Tests/Fixtures/ztoe_schedule_live.html`, `StreetDedupTests.swift`, the ztoe and PowerOn parts of `DataLayerTests.swift` and the PowerOn runner of `SpecVectorsTests.swift`; `spec/vectors/poweron_api.json` (no reader left); the ztoe entry of `valid-urls.json` (all four copies). `tests/unit.test.ts` checks that no Swift file uses ztoe or PowerOn and that the widget does not bundle the POE data.
+- CI (owner's OK, 2026-11-19): the iOS geo-check in `.github/workflows/build-ios.yml` probes `www.poe.pl.ua` only (the ztoe and PowerOn probes are gone); `.github/workflows/poe-data.yml` also refreshes the `ios/Resources` copies of `poe_directory.json` and `poe_queues.json`, which `tests/unit.test.ts` checks.
 
 # History inherited from «Світло в Житомирі»
 
