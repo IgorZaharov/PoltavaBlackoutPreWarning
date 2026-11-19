@@ -26,18 +26,11 @@ enum BackgroundRefresh {
     static func run() async {
         schedule()
         PoeAddressLookup.initialize()
-        let settings = SettingsRepository.shared.getSettings()
 
-        // A house without a queue may be given one by POE later (per-house status, E4). Only the fields of
-        // this check are written, through the store, so a setting the user changes meanwhile is never reverted.
-        // "Several connections" gives neither a queue nor a no-queue text and changes nothing here.
-        if let q = settings.selectedAddressQuery, settings.queue.ktIsBlank,
-           let lookup = await PoeAddressLookup.checkAddress(q),
-           !lookup.queue.ktIsBlank || lookup.statusText != nil,
-           lookup.queue != settings.queue || lookup.statusText != settings.customQueueStatusText {
-            SubscriptionSync.shared.assignPrimaryQueue(queue: lookup.queue, statusText: lookup.statusText, addressText: nil)
-        }
-
+        // The queue of every address is re-read from POE inside the refresh (per-house status, E4, written
+        // back through the subscription store), so a house that gets a queue later, or changes it, is updated
+        // without a separate check, as Android `ScheduleSyncWorker` does since P3; a second E4 request per
+        // run would only cost time and traffic in the short background window.
         if !Task.isCancelled {
             let outcome = await OutageRepository.shared.refresh(SettingsRepository.shared.getSettings(),
                                                                 widgetItemIds: await WidgetBindings.shownItemIds())

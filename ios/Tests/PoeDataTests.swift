@@ -249,6 +249,53 @@ final class PoePipelineTests: XCTestCase {
         XCTAssertEqual(over.events.first?.earlyEnd, true)
     }
 
+    /// I4: the same recorded E4 answers, on through the notification layer. «Пошкодження» from E4 is posted
+    /// once as START with POE's estimated end, the "nothing registered" answer as the early END, and an
+    /// unreachable POE posts nothing (spec/NOTIFICATIONS.md 2, Android `NotificationHelper.postEmergencyEvents`).
+    func testPoshkodzhennyaFromE4ReachesTheNotificationsOnce() async throws {
+        var fired = Set<String>()
+        func post(_ events: [EmergencyEvent], _ now: LocalDateTime) -> [LocalAlert] {
+            let batch = EmergencyBatch(addressKey: "11143|key|9", subscriptionId: "aaaa1111", addressLine: "вул. Тестова, 9",
+                                       events: events, plannedSpans: [], plannedAlertsOn: true, alertsOn: true)
+            var marked = fired
+            let out = NotificationPlanner.emergencyAlerts(batch, settings: UserSettings(), lang: "uk", now: now, sound: true,
+                                                          fired: { marked.contains($0) }, markFired: { marked.insert($0) })
+            fired = marked
+            return out
+        }
+
+        let at1030 = LocalDateTime(iso: "2026-11-16T10:30")!
+        let started = try await status("poe_result_type3_emergency_noqueue.json", at1030)
+        let first = EmergencyLedger.reconcile([], fetch: PoeClient.emergencyFetch(started, today: today), now: at1030)
+        let start = post(first.events, at1030)
+        XCTAssertEqual(start.map(\.identifier), ["emerg_start_11143|key|9_2026-11-16T08:59"])
+        XCTAssertEqual(start.first?.title, "Аварійне відключення")
+        XCTAssertEqual(start.first?.body, "Початок: 08:59. Орієнтовне відновлення: 15:59.\nвул. Тестова, 9")
+        XCTAssertNil(start.first?.fireAt, "an emergency is delivered at once")
+        XCTAssertEqual(start.first?.category, .emergency)
+        XCTAssertEqual(start.first?.subscriptionId, "aaaa1111")
+
+        // the next refresh sees the same emergency: no new event, nothing posted again
+        let at1100 = LocalDateTime(iso: "2026-11-16T11:00")!
+        let again = EmergencyLedger.reconcile(first.entries, fetch: PoeClient.emergencyFetch(started, today: today), now: at1100)
+        XCTAssertTrue(post(again.events, at1100).isEmpty)
+        XCTAssertTrue(post(first.events, at1100).isEmpty, "the fired registry stops a replayed START")
+
+        // POE unreachable: nothing
+        let down = EmergencyLedger.reconcile(again.entries, fetch: PoeClient.emergencyFetch(.unavailable("network"), today: today), now: at1100)
+        XCTAssertTrue(post(down.events, at1100).isEmpty)
+
+        // POE answers "nothing registered" before the estimated end: the early END, once
+        let at1530 = LocalDateTime(iso: "2026-11-16T15:30")!
+        let ended = try await status("poe_result_type0_none.json", at1530)
+        let over = EmergencyLedger.reconcile(down.entries, fetch: PoeClient.emergencyFetch(ended, today: today), now: at1530)
+        let end = post(over.events, at1530)
+        XCTAssertEqual(end.map(\.identifier), ["emerg_end_11143|key|9_2026-11-16T08:59"])
+        XCTAssertEqual(end.first?.title, "Аварійне відключення скасовано")
+        XCTAssertEqual(end.first?.body, "Відключення зникло зі списку до 15:59: світло, імовірно, вже є.\nвул. Тестова, 9")
+        XCTAssertTrue(post(over.events, at1530).isEmpty)
+    }
+
     func testScheduleMirrorIsNeverAnEmergency() async throws {
         let at1800 = LocalDateTime(iso: "2026-11-16T18:06")!
         let fetch = try await status("poe_result_type4_schedule_mirror.json", at1800)
