@@ -910,10 +910,10 @@ function runUnitTestG_IosPort() {
   }
 
   // poe_directory.json (POE address directory snapshot, docs/POLTAVA_PORT_PLAN.md section 4.4): the root
-  // file is canonical; public/ and the Android assets hold byte-identical copies (iOS from milestone I2).
+  // file is canonical; public/, the Android assets and the iOS app resources hold byte-identical copies.
   {
     const canonical = read('poe_directory.json');
-    for (const dir of ['public', 'android/app/src/main/assets']) {
+    for (const dir of ['public', 'android/app/src/main/assets', 'ios/Resources']) {
       assert.equal(read(`${dir}/poe_directory.json`), canonical, `${dir}/poe_directory.json must be identical to /poe_directory.json`);
     }
     const dir = JSON.parse(canonical);
@@ -922,16 +922,42 @@ function runUnitTestG_IosPort() {
   }
 
   // poe_queues.json (address and company -> queue from POE's hourly-schedule PDF, spec/POE_API.md 8.11):
-  // the root file is canonical; public/ and the Android assets hold byte-identical copies (iOS from I2).
+  // the root file is canonical; public/, the Android assets and the iOS app resources hold byte-identical copies.
   {
     const canonical = read('poe_queues.json');
-    for (const dir of ['public', 'android/app/src/main/assets']) {
+    for (const dir of ['public', 'android/app/src/main/assets', 'ios/Resources']) {
       assert.equal(read(`${dir}/poe_queues.json`), canonical, `${dir}/poe_queues.json must be identical to /poe_queues.json`);
     }
     const cat = JSON.parse(canonical);
     assert.ok(cat.entries.length > 5000, 'poe_queues.json must list the address entries of the whole oblast');
     assert.ok(cat.companies.length > 100, 'poe_queues.json must list the companies');
     assert.ok(typeof cat.builtAt === 'string' && cat.builtAt.length > 0, 'poe_queues.json must carry builtAt');
+  }
+
+  // The inherited Zhytomyr data layer is gone from iOS too (milestone I2): no ztoe or PowerOn client,
+  // parser, directory or vectors, and the widget target does not bundle the 3 MB of POE data.
+  for (const gone of ['ios/Shared/Data/ZtoeParser.swift', 'ios/Shared/Data/ZtoeAddressLookup.swift', 'ios/Shared/Data/ZtoeStaticDirectory.swift',
+    'ios/Shared/Data/PowerOnClient.swift', 'ios/Shared/Core/PowerOnMapper.swift', 'spec/vectors/poweron_api.json']) {
+    assert.ok(!fs.existsSync(path.join(ROOT_DIR, gone)), `${gone} must be removed (I2)`);
+  }
+  {
+    const swiftFiles: string[] = [];
+    const walk = (dir: string) => {
+      for (const e of fs.readdirSync(path.join(ROOT_DIR, dir), { withFileTypes: true })) {
+        const rel = `${dir}/${e.name}`;
+        if (e.isDirectory()) walk(rel);
+        else if (e.name.endsWith('.swift')) swiftFiles.push(rel);
+      }
+    };
+    walk('ios');
+    for (const f of swiftFiles) {
+      const code = read(f);
+      assert.ok(!/ztoe\.com\.ua\/unhooking|api-ztoe-poweron|ZtoeAddressLookup|ZtoeParser|PowerOnClient|PowerOnMapper/.test(code), `${f} must not use the Zhytomyr data layer`);
+    }
+    const projectYml = read('ios/project.yml');
+    const widgetTarget = projectYml.slice(projectYml.indexOf('BlackoutWidgetExtension:'), projectYml.indexOf('ZTPreBlackoutTests:'));
+    assert.ok(!widgetTarget.includes('poe_directory.json') && !widgetTarget.includes('poe_queues.json'), 'the widget extension must not bundle the POE directory or catalogue');
+    assert.ok(!/- path: Resources\s*\n\s*buildPhase/.test(widgetTarget), 'the widget extension bundles single resource files, never the whole Resources folder');
   }
 
   // Invariants shared with Android and web.

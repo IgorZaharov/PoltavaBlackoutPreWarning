@@ -1,6 +1,6 @@
 import SwiftUI
 
-// Views of the site and PowerOn status (Android ui/components/SiteStatusIndicator.kt). The rules that
+// Views of the site and emergency source status (Android ui/components/SiteStatusIndicator.kt). The rules that
 // decide what is shown live in ios/Shared/Design/SiteStatusModel.swift.
 
 /// One status pill: tinted glass, icon and text in the same family. Text wraps instead of clipping.
@@ -19,7 +19,7 @@ struct StatusChipView: View {
     }
 }
 
-/// Chips of the "Last updated" card, plus the PowerOn line when that source is down.
+/// Chips of the "Last updated" card, plus the emergency source line when that source is down.
 struct SiteStatusChipRow: View {
     let snapshot: OutageSnapshot
     let lang: String
@@ -47,7 +47,7 @@ struct SiteStatusChipRow: View {
     }
 }
 
-/// Card with the text ztoe publishes in place of the schedule, quoted as is.
+/// Card with the text the site publishes in place of the schedule, quoted as is.
 struct SiteNoticeCard: View {
     let text: String
     let lang: String

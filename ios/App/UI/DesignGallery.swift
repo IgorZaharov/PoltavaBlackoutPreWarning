@@ -186,7 +186,7 @@ struct DesignGallery: View {
             }
             ZtGlassCard {
                 VStack(alignment: .leading, spacing: 10) {
-                    caption("14.11 · table not published · PowerOn emergency 09:00-11:00 on grey")
+                    caption("14.11 · table not published · POE emergency 09:00-11:00 on grey")
                     TimelineBar(
                         slots: Self.slots(Self.today.plusDays(1), only: [.EMERGENCY, .REPAIR]),
                         showNeedle: false, lang: lang, unclearBase: true

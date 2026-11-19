@@ -235,7 +235,7 @@ struct SettingsScreen: View {
 
     private var siteCard: some View {
         let checking = verifying || !urlChecked
-        let ok = ZtoeParser.isValidUrl(settings.cityUrl) && urlStatus == .SUCCESS
+        let ok = PoeScheduleSync.isValidUrl(settings.cityUrl) && urlStatus == .SUCCESS
         let bad = !checking && !ok
         return ZtGlassCard(padding: 18) {
             VStack(alignment: .leading, spacing: 8) {
@@ -274,14 +274,14 @@ struct SettingsScreen: View {
     private func verifyUrl() async {
         guard isVisible else { return }
         let url = settings.cityUrl
-        if !ZtoeParser.isValidUrl(url) {
+        if !PoeScheduleSync.isValidUrl(url) {
             urlStatus = .NO_QUEUES_FOUND
             urlChecked = true
             return
         }
         verifying = true
-        let queue = settings.queue.ktIsBlank ? "1.1" : settings.queue
-        let res = await ZtoeParser.fetchFullSchedule(url: url, queue: queue)
+        // today's POE table of all 12 queues, stored like a refresh (Android SettingsScreen.kt)
+        let res = await PoeScheduleSync.refresh()
         if Task.isCancelled { return }
         urlStatus = res.status
         verifying = false

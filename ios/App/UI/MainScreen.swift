@@ -3,7 +3,7 @@ import UserNotifications
 
 /// Main page (port of Android ui/screens/MainScreen.kt 1.4.0): header with the notification bell,
 /// banners, address switcher, hero countdown, Today/Tomorrow, the drum with the day's outages, last
-/// update and site chips, the Facebook and ztoe links. With no queue and no address the page is dimmed
+/// update and site chips, the Facebook and POE links. With no queue and no address the page is dimmed
 /// and only "Select queue" and the language switch work (first launch).
 struct MainScreen: View {
     @ObservedObject var model: AppModel
@@ -24,7 +24,7 @@ struct MainScreen: View {
         let today = snapshot.today
         let activeDate = isTomorrow ? today.plusDays(1) : today
         let activeView = snapshot.dayView(activeDate)
-        // the ztoe table of the shown day is not known: the drum is grey, known emergency/repair outages are drawn on top
+        // the POE table of the shown day is not known: the drum is grey, known emergency/repair outages are drawn on top
         let isTodayUnclear = !hasCustomNoQueueStatus && !queue.ktIsBlank && !snapshot.plannedKnown
         let isTomorrowUnclear = !hasCustomNoQueueStatus && !queue.ktIsBlank && !snapshot.tomorrowPublished
         let activeUnclear = isTomorrow ? isTomorrowUnclear : isTodayUnclear
@@ -612,7 +612,7 @@ private struct FirstLaunchOverlay: View {
 
             LanguageSwitch(selected: model.settings.language, lang: lang) { model.setLanguage($0) }
 
-            // not an official service, data from ztoe.com.ua: shown here once and in About (App Review item R2)
+            // not an official service, data from poe.pl.ua: shown here once and in About (App Review item R2)
             Text(verbatim: AppStrings.disclaimerText(lang))
                 .ztText(ZtType.caption)
                 .foregroundStyle(ZtColors.textSecondary)

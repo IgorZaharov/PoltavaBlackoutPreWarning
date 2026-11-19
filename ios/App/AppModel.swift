@@ -104,7 +104,7 @@ final class AppModel: ObservableObject {
         return settings.selectedAddress
     }
 
-    /// "Last updated" is the last successful ztoe fetch; "next" is one refresh interval after the last check.
+    /// "Last updated" is the last successful POE table fetch; "next" is one refresh interval after the last check.
     var lastUpdated: String {
         let ms = snapshot.site?.lastSuccessMs ?? (scheduleRepo.lastSyncMs() > 0 ? scheduleRepo.lastSyncMs() : nil)
         return ms.map(SiteStatusModel.formatHhmm) ?? "--:--"
@@ -154,9 +154,7 @@ final class AppModel: ObservableObject {
         defer { isRefreshing = false }
         let current = settingsRepo.getSettings()
         if resolveAddress, let q = current.selectedAddressQuery, !q.streetId.ktIsBlank, !q.house.ktIsBlank {
-            if let lookup = await ZtoeAddressLookup.checkAddressOnZtoeWebsite(
-                remId: q.remId, settlementId: q.settlementId, streetId: q.streetId, house: q.house, siteUrl: current.cityUrl
-            ) {
+            if let lookup = await PoeAddressLookup.checkAddress(q) {
                 let latest = settingsRepo.getSettings()
                 let status = lookup.statusText ?? ""
                 let nextQueue = !lookup.queue.ktIsBlank ? lookup.queue : (!status.ktIsBlank ? "" : latest.queue)
@@ -198,7 +196,7 @@ final class AppModel: ObservableObject {
 
     private func shownChanged() {
         recompute()
-        // another address is shown: poll its PowerOn too (its switches gate notifications only)
+        // another address is shown: poll its per-house status too (its switches gate notifications only)
         if hasCompletedInitialScheduleFetch && otherShownItem != nil {
             Task { await runRefresh(force: false, resolveAddress: false) }
         }
@@ -221,14 +219,11 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// Loads the address index from the disk cache and the site after the first frame, so the "?"
-    /// lookup opens without delay.
+    /// Parses the bundled POE directory after the first frame, off the main thread, so the "?" lookup
+    /// opens without delay (houses are always asked live).
     func prefetchAddressIndex() async {
         try? await Task.sleep(for: .milliseconds(250))
-        let q = settings.selectedAddressQuery
-        await ZtoeAddressLookup.prefetchAddressIndexInBackground(
-            siteUrl: settings.cityUrl, savedRemId: q?.remId, savedSettlementId: q?.settlementId, savedStreetId: q?.streetId
-        )
+        await Task.detached(priority: .utility) { PoeAddressLookup.initialize() }.value
     }
 
     /// Re-plans the pre-warnings and redraws the widgets from the stored state (Android

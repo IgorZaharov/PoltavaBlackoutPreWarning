@@ -25,15 +25,15 @@ enum BackgroundRefresh {
     /// the warnings are planned from the latest stored state anyway.
     static func run() async {
         schedule()
-        ZtoeAddressLookup.initDiskCache()
+        PoeAddressLookup.initialize()
         let settings = SettingsRepository.shared.getSettings()
 
-        // A house without a queue may be given one by the site later. Only the fields of this check are
-        // written, through the store, so a setting the user changes meanwhile is never reverted.
+        // A house without a queue may be given one by POE later (per-house status, E4). Only the fields of
+        // this check are written, through the store, so a setting the user changes meanwhile is never reverted.
+        // "Several connections" gives neither a queue nor a no-queue text and changes nothing here.
         if let q = settings.selectedAddressQuery, settings.queue.ktIsBlank,
-           let lookup = await ZtoeAddressLookup.checkAddressOnZtoeWebsite(
-               remId: q.remId, settlementId: q.settlementId, streetId: q.streetId, house: q.house, siteUrl: settings.cityUrl
-           ),
+           let lookup = await PoeAddressLookup.checkAddress(q),
+           !lookup.queue.ktIsBlank || lookup.statusText != nil,
            lookup.queue != settings.queue || lookup.statusText != settings.customQueueStatusText {
             SubscriptionSync.shared.assignPrimaryQueue(queue: lookup.queue, statusText: lookup.statusText, addressText: nil)
         }

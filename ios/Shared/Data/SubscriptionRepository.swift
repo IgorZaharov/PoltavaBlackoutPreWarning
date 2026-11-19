@@ -54,7 +54,7 @@ public final class SubscriptionRepository {
     /// Same lookup as `OutageRepository.addressKey`, so the migrated address key matches 1.4.0.
     public static func resolveStreetName(_ streetId: String?) -> String? {
         guard let streetId, !streetId.ktIsBlank else { return nil }
-        return ZtoeAddressLookup.findStreetById(streetId)?.nameUk
+        return PoeAddressLookup.findStreetById(streetId)?.nameUk
     }
 
     // MARK: - JSON text <-> store
@@ -193,13 +193,19 @@ public final class SubscriptionSync {
         return change { Subscriptions.add($0, item) }
     }
 
-    /// A background ZTOE lookup for the primary address found its queue (or "no queue").
+    /// The per-house status (E4) of the primary address gave its queue (or "no queue").
     @discardableResult
     public func assignPrimaryQueue(queue: String?, statusText: String?, addressText: String?) -> StoreResult {
         change { s in
             guard let id = s.primaryId else { return .error(code: Subscriptions.ERR_NOT_FOUND, existingId: nil) }
             return Subscriptions.setQueueInfo(s, id: id, queue: queue, statusText: statusText, addressText: addressText)
         }
+    }
+
+    /// Same for any other address item (spec/POE_API.md 8.5: the queue is re-read on every refresh).
+    @discardableResult
+    public func assignItemQueue(id: String, queue: String?, statusText: String?) -> StoreResult {
+        change { Subscriptions.setQueueInfo($0, id: id, queue: queue, statusText: statusText, addressText: nil) }
     }
 
     public func mirror() {

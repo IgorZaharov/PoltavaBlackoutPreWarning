@@ -8,7 +8,8 @@ struct ZTPreBlackoutApp: App {
 
     init() {
         NetworkProbe.start()
-        ZtoeAddressLookup.initDiskCache()
+        // the bundled POE directory (about 1 MB of JSON) is parsed off the main thread
+        Task.detached(priority: .utility) { PoeAddressLookup.initialize() }
         UNUserNotificationCenter.current().delegate = ForegroundNotificationDelegate.shared
         AppModel.applyLaunchSeed()
         // BackgroundRefresh.schedule() runs once the scene is active: iOS asserts on a request submitted
