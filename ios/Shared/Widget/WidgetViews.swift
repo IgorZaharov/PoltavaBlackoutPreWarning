@@ -36,8 +36,13 @@ public struct WidgetDrum: View {
         self.look = look
     }
 
-    /// Opacity of one cell in the tinted look: off = solid, on = faint (emergency adds stripes on top).
-    public static func tintedAlpha(_ cell: DrumCell) -> Double { cell.planned ? 1 : 0.28 }
+    /// Opacity of one cell in the tinted look (spec/UI_DRUM.md, tinted widgets): off = solid, POE's switching
+    /// half-hour (power may still be off) between, on = faint; an emergency adds stripes on top.
+    public static func tintedAlpha(_ cell: DrumCell) -> Double {
+        if cell.planned { return 1 }
+        if cell.switching { return 0.6 }
+        return 0.28
+    }
 
     public var body: some View {
         VStack(spacing: 2) {
@@ -93,7 +98,7 @@ public struct WidgetDrum: View {
         .accessibilityLabel(Text(verbatim: summary))
     }
 
-    /// One-tint cells: solid when off, faint when on, emergency bottom halves striped solid.
+    /// One-tint cells: solid when off, half when switching, faint when on, emergency bottom halves striped solid.
     static func drawTinted(_ gc: GraphicsContext, size: CGSize, cells: [DrumCell]) {
         let w = size.width
         let h = size.height
