@@ -158,6 +158,12 @@ struct SettingsScreen: View {
             .padding(.vertical, 12)
             .launchScroll(proxy, active: isVisible)
             .scrollsToTop(proxy, page: 1, request: model.scrollTop)
+            // the tour's RENAME and ALERTS point at the first address card: scroll it into view (spec/ONBOARDING.md)
+            .task(id: "\(model.tourActive && model.tourReachedRename)|\(model.tourRenameDone)|\(isVisible)") {
+                guard isVisible, model.tourActive, !model.subscriptions.items.isEmpty else { return }
+                try? await Task.sleep(for: .milliseconds(400))
+                withAnimation { proxy.scrollTo("tour-first-address", anchor: .center) }
+            }
           }
         }
         .scrollDismissesKeyboard(.interactively)
@@ -190,12 +196,18 @@ struct SettingsScreen: View {
                 siteUrl: settings.cityUrl,
                 lang: lang,
                 saved: settings.selectedAddressQuery,
+                tourActive: model.tourActive,
+                onTourSkip: { model.endTour() },
                 onDismiss: { showLookup = false },
                 onApply: { queue, status, label, query in
                     model.addAddress(queue: queue, statusText: status, addressLabel: label, query: query)
                     showLookup = false
                 },
-                onBanner: { model.showBanner($0) }
+                onBanner: { model.showBanner($0) },
+                onAddCompany: { queue, label in
+                    model.addCompany(queue: queue, label: label)
+                    showLookup = false
+                }
             )
         }
         .alert(Text(verbatim: AppStrings.removeConfirmTitle(lang)), isPresented: Binding(get: { removeCandidate != nil }, set: { if !$0 { removeCandidate = nil } }), presenting: removeCandidate) { item in
@@ -204,6 +216,8 @@ struct SettingsScreen: View {
         } message: { item in
             Text(verbatim: AppStrings.removeConfirmBody(lang, Subscriptions.displayLabel(item)))
         }
+        // closing the rename dialog during the tour's RENAME step goes on to ALERTS (spec/ONBOARDING.md)
+        .onChange(of: renameCandidate == nil) { _, closed in if closed { model.tourRenameDialogClosed() } }
         .alert(Text(verbatim: AppStrings.renameAddress(lang)), isPresented: Binding(get: { renameCandidate != nil }, set: { if !$0 { renameCandidate = nil } }), presenting: renameCandidate) { item in
             TextField(text: Binding(get: { renameText }, set: { renameText = String($0.prefix(Subscriptions.MAX_LABEL_LENGTH)) })) {
                 Text(verbatim: Subscriptions.defaultLabel(item))
@@ -392,8 +406,10 @@ private struct MyAddressesCard: View {
                             onRename: { onRename(item) },
                             onMakePrimary: { model.makePrimary(id) },
                             onSetPlanned: { model.setPlanned(id, $0) },
-                            onSetEmergency: { model.setEmergency(id, $0) }
+                            onSetEmergency: { model.setEmergency(id, $0) },
+                            tourTargets: index == 0
                         )
+                        .id(index == 0 ? "tour-first-address" : "address-\(id)")
                         .background(GeometryReader { g in Color.clear.preference(key: BlockHeights.self, value: [id: g.size.height]) })
                         .scaleEffect(dragging ? 1.02 : 1)
                         .offset(y: dragging ? dragOffset : 0)
@@ -489,6 +505,8 @@ private struct SubscriptionBlock<G: Gesture>: View {
     let onMakePrimary: () -> Void
     let onSetPlanned: (Bool) -> Void
     let onSetEmergency: (Bool) -> Void
+    /// The first card carries the tour's RENAME and ALERTS targets (spec/ONBOARDING.md).
+    var tourTargets = false
 
     var body: some View {
         let label = Subscriptions.displayLabel(item)
@@ -520,6 +538,7 @@ private struct SubscriptionBlock<G: Gesture>: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 IconTile(icon: "pencil", description: "\(AppStrings.renameAddress(lang)): \(label)", action: onRename)
+                    .coachTarget(tourTargets ? "rename" : "rename-\(item.id)")
                 IconTile(icon: "trash", description: "\(AppStrings.removeAddress(lang)): \(label)", danger: true, action: onRemove)
             }
             Text(verbatim: label).ztText(ZtType.subhead).foregroundStyle(Color.white)
@@ -529,9 +548,11 @@ private struct SubscriptionBlock<G: Gesture>: View {
             }
             SwitchRow(icon: "bell.fill", title: AppStrings.plannedShort(lang), hint: AppStrings.plannedDesc(lang, advanceMinutes),
                       isOn: master && item.plannedAlerts, enabled: master && item.queue != nil, onChange: onSetPlanned)
+                .coachTarget(tourTargets ? "alert-planned" : "alert-planned-\(item.id)")
             SwitchRow(icon: "exclamationmark.triangle.fill", iconTint: ZtColors.accent, title: AppStrings.emergencyShort(lang),
                       hint: item.address != nil ? AppStrings.emergencyDesc(lang) : AppStrings.emergencyNeedsAddress(lang),
                       isOn: master && item.emergencyAlerts && item.address != nil, enabled: master && item.address != nil, onChange: onSetEmergency)
+                .coachTarget(tourTargets ? "alert-emergency" : "alert-emergency-\(item.id)")
             if !isPrimary {
                 ActionButton(text: AppStrings.makePrimary(lang), icon: "star", action: onMakePrimary)
             }

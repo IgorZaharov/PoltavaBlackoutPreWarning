@@ -8,6 +8,17 @@ private struct LevelState: Equatable {
     var retry = 0
 }
 
+/// One company of the search by workplace: its queues and the text the search matches.
+private struct CompanyChoice: Hashable {
+    let id: String
+    let name: String
+    let label: String
+    let town: String?
+    let queues: [String]
+    let search: String
+    let context: String
+}
+
 /// Full-screen queue help and address lookup (the "?" button; port of Android SettingsScreen.kt
 /// `AddressLookupDialog`) on Полтаваобленерго data (`PoeAddressLookup`). The cascade starts from the
 /// saved address, or from Полтава (Полтавська об'єднана філія) on a first launch; choosing another branch
@@ -17,9 +28,15 @@ struct AddressLookupSheet: View {
     let siteUrl: String
     let lang: String
     let saved: SelectedAddressQuery?
+    /// First-run tour (spec/ONBOARDING.md): this cover draws its own PICK and APPLY steps.
+    let tourActive: Bool
+    let onTourSkip: () -> Void
     let onDismiss: () -> Void
     let onApply: (_ queue: String, _ statusText: String?, _ addressLabel: String, _ query: SelectedAddressQuery) -> Void
     let onBanner: (String) -> Void
+    /// A workplace of the company search, or a place without streets or houses: its queue as a queue-only
+    /// entry named after it (spec/POE_API.md 8.11).
+    let onAddCompany: (_ queue: String, _ label: String) -> Void
 
     @State private var remId: String
     @State private var settlementId: String
@@ -38,6 +55,25 @@ struct AddressLookupSheet: View {
     @State private var checking = false
     @State private var checkFailed = false
     @State private var lookup: PoeHouseLookupResult?
+    /// The queue the user picks when POE names none ("several connections", spec/POE_API.md 8.11).
+    @State private var chosenQueue: String?
+    /// Company search (hourly-schedule catalogue): one entry per company name and town with all its queues.
+    @State private var companies: [CompanyChoice] = []
+    @State private var selectedCompany: String?
+    @State private var companyQueue: String?
+    @State private var catalogueReady = false
+    /// POE answered with no houses for the chosen street (not a failure): the street is taken as a whole.
+    @State private var housesAnswered = false
+    /// Bumped after a scoped refresh so every list reloads.
+    @State private var directoryVersion = 0
+    /// "settlementId|directoryVersion" of the street list on screen: "no streets" only for the chosen one.
+    @State private var streetsFor = ""
+    /// Which "my address is missing" refresh runs.
+    @State private var refreshing: String?
+    @State private var placeHints: [QueueCatalogue.Hint] = []
+    @State private var placeQueue: String?
+    @State private var coachRects: [String: CGRect] = [:]
+    @State private var sheetHeight: CGFloat = 800
 
     /// The POE page named in step 1 of the queue help (AppStrings.queueHelpSteps), made a link there.
     private static let POE_SEARCH_URL = "https://www.poe.pl.ua/disconnection/poshuk-vidkliuchennia-za-osobovym-rakhunkom/"
@@ -47,16 +83,21 @@ struct AddressLookupSheet: View {
 
     init(
         siteUrl: String, lang: String, saved: SelectedAddressQuery?,
+        tourActive: Bool = false, onTourSkip: @escaping () -> Void = {},
         onDismiss: @escaping () -> Void,
         onApply: @escaping (String, String?, String, SelectedAddressQuery) -> Void,
-        onBanner: @escaping (String) -> Void
+        onBanner: @escaping (String) -> Void,
+        onAddCompany: @escaping (String, String) -> Void = { _, _ in }
     ) {
         self.siteUrl = siteUrl
         self.lang = lang
         self.saved = saved
+        self.tourActive = tourActive
+        self.onTourSkip = onTourSkip
         self.onDismiss = onDismiss
         self.onApply = onApply
         self.onBanner = onBanner
+        self.onAddCompany = onAddCompany
         let rem = saved.map { $0.remId.ktIsBlank ? Self.DEFAULT_BRANCH : $0.remId } ?? Self.DEFAULT_BRANCH
         let settlement = saved.map { $0.settlementId.ktIsBlank ? Self.DEFAULT_SETTLEMENT : $0.settlementId } ?? Self.DEFAULT_SETTLEMENT
         let street = saved?.streetId ?? ""
@@ -107,6 +148,48 @@ struct AddressLookupSheet: View {
         return nil
     }
 
+    /// Oblast-wide search (plan D4): the branch's settlements first, then every other one with its branch named.
+    private var settlementChoices: [SettlementChoice] { PoeAddressLookup.settlementChoices(remId, lang: lang) }
+
+    /// A settlement whose directory has no streets, or a street POE lists no houses for: the lower picker is
+    /// disabled and the place is added as a queue-only entry (spec/POE_API.md 8.11).
+    private var noStreets: Bool {
+        !settlementId.ktIsBlank && !streetsState.loading && streetsFor == "\(settlementId)|\(directoryVersion)" && streets.isEmpty
+    }
+    private var noHouses: Bool { !streetId.ktIsBlank && !housesState.loading && housesAnswered && houses.isEmpty }
+    private var placeMode: String? { noStreets ? "settlement" : noHouses ? "street" : nil }
+    private var placeLabel: String {
+        [currentSettlement?.nameUk, placeMode == "street" ? currentStreet?.nameUk : nil]
+            .compactMap { $0 }.filter { !$0.ktIsBlank }.joined(separator: ", ")
+    }
+
+    /// A result card is on screen: a house, or a place without streets or houses.
+    private var resultShown: Bool { placeMode != nil || (!house.ktIsBlank && matchedRecord != nil) }
+
+    /// PICK (settlement, its hint, street and house lit, the next field ringed) or APPLY (the result card, its
+    /// button ringed). PICK and APPLY wait for the address, so a tap outside does nothing here.
+    @ViewBuilder
+    private var tourOverlay: some View {
+        let step = OnboardingTour.step(TourInput(
+            active: tourActive, lookupOpen: true, resultShown: resultShown, page: .settings,
+            hasAddress: false, reachedRename: false, renameDone: false
+        ))
+        if step == .pick {
+            let block = ["settlement", "settlement-hint", "street", "house"]
+            let ring = currentStreet != nil ? "house" : (!settlementId.ktIsBlank ? "street" : "settlement")
+            CoachOverlay(rects: coachRects, holes: [block],
+                         tips: [CoachTip(anchor: block, text: AppStrings.tourPick(lang), ring: ring, skip: true)],
+                         lang: lang, onSkip: onTourSkip)
+        } else if step == .apply {
+            // outside the result card unless the card fills most of the screen; the button is ringed
+            let card = coachRects["result"]
+            let anchor = (card.map { $0.height < sheetHeight * 0.55 } ?? false) ? "result" : "apply"
+            CoachOverlay(rects: coachRects, holes: [["result"]],
+                         tips: [CoachTip(anchor: [anchor], text: AppStrings.tourApply(lang), ring: "apply", skip: true)],
+                         lang: lang, onSkip: onTourSkip)
+        }
+    }
+
     private func clearBelowRem() {
         settlementId = ""
         streetId = ""
@@ -126,10 +209,13 @@ struct AddressLookupSheet: View {
     // MARK: - Body
 
     var body: some View {
+      ScrollViewReader { proxy in
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 header
                 searchCard
+                if !companies.isEmpty { companyCard }
+                missingCard
                 Text(verbatim: AppStrings.queueHelpManualSearchTitle(lang).uppercased())
                     .ztText(ZtType.label.weight(.heavy).tracking(0.05))
                     .foregroundStyle(Color.white)
@@ -151,12 +237,26 @@ struct AddressLookupSheet: View {
             .padding(.vertical, 16)
         }
         .scrollDismissesKeyboard(.interactively)
+        .onPreferenceChange(CoachRectsKey.self) { coachRects = $0 }
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { sheetHeight = $0 }
+        .overlay { tourOverlay }
+        // the tour scrolls the control its tip points at into view: the fields (PICK), the button (APPLY)
+        .task(id: "\(tourActive)|\(resultShown)") {
+            guard tourActive else { return }
+            try? await Task.sleep(for: .milliseconds(400))
+            withAnimation { proxy.scrollTo(resultShown ? "tour-apply" : "tour-pick", anchor: .center) }
+        }
+      }
         .background(ZtColors.cardSolid.ignoresSafeArea())
         .preferredColorScheme(.dark)
-        // settlements of the branch (local; a retry asks POE): never picks one by itself
-        .task(id: "\(remId)|\(settlementsState.retry)") { await loadSettlements() }
-        // streets of the settlement (local; a retry asks POE)
-        .task(id: "\(remId)|\(settlementId)|\(streetsState.retry)") { await loadStreets() }
+        // the hourly-schedule catalogue (about 2 MB) for the company search, read off the main thread
+        .task { await loadCompanies() }
+        // settlements of the branch (bundled directory): never picks one by itself
+        .task(id: "\(remId)|\(settlementsState.retry)|\(directoryVersion)") { await loadSettlements() }
+        // streets of the settlement (bundled directory, spelling variants merged)
+        .task(id: "\(remId)|\(settlementId)|\(streetsState.retry)|\(directoryVersion)") { await loadStreets() }
+        // the catalogue's queues of a place without streets or houses
+        .task(id: "\(placeMode ?? "-")|\(remId)|\(settlementId)|\(streetId)|\(catalogueReady)|\(directoryVersion)") { loadPlaceHints() }
         // houses of the street, live from POE
         .task(id: "\(remId)|\(settlementId)|\(streetId)|\(housesState.retry)") { await loadHouses() }
         // asks POE for the queue when street and house are chosen
@@ -216,7 +316,7 @@ struct AddressLookupSheet: View {
                 label: AppStrings.addrCityLabel(lang),
                 value: currentSettlement.map(\.nameUk),
                 placeholder: AppStrings.addrCityPlaceholder(lang),
-                items: settlements.map { PickerItem(id: $0.id, label: $0.nameUk) },
+                items: settlementChoices.map { PickerItem(id: $0.option.id, label: $0.label) },
                 selectedId: settlementId.ktIsBlank ? nil : settlementId,
                 lang: lang,
                 loading: settlementsState.loading,
@@ -224,10 +324,22 @@ struct AddressLookupSheet: View {
                 onRetry: { settlementsState.retry += 1 }
             ) { item in
                 if item.id != settlementId {
+                    // a settlement of another branch fills the branch in (most users do not know their дільниця)
+                    if let choice = settlementChoices.first(where: { $0.option.id == item.id }), !choice.inBranch,
+                       let branch = choice.option.branchIds.first {
+                        remId = branch
+                    }
                     settlementId = item.id
                     clearBelowSettlement()
                 }
             }
+            .coachTarget("settlement")
+            .id("tour-pick")
+            Text(verbatim: AppStrings.addrCityAnyBranchHint(lang))
+                .ztText(ZtType.caption)
+                .foregroundStyle(ZtColors.textTertiary)
+                .padding(.leading, 4)
+                .coachTarget("settlement-hint")
 
             SearchablePickerField(
                 label: AppStrings.addrStreetLabel(lang),
@@ -236,11 +348,11 @@ struct AddressLookupSheet: View {
                 items: streets.map { PickerItem(id: $0.id, label: $0.nameUk) },
                 selectedId: streetId.ktIsBlank ? nil : streetId,
                 lang: lang,
-                enabled: !settlementId.ktIsBlank,
+                enabled: !settlementId.ktIsBlank && !noStreets,
                 loading: streetsState.loading,
-                loadFailed: streetsState.failed && !settlementId.ktIsBlank,
+                loadFailed: streetsState.failed && !settlementId.ktIsBlank && !noStreets,
                 onRetry: { streetsState.retry += 1 },
-                disabledHint: AppStrings.pickerChooseFirst(lang),
+                disabledHint: noStreets ? AppStrings.noStreetsHint(lang) : AppStrings.pickerChooseFirst(lang),
                 // CI screenshots only: `-ZTPicker street` opens the street list (ios/scripts/gallery_screenshots.sh)
                 autoOpen: UserDefaults.standard.string(forKey: "ZTPicker") == "street"
             ) { item in
@@ -248,9 +360,11 @@ struct AddressLookupSheet: View {
                     streetId = item.id
                     house = ""
                     houses = PoeAddressLookup.getHousesForStreet(item.id)
+                    housesAnswered = false
                     lookup = nil
                 }
             }
+            .coachTarget("street")
 
             SearchablePickerField(
                 label: AppStrings.addrHouseLabel(lang),
@@ -259,18 +373,21 @@ struct AddressLookupSheet: View {
                 items: houses.map { PickerItem(id: $0.house, label: $0.house) },
                 selectedId: house.ktIsBlank ? nil : house,
                 lang: lang,
-                enabled: currentStreet != nil,
+                enabled: currentStreet != nil && !noHouses && !noStreets,
                 loading: housesState.loading,
                 loadFailed: housesState.failed && currentStreet != nil,
                 onRetry: { housesState.retry += 1 },
                 kind: .HOUSE,
-                disabledHint: AppStrings.pickerChooseFirst(lang)
+                disabledHint: noHouses ? AppStrings.noHousesHint(lang) : AppStrings.pickerChooseFirst(lang)
             ) { item in
                 house = item.id
                 lookup = nil
             }
+            .coachTarget("house")
 
-            if !house.ktIsBlank, let record = matchedRecord {
+            if let mode = placeMode {
+                placeCard(mode)
+            } else if !house.ktIsBlank, let record = matchedRecord {
                 resultCard(record)
             }
         }
@@ -283,7 +400,8 @@ struct AddressLookupSheet: View {
 
     private func resultCard(_ record: PoeHouseLookupResult) -> some View {
         // while the site answers, an address without a known queue cannot be confirmed yet
-        let canApply = !(checking && record.queue.ktIsBlank)
+        let several = record.severalConnections && record.queue.ktIsBlank
+        let canApply = !(checking && record.queue.ktIsBlank) && (!several || chosenQueue != nil)
         return VStack(alignment: .leading, spacing: 10) {
             if !selectedAddressStr.ktIsBlank {
                 Text(verbatim: selectedAddressStr).ztText(ZtType.label).foregroundStyle(UiColors.textSecondaryHi)
@@ -317,10 +435,18 @@ struct AddressLookupSheet: View {
                             .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color(argb: 0x33FFFFFF), lineWidth: 2))
                     }
             }
+            // several connections: POE names no queue; the catalogue's queues, or all twelve, to choose from
+            if several {
+                Text(verbatim: AppStrings.severalConnections(lang)).ztText(ZtType.label.weight(.bold)).foregroundStyle(Color.white)
+                queueChoices(hints: record.hints, selected: chosenQueue) { chosenQueue = $0 }
+            }
             Button {
                 let query = SelectedAddressQuery(remId: remId, settlementId: settlementId, streetId: streetId, house: house)
                 let address = selectedAddressStr.ktIsBlank ? record.addressLabel : selectedAddressStr
-                if !record.queue.ktIsBlank {
+                if several, let picked = chosenQueue {
+                    onApply(picked, nil, address, query)
+                    onBanner("\(AppStrings.queue(lang)) \(picked)")
+                } else if !record.queue.ktIsBlank {
                     onApply(record.queue, nil, address, query)
                     onBanner("\(AppStrings.queue(lang)) \(record.queue)")
                 } else {
@@ -328,7 +454,8 @@ struct AddressLookupSheet: View {
                     onBanner(record.statusText ?? AppStrings.addrSaved(lang))
                 }
             } label: {
-                Text(verbatim: record.queue.ktIsBlank ? AppStrings.addrConfirm(lang) : AppStrings.addrApplyQueue(lang, record.queue))
+                Text(verbatim: several && chosenQueue != nil ? AppStrings.addrApplyQueue(lang, chosenQueue!)
+                     : record.queue.ktIsBlank ? AppStrings.addrConfirm(lang) : AppStrings.addrApplyQueue(lang, record.queue))
                     .ztText(ZtType.subhead.weight(.heavy))
                     .foregroundStyle(Color.white)
                     .multilineTextAlignment(.center)
@@ -338,13 +465,148 @@ struct AddressLookupSheet: View {
             }
             .buttonStyle(ZtPressStyle())
             .disabled(!canApply)
+            .coachTarget("apply")
+            .id("tour-apply")
         }
         .padding(16)
         .background {
             RoundedRectangle(cornerRadius: 16).fill(Color(argb: 0xD9141A29))
                 .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.white.opacity(0.25), lineWidth: 2))
         }
+        .coachTarget("result")
         .padding(.top, 6)
+    }
+
+    /// The catalogue's queues (best first, with what matched), then the other queues; all twelve without hints.
+    @ViewBuilder
+    private func queueChoices(hints: [QueueCatalogue.Hint], selected: String?, onSelect: @escaping (String) -> Void) -> some View {
+        Text(verbatim: hints.isEmpty ? AppStrings.chooseQueueTitle(lang) : AppStrings.catalogueHintsTitle(lang))
+            .ztText(ZtType.caption).foregroundStyle(ZtColors.textSecondary)
+        QueueChoiceChips(
+            choices: hints.isEmpty ? POE_QUEUE_IDS.map { QueueChoice(queue: $0) }
+                : hints.map { QueueChoice(queue: $0.queue, caption: hintCaption(lang, $0.kind)) },
+            selected: selected, lang: lang, onSelect: onSelect
+        )
+        if !hints.isEmpty {
+            Text(verbatim: AppStrings.chooseQueueTitle(lang)).ztText(ZtType.caption).foregroundStyle(ZtColors.textTertiary)
+            QueueChoiceChips(
+                choices: POE_QUEUE_IDS.filter { q in !hints.contains { $0.queue == q } }.map { QueueChoice(queue: $0) },
+                selected: selected, lang: lang, onSelect: onSelect
+            )
+        }
+    }
+
+    /// A settlement without streets, or a street POE lists no houses for (spec/POE_API.md 8.11): the
+    /// catalogue's queue for the whole place, added as a queue-only entry named after it.
+    private func placeCard(_ mode: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(verbatim: placeLabel).ztText(ZtType.label).foregroundStyle(UiColors.textSecondaryHi)
+            Text(verbatim: mode == "settlement" ? AppStrings.noStreetsHint(lang) : AppStrings.noHousesHint(lang))
+                .ztText(ZtType.label.weight(.bold)).foregroundStyle(Color.white)
+            queueChoices(hints: placeHints, selected: placeQueue) { placeQueue = $0 }
+            Text(verbatim: AppStrings.placeQueueHint(lang)).ztText(ZtType.caption).foregroundStyle(ZtColors.textTertiary)
+            ActionButton(
+                text: placeQueue.map { AppStrings.addCompanyQueue(lang, $0) } ?? AppStrings.chooseQueueTitle(lang),
+                icon: "plus", filled: placeQueue != nil
+            ) {
+                if let q = placeQueue { onAddCompany(q, placeLabel) }
+            }
+            .coachTarget("apply")
+            .id("tour-apply")
+        }
+        .padding(16)
+        .background {
+            RoundedRectangle(cornerRadius: 16).fill(Color(argb: 0xD9141A29))
+                .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.white.opacity(0.25), lineWidth: 2))
+        }
+        .coachTarget("result")
+        .padding(.top, 6)
+    }
+
+    /// Search by workplace: companies named in POE's hourly-schedule PDF (spec/POE_API.md 8.11).
+    private var companyCard: some View {
+        let company = companies.first { $0.id == selectedCompany }
+        return VStack(alignment: .leading, spacing: 12) {
+            Text(verbatim: AppStrings.companyTitle(lang).uppercased())
+                .ztText(ZtType.label.weight(.heavy).tracking(0.05))
+                .foregroundStyle(Color.white)
+            SearchablePickerField(
+                label: AppStrings.companyLabel(lang),
+                value: company?.name,
+                placeholder: AppStrings.companyPlaceholder(lang),
+                items: companies.map { c in
+                    PickerItem(id: c.id, label: [c.name, c.town, c.queues.joined(separator: ", ")].compactMap { $0 }.joined(separator: " · "),
+                               search: c.search, context: c.context)
+                },
+                selectedId: selectedCompany,
+                lang: lang,
+                contextLabel: AppStrings.companyRowMatch(lang)
+            ) { item in
+                selectedCompany = item.id
+                let queues = companies.first { $0.id == item.id }?.queues ?? []
+                companyQueue = queues.count == 1 ? queues[0] : nil
+            }
+            Text(verbatim: AppStrings.companyHint(lang)).ztText(ZtType.caption).foregroundStyle(ZtColors.textTertiary)
+            if let company {
+                if company.queues.count > 1 {
+                    QueueChoiceChips(choices: company.queues.map { QueueChoice(queue: $0) }, selected: companyQueue, lang: lang) { companyQueue = $0 }
+                }
+                ActionButton(
+                    text: companyQueue.map { AppStrings.addCompanyQueue(lang, $0) } ?? AppStrings.chooseQueueTitle(lang),
+                    icon: "plus", filled: companyQueue != nil
+                ) {
+                    if let q = companyQueue { onAddCompany(q, company.label) }
+                }
+            }
+        }
+        .padding(20)
+        .background {
+            RoundedRectangle(cornerRadius: 24).fill(Color(argb: 0x0DFFFFFF))
+                .overlay(RoundedRectangle(cornerRadius: 24).strokeBorder(Color.white.opacity(0.25), lineWidth: 2))
+        }
+    }
+
+    /// "Немає вашої адреси?": scoped refresh, never a crawl of POE from the phone (plan section 4.4).
+    private var missingCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(verbatim: AppStrings.addrMissingTitle(lang)).ztText(ZtType.label.weight(.bold)).foregroundStyle(Color.white)
+            ActionButton(text: AppStrings.refreshSettlements(lang), icon: "arrow.clockwise", subdued: true,
+                         busy: refreshing == "settlements", busyText: AppStrings.refreshing(lang)) {
+                let rem = remId
+                runRefresh("settlements", { await PoeAddressLookup.refreshSettlements(rem) ? true : nil }) { _ in AppStrings.refreshListDone(lang) }
+            }
+            if !settlementId.ktIsBlank {
+                ActionButton(text: AppStrings.refreshStreets(lang), icon: "arrow.clockwise", subdued: true,
+                             busy: refreshing == "streets", busyText: AppStrings.refreshing(lang)) {
+                    let rem = remId
+                    let city = settlementId
+                    runRefresh("streets", { await PoeAddressLookup.refreshStreets(rem, city) ? true : nil }) { _ in AppStrings.refreshListDone(lang) }
+                }
+            }
+            ActionButton(text: AppStrings.refreshDirectory(lang), icon: "arrow.clockwise", subdued: true,
+                         busy: refreshing == "directory", busyText: AppStrings.refreshing(lang)) {
+                runRefresh("directory", {
+                    switch await PoeAddressLookup.updateDirectory() {
+                    case .UPDATED: return true
+                    case .UP_TO_DATE: return false
+                    case .FAILED: return nil
+                    }
+                }) { updated in updated ? AppStrings.directoryUpdated(lang) : AppStrings.directoryUpToDate(lang) }
+            }
+        }
+        .padding(.horizontal, 4)
+    }
+
+    /// Runs one scoped refresh; `work` gives nil when POE (or the repository) could not be asked.
+    private func runRefresh(_ kind: String, _ work: @escaping () async -> Bool?, okText: @escaping (Bool) -> String) {
+        guard refreshing == nil else { return }
+        refreshing = kind
+        Task {
+            let ok = await work()
+            refreshing = nil
+            if ok != nil { directoryVersion += 1 }
+            onBanner(ok.map(okText) ?? AppStrings.refreshListFailed(lang))
+        }
     }
 
     /// Numbered instructions 1-4, text unchanged from AppStrings.queueHelpSteps; only the address is a link.
@@ -392,20 +654,9 @@ struct AddressLookupSheet: View {
     private func loadSettlements() async {
         await ensureDirectory()
         if Task.isCancelled { return }
-        settlementsState.failed = false
-        if settlementsState.retry > 0 {
-            settlementsState.loading = true
-            _ = await PoeAddressLookup.refreshSettlements(remId)
-            if Task.isCancelled { return }
-            settlementsState.loading = false
-        }
         settlements = PoeAddressLookup.getSettlementsForRem(remId)
-        settlementsState.failed = settlements.isEmpty
-        if !settlementId.ktIsBlank && !settlements.isEmpty && !settlements.contains(where: { $0.id == settlementId })
-            && PoeAddressLookup.findSettlementById(settlementId) == nil {
-            settlementId = ""
-            clearBelowSettlement()
-        }
+        settlementsState.failed = PoeAddressLookup.indexOrNull() == nil
+        settlementsState.loading = false
     }
 
     private func loadStreets() async {
@@ -415,17 +666,57 @@ struct AddressLookupSheet: View {
             streetsState.failed = false
             return
         }
+        streetsState.loading = true
         await ensureDirectory()
         if Task.isCancelled { return }
-        streetsState.failed = false
-        if streetsState.retry > 0 {
-            streetsState.loading = true
-            _ = await PoeAddressLookup.refreshStreets(remId, settlementId)
-            if Task.isCancelled { return }
-            streetsState.loading = false
-        }
         streets = PoeAddressLookup.getStreetsForSettlement(settlementId)
-        streetsState.failed = streets.isEmpty
+        streetsState.failed = PoeAddressLookup.indexOrNull() == nil
+        streetsState.loading = false
+        streetsFor = "\(settlementId)|\(directoryVersion)"
+    }
+
+    private func loadPlaceHints() {
+        guard let mode = placeMode, catalogueReady else {
+            placeHints = []
+            placeQueue = nil
+            return
+        }
+        placeHints = PoeQueues.queuesFor(SelectedAddressQuery(remId: remId, settlementId: settlementId,
+                                                              streetId: mode == "street" ? streetId : "", house: ""))
+        placeQueue = placeHints.first?.queue
+    }
+
+    private func loadCompanies() async {
+        let built: [CompanyChoice] = await Task.detached(priority: .utility) {
+            PoeQueues.initialize()
+            // one entry per name and town: «Школа № 27» of Кременчук and of Полтава are two
+            var order: [String] = []
+            var groups: [String: [PoeCompany]] = [:]
+            for c in PoeQueues.companies() {
+                let id = "\(c.name)|\(c.settlement ?? "")"
+                if groups[id] == nil { order.append(id) }
+                groups[id, default: []].append(c)
+            }
+            return order.compactMap { id -> CompanyChoice? in
+                guard let rows = groups[id], let first = rows.first else { return nil }
+                let hasAliases = rows.contains { !$0.aliases.ktIsBlank }
+                var queues = Array(Set(rows.map(\.queue)))
+                queues.sort()
+                var search: [String] = []
+                for t in [first.name] + rows.map(\.aliases) where !t.ktIsBlank && !search.contains(t) { search.append(t) }
+                var context: [String] = []
+                for t in rows.map(\.rowText) where !t.ktIsBlank && !context.contains(t) { context.append(t) }
+                return CompanyChoice(
+                    id: id, name: first.name,
+                    label: first.settlement != nil && hasAliases ? "\(first.name), \(first.settlement!)" : first.name,
+                    town: first.settlement, queues: queues,
+                    search: search.joined(separator: " "), context: context.joined(separator: "; ")
+                )
+            }.sorted { $0.name.lowercased() < $1.name.lowercased() }
+        }.value
+        if Task.isCancelled { return }
+        companies = built
+        catalogueReady = PoeQueues.current() != nil
     }
 
     private func loadHouses() async {
@@ -441,13 +732,16 @@ struct AddressLookupSheet: View {
         let fetched = await PoeAddressLookup.fetchHousesForStreet(remId, settlementId, streetId)
         if Task.isCancelled { return }
         if let fetched, !fetched.isEmpty { houses = fetched }
-        housesState.failed = houses.isEmpty
+        housesAnswered = fetched != nil
+        // an answer with no houses is not a failure: the street has no house numbers
+        housesState.failed = fetched == nil && houses.isEmpty
         housesState.loading = false
     }
 
     private func checkAddress() async {
         lookup = nil
         checkFailed = false
+        chosenQueue = nil
         if streetId.ktIsBlank || house.ktIsBlank {
             checking = false
             return
@@ -461,6 +755,8 @@ struct AddressLookupSheet: View {
         lookup = res
         checkFailed = res == nil
         guard let res else { return }
+        // the catalogue's best queue is pre-selected; the user confirms or picks another
+        if res.severalConnections { chosenQueue = res.hints.first?.queue }
         if let i = houses.firstIndex(where: { $0.house.caseInsensitiveCompare(res.house) == .orderedSame }) {
             var h = houses[i]
             if !res.queue.isEmpty { h.queue = res.queue }
