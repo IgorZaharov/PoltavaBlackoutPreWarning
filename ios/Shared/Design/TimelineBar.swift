@@ -1,13 +1,16 @@
 import SwiftUI
 
-/// One half-hour cell of the drum, reduced to what is drawn (spec/UI_DRUM.md section 1).
+/// One half-hour cell of the drum, reduced to what is drawn (spec/UI_DRUM.md section 1). `switching` is
+/// the POE switching half-hour (power may still be off): never together with `planned`.
 public struct DrumCell: Equatable, Sendable {
     public var planned: Bool
     public var emergency: Bool
+    public var switching: Bool
 
-    public init(planned: Bool, emergency: Bool) {
+    public init(planned: Bool, emergency: Bool, switching: Bool = false) {
         self.planned = planned
         self.emergency = emergency
+        self.switching = switching
     }
 }
 
@@ -40,12 +43,32 @@ public enum DrumGeometry {
     }
 
     /// 48 cells from `slots` (48 half-hours, or 24 legacy hourly slots used twice); nil otherwise.
-    /// `planned` and `emergency` are separate so a planned outage under an emergency shows both.
+    /// `planned` and `emergency` are separate so a planned outage under an emergency shows both. The one
+    /// classification the app drum and the widget drums draw (Android `DrumCells`).
     public static func cells(_ slots: [BlackoutSlot]) -> [DrumCell]? {
-        OutageRowFormat.cells(slots)?.map { s in
-            let off = s.status == .POWER_OFF
-            return DrumCell(planned: off && (s.isPlanned || !s.isEmergency), emergency: off && s.isEmergency)
-        }
+        OutageRowFormat.cells(slots)?.map(cell)
+    }
+
+    public static func cell(_ s: BlackoutSlot) -> DrumCell {
+        let off = s.status == .POWER_OFF
+        let planned = off && (s.isPlanned || !s.isEmergency)
+        return DrumCell(planned: planned, emergency: off && s.isEmergency, switching: s.isSwitching && !planned)
+    }
+
+    /// The 48 states as one string (Android `DrumCells.signature`): "0" on, "1" planned, "2" emergency,
+    /// "3" both, "4" switching, "5" switching with an emergency; "UNCLEAR" when there is no drum.
+    public static func signature(_ slots: [BlackoutSlot]) -> String {
+        guard let cells = cells(slots) else { return "UNCLEAR" }
+        return String(cells.map(code))
+    }
+
+    public static func code(_ c: DrumCell) -> Character {
+        if c.planned && c.emergency { return "3" }
+        if c.planned { return "1" }
+        if c.switching && c.emergency { return "5" }
+        if c.switching { return "4" }
+        if c.emergency { return "2" }
+        return "0"
     }
 
     /// The tick hours under the drum: every 2 h, every 4 h at large Dynamic Type (labels cannot overlap).
@@ -70,6 +93,14 @@ public enum DrumRenderer {
                 Path(CGRect(x: left, y: 0, width: width, height: h)),
                 with: .linearGradient(Gradient(colors: colors), startPoint: vertical.0, endPoint: vertical.1)
             )
+            if cell.switching {
+                // The switching half-hour fills the cell (spec/UI_DRUM.md 1), plain, no stripes; an
+                // emergency on it still takes the bottom half
+                gc.fill(
+                    Path(CGRect(x: left, y: 0, width: width, height: h)),
+                    with: .linearGradient(Gradient(colors: ZtDrumColors.switching), startPoint: vertical.0, endPoint: vertical.1)
+                )
+            }
             if cell.emergency {
                 // An emergency takes only the bottom half: the top half keeps the planned state behind it
                 let rect = CGRect(x: left, y: mid, width: width, height: h - mid)
@@ -102,7 +133,7 @@ public enum DrumRenderer {
 
 /// The 24-hour "analog meter" drum (Android `TimelineBar`). Planned and repair outages are crimson,
 /// emergency outages amber with 45 degree stripes in the bottom half, emergency over planned is crimson
-/// on top and striped amber below. `unclearBase` paints cells without an outage grey (the day's table
+/// on top and striped amber below, POE's switching half-hour yellow over the whole cell. `unclearBase` paints cells without an outage grey (the day's table
 /// is not known) while known outages are still drawn. The whole drum is one VoiceOver element described
 /// by `OutageRowFormat.drumSummary`.
 public struct TimelineBar: View {

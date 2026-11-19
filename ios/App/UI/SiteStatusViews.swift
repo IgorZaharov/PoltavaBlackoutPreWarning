@@ -47,10 +47,12 @@ struct SiteStatusChipRow: View {
     }
 }
 
-/// Card with the text the site publishes in place of the schedule, quoted as is.
+/// Card with the text the site publishes in place of the schedule, quoted as is; with `title` also
+/// today's POE measures (ГАВ, ГОП, СГАВ ...).
 struct SiteNoticeCard: View {
     let text: String
     let lang: String
+    var title: String? = nil
 
     var body: some View {
         ZtGlassCard {
@@ -58,7 +60,7 @@ struct SiteNoticeCard: View {
                 Circle().fill(ZtChipTone.amber.fill).frame(width: 36, height: 36)
                     .overlay { Image(systemName: "info.circle.fill").font(.system(size: 18)).foregroundStyle(ZtChipTone.amber.text) }
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(verbatim: AppStrings.siteNoticeTitle(lang)).ztText(ZtType.overline).foregroundStyle(ZtChipTone.amber.text)
+                    Text(verbatim: title ?? AppStrings.siteNoticeTitle(lang)).ztText(ZtType.overline).foregroundStyle(ZtChipTone.amber.text)
                     let lines = text.components(separatedBy: "\n")
                     ForEach(Array(lines.enumerated()), id: \.offset) { i, line in
                         Text(verbatim: line)
@@ -70,7 +72,7 @@ struct SiteNoticeCard: View {
             }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text(verbatim: AppStrings.siteNoticeA11y(lang) + ". " + text))
+        .accessibilityLabel(Text(verbatim: (title ?? AppStrings.siteNoticeA11y(lang)) + ". " + text))
     }
 }
 

@@ -88,6 +88,10 @@ public enum ZtDrumColors {
     public static let emergency = [Color(argb: 0xFFFFB020), Color(argb: 0xFFF28A1B), Color(argb: 0xFFC96A0B)]
     public static let emergencyStripeDark = Color(argb: 0x8C1A1208)
     public static let emergencyStripeLight = Color(argb: 0xD9FFB020)
+    /// POE's switching half-hour (design-tokens.json `drum.switchingGradient`): power may still be off.
+    public static let switching = [Color(argb: 0xFFE3AE2E), Color(argb: 0xFFF5C242), Color(argb: 0xFFD9A62C)]
+    /// The middle stop of `switching`: the swatch and text of «Світло повернеться» in the hero.
+    public static let switchingMid = Color(argb: 0xFFF5C242)
     public static let tick = Color(argb: 0xFF1C1B18)
     /// Every drum, app and widgets (owner, 2026-11-15 for the widgets, 2026-11-17 everywhere: the black needle was
     /// hard to see): a bright yellow core with a 2 pt black outline, which stands out on every cell colour.
