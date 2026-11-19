@@ -160,9 +160,9 @@ struct SettingsScreen: View {
             .scrollsToTop(proxy, page: 1, request: model.scrollTop)
             // the tour's RENAME and ALERTS point at the first address card: scroll it into view (spec/ONBOARDING.md)
             .task(id: "\(model.tourActive && model.tourReachedRename)|\(model.tourRenameDone)|\(isVisible)") {
-                guard isVisible, model.tourActive, !model.subscriptions.items.isEmpty else { return }
+                guard isVisible, model.tourActive, let first = model.subscriptions.items.first else { return }
                 try? await Task.sleep(for: .milliseconds(400))
-                withAnimation { proxy.scrollTo("tour-first-address", anchor: .center) }
+                withAnimation { proxy.scrollTo(MyAddressesCard.cardId(first.id), anchor: .center) }
             }
           }
         }
@@ -347,6 +347,12 @@ private struct MyAddressesCard: View {
     let onRemove: (Subscription) -> Void
     let onRename: (Subscription) -> Void
 
+    /// Scroll id of one address card. It must stay the same for the card wherever it moves: an id that
+    /// depends on the position (the tour once used "the first card") changes while a card is dragged past
+    /// the top, SwiftUI then rebuilds the card mid-gesture, the drag never ends and the list hangs with the
+    /// card lifted (TestFlight 1.0.0 (33), 2026-11-19).
+    static func cardId(_ itemId: String) -> String { "address-\(itemId)" }
+
     // drag the handle to reorder: a local order follows the finger, the store is written on release
     @State private var order: [String] = []
     @State private var draggingId: String?
@@ -409,7 +415,7 @@ private struct MyAddressesCard: View {
                             onSetEmergency: { model.setEmergency(id, $0) },
                             tourTargets: index == 0
                         )
-                        .id(index == 0 ? "tour-first-address" : "address-\(id)")
+                        .id(Self.cardId(id))
                         .background(GeometryReader { g in Color.clear.preference(key: BlockHeights.self, value: [id: g.size.height]) })
                         .scaleEffect(dragging ? 1.02 : 1)
                         .offset(y: dragging ? dragOffset : 0)
