@@ -1167,7 +1167,6 @@ import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
 import androidx.glance.Image
 import androidx.glance.ImageProvider
-import androidx.glance.LocalSize
 import androidx.glance.action.Action
 import androidx.glance.action.ActionParameters
 import androidx.glance.action.actionParametersOf
@@ -1226,9 +1225,8 @@ open class BlackoutGlanceWidget(private val forceBigLayout: Boolean = false) : G
         )
     )
 
-    /** One RemoteViews while an address stack can show, so its cards (a partial update) reach it (AddressStack.active). */
-    override val sizeMode: SizeMode
-        get() = if (AddressStack.active()) SizeMode.Single else responsive
+    /** One RemoteViews on Android 12+, so address-stack cards (a partial update) reach it (AddressStack.sizeMode). */
+    override val sizeMode: SizeMode = AddressStack.sizeMode(responsive)
 
     companion object {
         val KEY_NOTIFICATIONS_ENABLED = booleanPreferencesKey("glance_notifications_enabled")
@@ -1365,7 +1363,6 @@ open class BlackoutGlanceWidget(private val forceBigLayout: Boolean = false) : G
          */
         suspend fun syncAllWidgets(context: Context, refreshing: Boolean? = null) {
             val appCtx = context.applicationContext
-            AddressStack.remember(appCtx)
             val manager = GlanceAppWidgetManager(appCtx)
             val smallIds = manager.getGlanceIds(BlackoutGlanceWidget::class.java)
             val bigIds = manager.getGlanceIds(BlackoutBigGlanceWidget::class.java)
@@ -1670,13 +1667,18 @@ open class BlackoutGlanceWidget(private val forceBigLayout: Boolean = false) : G
             // the bell shows and toggles the master switch for all addresses (owner decision 4)
             val notificationsEnabled = SubscriptionSync(appContext).master()
 
-            val size = LocalSize.current
-            val isBigWidget = forceBigLayout || size.height >= 110.dp || size.width >= 220.dp
+            val kind = if (forceBigLayout) AddressStack.Kind.BIG else AddressStack.Kind.SMALL
+            val size = AddressStack.layoutSize(appContext, kind)
+            // Android 12+ lays out for the launcher's size; the big layout from the size of the 4x2 bucket of \`responsive\`
+            val isBigWidget = forceBigLayout || if (AddressStack.supported) {
+                size.width >= 250.dp && size.height >= 110.dp
+            } else {
+                size.height >= 110.dp || size.width >= 220.dp
+            }
             // the app widget id of an address stack (spec/SUBSCRIPTIONS.md 10), null when this widget shows one address
             val stackWidgetId = appWidgetId?.takeIf { AddressStack.supported && WidgetBindings.stackIds(appContext, it).size >= 2 }
             val options = LocalAppWidgetOptions.current
-            val kind = if (forceBigLayout) AddressStack.Kind.BIG else AddressStack.Kind.SMALL
-            // the cards are composed off the composition and land a moment later; until then the widget is as before
+            // the cards are composed off the composition and land a moment later in the frame drawn below
             val cards by produceState<List<Pair<String, RemoteViews>>?>(null, stackWidgetId, refreshTick, options, notificationsEnabled) {
                 value = stackWidgetId?.let {
                     try {
@@ -1691,11 +1693,14 @@ open class BlackoutGlanceWidget(private val forceBigLayout: Boolean = false) : G
             }
             val ready = cards
 
-            if (stackWidgetId != null && !ready.isNullOrEmpty() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (stackWidgetId != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 // Address stack (spec/SUBSCRIPTIONS.md 10): one card over the whole widget, and above it the buttons in
                 // the corner the card leaves empty; the cards follow this frame as a partial update (see AddressStack)
-                val widget = AddressStack.widgetSize(options, kind)
+                val widget = AddressStack.widgetSize(appContext, options, kind)
+                // the frame is drawn from the first frame on (switching from the one-address layout left the launcher
+                // reusing its views: its padding and background stayed and the buttons were lost); the cards follow
                 LaunchedEffect(ready) {
+                    if (ready.isNullOrEmpty()) return@LaunchedEffect
                     kotlinx.coroutines.delay(AddressStack.PUSH_DELAY_MS)
                     AddressStack.pushCards(appContext, stackWidgetId, ready, widget)
                 }
@@ -1932,12 +1937,14 @@ internal fun WidgetBody(
 
 /**
  * The refresh and bell buttons of an address stack, above the front card (see [AddressStack]): in the corner each
- * card leaves empty, 12 dp from it; top right on the 4x2 card, bottom right on the 2x1 card.
+ * card leaves empty: top right on the 4x2 card, 12 dp from the corner; bottom right on the 2x1 card, 12 dp from the
+ * right and 8 dp from the bottom (the card's padding, widget_card_small.xml).
  */
 @Composable
 internal fun StackButtons(isBigWidget: Boolean, notificationsEnabled: Boolean, isRefreshing: Boolean) {
     Box(
-        modifier = GlanceModifier.fillMaxSize().padding(12.dp),
+        modifier = GlanceModifier.fillMaxSize()
+            .padding(start = 12.dp, top = 12.dp, end = 12.dp, bottom = if (isBigWidget) 12.dp else 8.dp),
         contentAlignment = if (isBigWidget) Alignment.TopEnd else Alignment.BottomEnd
     ) {
         Row(verticalAlignment = Alignment.Vertical.CenterVertically) {
@@ -2029,9 +2036,8 @@ class BlackoutStripGlanceWidget : GlanceAppWidget() {
         )
     )
 
-    /** One RemoteViews while an address stack can show, so its cards (a partial update) reach it (AddressStack.active). */
-    override val sizeMode: SizeMode
-        get() = if (AddressStack.active()) SizeMode.Single else responsive
+    /** One RemoteViews on Android 12+, so address-stack cards (a partial update) reach it (AddressStack.sizeMode). */
+    override val sizeMode: SizeMode = AddressStack.sizeMode(responsive)
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val appContext = context.applicationContext
@@ -2055,12 +2061,15 @@ class BlackoutStripGlanceWidget : GlanceAppWidget() {
                 value = stackWidgetId?.let { AddressStack.buildCards(appContext, it, AddressStack.Kind.STRIP, options) }
             }
             val ready = cards
-            if (stackWidgetId != null && !ready.isNullOrEmpty() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (stackWidgetId != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 // Address stack (spec/SUBSCRIPTIONS.md 10): this widget has no buttons, so the cards are all of it;
                 // they follow this frame as a partial update (see AddressStack)
+                // the frame is drawn from the first frame on (switching from the one-address layout left the launcher
+                // reusing its views: its padding and background stayed and the buttons were lost); the cards follow
                 LaunchedEffect(ready) {
+                    if (ready.isNullOrEmpty()) return@LaunchedEffect
                     kotlinx.coroutines.delay(AddressStack.PUSH_DELAY_MS)
-                    AddressStack.pushCards(appContext, stackWidgetId, ready, AddressStack.widgetSize(options, AddressStack.Kind.STRIP))
+                    AddressStack.pushCards(appContext, stackWidgetId, ready, AddressStack.widgetSize(appContext, options, AddressStack.Kind.STRIP))
                 }
                 AndroidRemoteViews(
                     remoteViews = AddressStack.frame(appContext),
@@ -2069,7 +2078,8 @@ class BlackoutStripGlanceWidget : GlanceAppWidget() {
             } else {
                 val source = widgetSource(appContext, appWidgetId)
                 val model = BlackoutGlanceWidget.buildWidgetModel(source.settings, source.snapshot, source.label)
-                StripBody(model, openAppAction(source.itemId), showInfo = LocalSize.current.height >= INFO_MIN_HEIGHT)
+                val size = AddressStack.layoutSize(appContext, AddressStack.Kind.STRIP)
+                StripBody(model, openAppAction(source.itemId), showInfo = size.height >= INFO_MIN_HEIGHT)
             }
         }
     }
@@ -2261,12 +2271,6 @@ import ua.blackout.prewarning.notification.AlarmScheduler
 
 open class BlackoutWidgetReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = BlackoutGlanceWidget()
-
-    override fun onReceive(context: Context, intent: android.content.Intent) {
-        // Glance asks the widgets for their size mode without a context (AddressStack.active)
-        AddressStack.remember(context)
-        super.onReceive(context, intent)
-    }
 
     override fun onEnabled(context: Context) {
         super.onEnabled(context)
@@ -13753,8 +13757,14 @@ class OnboardingStore(context: Context) {
     content: `package ua.blackout.prewarning.widget
 
 import android.content.Context
+import android.os.Build
+import android.widget.RemoteViews
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.datastore.preferences.core.Preferences
@@ -13764,10 +13774,12 @@ import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
 import androidx.glance.Image
 import androidx.glance.ImageProvider
-import androidx.glance.LocalSize
 import androidx.glance.action.clickable
+import androidx.glance.appwidget.AndroidRemoteViews
 import androidx.glance.appwidget.CircularProgressIndicator
 import androidx.glance.appwidget.GlanceAppWidget
+import androidx.glance.appwidget.GlanceAppWidgetManager
+import androidx.glance.appwidget.LocalAppWidgetOptions
 import androidx.glance.appwidget.SizeMode
 import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.cornerRadius
@@ -13792,7 +13804,9 @@ import androidx.glance.text.Text
 import androidx.glance.text.TextAlign
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
+import kotlinx.coroutines.CancellationException
 import ua.blackout.prewarning.R
+import ua.blackout.prewarning.data.repository.SettingsRepository
 import ua.blackout.prewarning.ui.AppStrings
 
 /**
@@ -13800,15 +13814,25 @@ import ua.blackout.prewarning.ui.AppStrings
  * next outage or to power on, and the refresh button, on a 50 % transparent layer. It always follows the
  * primary address (no configuration screen) and draws from the same snapshot as the other widgets, so the
  * status and the countdown are identical. Text sizes follow the widget size so a resized widget stays filled.
+ * With two or more saved addresses (Android 12+) it is an address stack like the other widgets (spec/SUBSCRIPTIONS.md
+ * 10, owner 2026-11-18): one card per address, swiped up or down, with the refresh button above the front card.
  */
 class BlackoutMinimalGlanceWidget : GlanceAppWidget() {
 
     override val stateDefinition: GlanceStateDefinition<*> = PreferencesGlanceStateDefinition
 
-    override val sizeMode = SizeMode.Exact
+    /** One RemoteViews on Android 12+, so address-stack cards (a partial update) reach it (AddressStack.sizeMode). */
+    override val sizeMode: SizeMode = AddressStack.sizeMode(SizeMode.Exact)
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val appContext = context.applicationContext
+        val appWidgetId = try {
+            GlanceAppWidgetManager(appContext).getAppWidgetId(id)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        }
 
         provideContent {
             val prefs = currentState<Preferences>()
@@ -13818,93 +13842,140 @@ class BlackoutMinimalGlanceWidget : GlanceAppWidget() {
             val refreshingSince = prefs[BlackoutGlanceWidget.KEY_REFRESHING_SINCE] ?: 0L
             val isRefreshing = refreshingSince > 0L &&
                 System.currentTimeMillis() - refreshingSince < BlackoutGlanceWidget.REFRESH_BUSY_MAX_MS
-            // null app widget id = follow the primary address
-            val source = widgetSource(appContext, null)
-            val model = BlackoutGlanceWidget.buildWidgetModel(source.settings, source.snapshot)
-            val openApp = openAppAction(source.itemId)
-            val m = minimalWidgetTexts(model.lang, model.isUnclear, model.isOffNow, model.countdown)
 
-            val statusColor = when {
-                model.isUnclear -> Color(0xFF9CA3AF)
-                model.isOffNow -> Color(0xFFFF5E3A)
-                else -> Color(0xFF34D399)
-            }
-
-            val size = LocalSize.current
-            val scale = (minOf(size.width.value, size.height.value) / BASE_DP).coerceIn(0.8f, 1.8f)
-            val pad = 12f * scale
-            val button = 34f * scale
-            val innerWidth = size.width.value - 2 * pad
-            val queueSp = fit(14f * scale, model.queueHeader, innerWidth - button - 6f, 0.6f)
-            val statusSp = fit(20f * scale, m.status, innerWidth, 0.68f)
-            val labelSp = m.label?.let { fit(12f * scale, it, innerWidth, 0.52f) } ?: 0f
-            val countdownSp = m.countdown?.let { fit(22f * scale, it, innerWidth, 0.58f) } ?: 0f
-
-            GlanceTheme {
-                Column(
-                    modifier = GlanceModifier
-                        .fillMaxSize()
-                        .cornerRadius(20.dp)
-                        .background(ColorProvider(Color(0x80141A29)))
-                        .padding(pad.dp)
-                        .clickable(openApp)
-                ) {
-                    Row(
-                        modifier = GlanceModifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.Vertical.CenterVertically
-                    ) {
-                        Text(
-                            text = model.queueHeader,
-                            style = TextStyle(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = queueSp.sp,
-                                color = ColorProvider(Color.White)
-                            ),
-                            maxLines = 1,
-                            modifier = GlanceModifier.defaultWeight()
-                        )
-                        RefreshButton(button.dp, isRefreshing, m.refreshDescription)
+            // the app widget id of an address stack (never bound, so it follows the primary), null = one address
+            val stackWidgetId = appWidgetId?.takeIf { AddressStack.supported && WidgetBindings.stackIds(appContext, it).size >= 2 }
+            val options = LocalAppWidgetOptions.current
+            // the cards are composed off the composition and land a moment later in the frame drawn below
+            val cards by produceState<List<Pair<String, RemoteViews>>?>(null, stackWidgetId, refreshTick, options) {
+                value = stackWidgetId?.let {
+                    try {
+                        AddressStack.buildCards(appContext, it, AddressStack.Kind.MINIMAL, options)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        android.util.Log.w("AddressStack", "cards not built: widget $it", e)
+                        null
                     }
-
-                    Column(
-                        modifier = GlanceModifier.fillMaxWidth().defaultWeight(),
-                        horizontalAlignment = Alignment.Horizontal.CenterHorizontally,
-                        verticalAlignment = Alignment.Vertical.CenterVertically
+                }
+            }
+            val ready = cards
+            if (stackWidgetId != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                // one card over the whole widget and the refresh button above it, in the corner the card leaves empty
+                val widget = AddressStack.widgetSize(appContext, options, AddressStack.Kind.MINIMAL)
+                // the frame is drawn from the first frame on (switching from the one-address layout left the launcher
+                // reusing its views: its padding and background stayed and the buttons were lost); the cards follow
+                LaunchedEffect(ready) {
+                    if (ready.isNullOrEmpty()) return@LaunchedEffect
+                    kotlinx.coroutines.delay(AddressStack.PUSH_DELAY_MS)
+                    AddressStack.pushCards(appContext, stackWidgetId, ready, widget)
+                }
+                val lang = AppStrings.resolveLang(SettingsRepository(appContext).getSettings().language)
+                Box(modifier = GlanceModifier.fillMaxSize()) {
+                    AndroidRemoteViews(
+                        remoteViews = AddressStack.frame(appContext),
+                        modifier = GlanceModifier.fillMaxSize()
+                    )
+                    Box(
+                        modifier = GlanceModifier.fillMaxSize().padding(12.dp),
+                        contentAlignment = Alignment.TopEnd
                     ) {
+                        RefreshButton(34.dp, isRefreshing, minimalRefreshDescription(lang))
+                    }
+                }
+            } else {
+                // null app widget id = follow the primary address
+                MinimalBody(widgetSource(appContext, null), isRefreshing, AddressStack.layoutSize(appContext, AddressStack.Kind.MINIMAL))
+            }
+        }
+    }
+
+    /** The widget content of the primary address (one address, or Android 8 to 11). */
+    @androidx.compose.runtime.Composable
+    private fun MinimalBody(source: WidgetSource, isRefreshing: Boolean, size: DpSize) {
+        val model = BlackoutGlanceWidget.buildWidgetModel(source.settings, source.snapshot)
+        val openApp = openAppAction(source.itemId)
+        val m = minimalWidgetTexts(model.lang, model.isUnclear, model.isOffNow, model.countdown)
+
+        val statusColor = when {
+            model.isUnclear -> Color(0xFF9CA3AF)
+            model.isOffNow -> Color(0xFFFF5E3A)
+            else -> Color(0xFF34D399)
+        }
+
+        val scale = (minOf(size.width.value, size.height.value) / BASE_DP).coerceIn(0.8f, 1.8f)
+        val pad = 12f * scale
+        val button = 34f * scale
+        val innerWidth = size.width.value - 2 * pad
+        val queueSp = fit(14f * scale, model.queueHeader, innerWidth - button - 6f, 0.6f)
+        val statusSp = fit(20f * scale, m.status, innerWidth, 0.68f)
+        val labelSp = m.label?.let { fit(12f * scale, it, innerWidth, 0.52f) } ?: 0f
+        val countdownSp = m.countdown?.let { fit(22f * scale, it, innerWidth, 0.58f) } ?: 0f
+
+        GlanceTheme {
+            Column(
+                modifier = GlanceModifier
+                    .fillMaxSize()
+                    .cornerRadius(20.dp)
+                    .background(ColorProvider(Color(0x80141A29)))
+                    .padding(pad.dp)
+                    .clickable(openApp)
+            ) {
+                Row(
+                    modifier = GlanceModifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Vertical.CenterVertically
+                ) {
+                    Text(
+                        text = model.queueHeader,
+                        style = TextStyle(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = queueSp.sp,
+                            color = ColorProvider(Color.White)
+                        ),
+                        maxLines = 1,
+                        modifier = GlanceModifier.defaultWeight()
+                    )
+                    RefreshButton(button.dp, isRefreshing, m.refreshDescription)
+                }
+
+                Column(
+                    modifier = GlanceModifier.fillMaxWidth().defaultWeight(),
+                    horizontalAlignment = Alignment.Horizontal.CenterHorizontally,
+                    verticalAlignment = Alignment.Vertical.CenterVertically
+                ) {
+                    Text(
+                        text = m.status,
+                        style = TextStyle(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = statusSp.sp,
+                            color = ColorProvider(statusColor),
+                            textAlign = TextAlign.Center
+                        ),
+                        maxLines = 1
+                    )
+                    if (m.label != null) {
+                        Spacer(modifier = GlanceModifier.height((4f * scale).dp))
                         Text(
-                            text = m.status,
+                            text = m.label,
                             style = TextStyle(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = statusSp.sp,
-                                color = ColorProvider(statusColor),
+                                fontSize = labelSp.sp,
+                                color = ColorProvider(Color(0xFFA9B4C2)),
                                 textAlign = TextAlign.Center
                             ),
                             maxLines = 1
                         )
-                        if (m.label != null) {
-                            Spacer(modifier = GlanceModifier.height((4f * scale).dp))
-                            Text(
-                                text = m.label,
-                                style = TextStyle(
-                                    fontSize = labelSp.sp,
-                                    color = ColorProvider(Color(0xFFA9B4C2)),
-                                    textAlign = TextAlign.Center
-                                ),
-                                maxLines = 1
-                            )
-                        }
-                        if (m.countdown != null) {
-                            Text(
-                                text = m.countdown,
-                                style = TextStyle(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = countdownSp.sp,
-                                    color = ColorProvider(Color.White),
-                                    textAlign = TextAlign.Center
-                                ),
-                                maxLines = 1
-                            )
-                        }
+                    }
+                    if (m.countdown != null) {
+                        Text(
+                            text = m.countdown,
+                            style = TextStyle(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = countdownSp.sp,
+                                color = ColorProvider(Color.White),
+                                textAlign = TextAlign.Center
+                            ),
+                            maxLines = 1
+                        )
                     }
                 }
             }
@@ -13965,7 +14036,7 @@ internal data class MinimalWidgetTexts(
  */
 internal fun minimalWidgetTexts(lang: String, isUnclear: Boolean, isOffNow: Boolean, countdown: String): MinimalWidgetTexts {
     val isUk = lang == "uk"
-    val refresh = if (isUk) "Оновити дані" else "Refresh"
+    val refresh = minimalRefreshDescription(lang)
     if (isUnclear) return MinimalWidgetTexts(AppStrings.powerUnclear(lang), null, null, refresh)
     val status = if (isOffNow) "СВІТЛА НЕМАЄ" else "СВІТЛО Є"
     if (!isOffNow && countdown.contains("--")) {
@@ -13977,6 +14048,9 @@ internal fun minimalWidgetTexts(lang: String, isUnclear: Boolean, isOffNow: Bool
     }
     return MinimalWidgetTexts(status, label, countdown, refresh)
 }
+
+/** The refresh button's description of the minimal widget (and of its address stack). */
+internal fun minimalRefreshDescription(lang: String): String = if (lang == "uk") "Оновити дані" else "Refresh"
 `
   }
 ];

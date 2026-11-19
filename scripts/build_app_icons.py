@@ -8,9 +8,10 @@ Writes:
   docs/screenshots/app-icon.png                                  README header
 
 The black outside the rounded square becomes transparent; the orange glow around the gold rim is kept
-as partial transparency. In the adaptive foreground the gold rounded square is about 72 dp wide (owner, 2026-11-17),
-just inside the 72 dp area that launchers show, so it fills the home-screen icon; the adaptive background
-is the logo's own maroon (`ic_launcher_background`), so no dark ring shows around it.
+as partial transparency. In the adaptive foreground the gold rounded square is about 62 dp wide: launchers show
+only the middle 72 dp and then cut it with their own mask (rounded square, squircle), so at 72 dp (owner, 2026-11-17)
+the gold rim was clipped (owner, 2026-11-18); 62 dp keeps about 5 dp to the edge and clears squircle corners.
+The adaptive background is the logo's own maroon (`ic_launcher_background`), so no dark ring shows around it.
 
 Run: python -X utf8 scripts/build_app_icons.py [repository root]   (needs Pillow)
 """
@@ -82,7 +83,7 @@ def main() -> None:
     logo = transparent_logo()
     for name, f in DENSITIES.items():
         d = os.path.join(RES, f'mipmap-{name}')
-        save(fit(logo, round(108 * f), 77 / 108), os.path.join(d, 'ic_launcher_foreground.png'))
+        save(fit(logo, round(108 * f), 66 / 108), os.path.join(d, 'ic_launcher_foreground.png'))
         save(fit(logo, round(48 * f), 0.96), os.path.join(d, 'ic_launcher.png'))
         save(fit(logo, round(48 * f), 0.74, background=MAROON, circle=True), os.path.join(d, 'ic_launcher_round.png'))
     save(fit(logo, 256, 1.0), os.path.join(RES, 'drawable-nodpi', 'app_logo.png'))

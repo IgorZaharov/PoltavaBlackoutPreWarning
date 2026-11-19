@@ -10,36 +10,18 @@ import {
 } from 'lucide-react';
 
 const PROMO_IMAGES = [
-  {
-    id: 1,
-    src: '/playstore/playstore_promo_1.png',
-    filename: 'playstore_promo_1.png',
-    title: '1. Візуалізація відключень світла'
-  },
-  {
-    id: 2,
-    src: '/playstore/playstore_promo_2.png',
-    filename: 'playstore_promo_2.png',
-    title: '2. Налаштування черги, інтервалів попередження, та автоматичного оновлення при зміні графіків'
-  },
-  {
-    id: 3,
-    src: '/playstore/playstore_promo_3.png',
-    filename: 'playstore_promo_3.png',
-    title: '3. Українська та Англійська мови інтерфейсу та окремі налаштування попереджень'
-  },
-  {
-    id: 4,
-    src: '/playstore/playstore_promo_4.png',
-    filename: 'playstore_promo_4.png',
-    title: '4. Віджети для головного екрану'
-  },
-  {
-    id: 5,
-    src: '/playstore/playstore_promo_5.png',
-    filename: 'playstore_promo_5.png',
-    title: '5. Мінімальне споживання батареї'
-  }
+  { id: 1, src: '/playstore/playstore_promo_1.png', filename: 'playstore_promo_1.png', title: '1. Аварійне відключення за вашою адресою' },
+  { id: 2, src: '/playstore/playstore_promo_2.png', filename: 'playstore_promo_2.png', title: '2. Ремонти й пошкодження поруч' },
+  { id: 3, src: '/playstore/playstore_promo_3.png', filename: 'playstore_promo_3.png', title: '3. Графік на 24 години: шкала, таймер, години без світла' },
+  { id: 4, src: '/playstore/playstore_promo_4.png', filename: 'playstore_promo_4.png', title: '4. Попередження за 15 хвилин до відключення' },
+  { id: 5, src: '/playstore/playstore_promo_5.png', filename: 'playstore_promo_5.png', title: '5. Кілька адрес з окремими сповіщеннями' },
+  { id: 6, src: '/playstore/playstore_promo_6.png', filename: 'playstore_promo_6.png', title: '6. Віджети для головного екрана' }
+];
+
+// Feature graphic and hi-res icon of the listing (scripts/build_store_assets.py)
+const LISTING_GRAPHICS = [
+  { src: '/playstore/feature_graphic.png', filename: 'feature_graphic.png', title: 'Feature graphic 1024×500' },
+  { src: '/playstore/icon_512.png', filename: 'icon_512.png', title: 'Значок 512×512' }
 ];
 
 export const PlayStoreGuide: React.FC = () => {
@@ -79,11 +61,11 @@ export const PlayStoreGuide: React.FC = () => {
             Рекламні скріншоти для Google Play Store (1080×1920, 9:16)
           </h3>
           <span className="text-[11px] font-mono text-emerald-400 bg-emerald-500/15 px-2.5 py-0.5 rounded-full border border-emerald-500/30">
-            5 PNG готові до завантаження
+            {PROMO_IMAGES.length} PNG готові до завантаження
           </span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {PROMO_IMAGES.map((item) => (
             <div
               key={item.id}
@@ -99,6 +81,29 @@ export const PlayStoreGuide: React.FC = () => {
                   {item.title}
                 </p>
               </div>
+              <a
+                href={item.src}
+                download={item.filename}
+                className="w-full py-2 px-3 rounded-xl bg-[#FF5E3A] hover:bg-[#e04e2c] text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Завантажити PNG</span>
+              </a>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Feature graphic and icon */}
+      <div className="bg-[#1C1D24] rounded-3xl p-5 border border-white/5 shadow-xl flex flex-col gap-4">
+        <h3 className="text-xs font-bold text-white uppercase tracking-wider">
+          Графіка сторінки в Google Play
+        </h3>
+        <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr] gap-3">
+          {LISTING_GRAPHICS.map((item) => (
+            <div key={item.filename} className="bg-[#121316] rounded-2xl p-3 border border-white/10 flex flex-col justify-between gap-3">
+              <img src={item.src} alt={item.title} className="w-full rounded-xl border border-white/10 shadow-lg" />
+              <p className="text-[11px] text-zinc-200 font-medium leading-snug">{item.title}</p>
               <a
                 href={item.src}
                 download={item.filename}
@@ -152,7 +157,7 @@ export const PlayStoreGuide: React.FC = () => {
         <ol className="list-decimal list-inside text-xs text-zinc-300 space-y-2">
           <li>Увійдіть в <a href="https://play.google.com/console" target="_blank" rel="noreferrer" className="text-[#FF5E3A] underline font-semibold">Google Play Console</a>.</li>
           <li>Натисніть кнопку <strong>«Створити додаток» (Create app)</strong>.</li>
-          <li>Назва додатку: <code className="font-bold bg-[#24262F] px-2 py-0.5 rounded-lg text-white">ZT Blackout Pre-Warning</code>.</li>
+          <li>Назва додатку: <code className="font-bold bg-[#24262F] px-2 py-0.5 rounded-lg text-white">Світло в Полтаві</code>.</li>
           <li>Мова за замовчуванням: <strong>Українська (uk-UA)</strong>.</li>
           <li>Тип: <strong>Додаток (App)</strong>, Безкоштовний (Free).</li>
         </ol>
