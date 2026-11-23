@@ -142,6 +142,7 @@ Most of I4 came with the 1.4.0 port (one alert per span, at most 40 pending, eme
 
 ### Fixed (empty address directory, 2026-11-23)
 - **The address directory is back** (`poe_directory.json` and its copies in `public/`, `android/app/src/main/assets/`, `ios/Resources/`, restored from before `7b3ce2e`). The weekly CI crawl of 2026-11-23 ran on a US runner, which www.poe.pl.ua does not answer, and committed a snapshot with 0 settlements, so the address picker of all three apps was empty and Unit Test E failed. Cause in `scripts/crawl_poe_directory.py`: a failed settlement-list request counted as an empty list, not as a failure. Now a failed request is a failure, and after any failure, or with fewer than 1 500 settlements, the script writes no snapshot and exits with 1, so the workflow commits nothing.
+- **No weekly directory crawl in CI** (owner, 2026-11-23): `.github/workflows/poe-data.yml` no longer has the Monday schedule, because GitHub's runners can never reach www.poe.pl.ua. The directory job runs only on manual dispatch; the snapshot is crawled locally from Ukraine and committed (`CLAUDE.md`). The apps still download a newer `poe_directory.json` from this repository when one is committed.
 
 ### Changed (iOS: dock and swipe from the Zhytomyr app)
 Ported from upstream Zhytomyr iOS (`IgorZaharov/Android-ZTBlackoutPreWarning` `2bfb2ab`, `a0f2cc6`, `c84e92c` on branch `ios/dock-tap-indicator`), the iOS side of what Android has since `9cadc9b`:
