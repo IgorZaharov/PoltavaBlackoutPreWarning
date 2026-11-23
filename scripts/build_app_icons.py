@@ -10,11 +10,18 @@ Writes:
   ios/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png  iPhone app icon (opaque: App Store Connect
                                                                  rejects transparency; iOS applies its own mask)
 
-The black outside the rounded square becomes transparent; the orange glow around the gold rim is kept
-as partial transparency. In the adaptive foreground the gold rounded square is about 62 dp wide: launchers show
-only the middle 72 dp and then cut it with their own mask (rounded square, squircle), so at 72 dp (owner, 2026-11-17)
-the gold rim was clipped (owner, 2026-11-18); 62 dp keeps about 5 dp to the edge and clears squircle corners.
-The adaptive background is the logo's own maroon (`ic_launcher_background`), so no dark ring shows around it.
+The logo is the house under power lines (owner, 2026-11-23). It replaced the shield with the Poltava coat of arms,
+because App Review rejected 1.0.0 (35) under guideline 4.1 for the reference to Poltava oblast in the icon.
+
+The black outside the rounded square becomes transparent (a flood fill from the image edge, so any corner shape
+works); the glow around the rim is kept as partial transparency. In the adaptive foreground the rounded square is
+about 62 dp wide: launchers show only the middle 72 dp and then cut it with their own mask (rounded square,
+squircle), so at 72 dp (owner, 2026-11-17) the rim was clipped (owner, 2026-11-18); 62 dp keeps about 5 dp to the
+edge and clears squircle corners. The adaptive background is the logo's own maroon (`ic_launcher_background`),
+so no dark ring shows around it.
+
+The iPhone icon is full bleed: the inside of the rounded square, cropped so that the logo's own corners and rim
+fall outside the rounded mask that iOS draws (no frame inside a frame).
 
 Run: python -X utf8 scripts/build_app_icons.py [repository root]   (needs Pillow)
 """
@@ -28,33 +35,35 @@ SRC = os.path.join(ROOT, 'public', 'logo.png')
 RES = os.path.join(ROOT, 'android', 'app', 'src', 'main', 'res')
 MAROON = (48, 0, 11, 255)  # the logo's inner edge colour, also values/colors.xml ic_launcher_background
 DENSITIES = {'mdpi': 1.0, 'hdpi': 1.5, 'xhdpi': 2.0, 'xxhdpi': 3.0, 'xxxhdpi': 4.0}
+BLACK_MAX = 12  # luminance of the black background around the logo, at most
+
+
+def logo_shape(im: Image.Image) -> Image.Image:
+    """255 inside the rounded square (rim included), 0 on the black around it."""
+    binary = im.convert('L').point(lambda v: 255 if v > BLACK_MAX else 0)
+    w, h = binary.size
+    # One black pixel of padding keeps the black around the logo connected where the logo touches an image edge
+    padded = Image.new('L', (w + 2, h + 2), 0)
+    padded.paste(binary, (1, 1))
+    ImageDraw.floodfill(padded, (0, 0), 128)
+    return padded.crop((1, 1, w + 1, h + 1)).point(lambda v: 0 if v == 128 else 255)
 
 
 def transparent_logo() -> Image.Image:
-    """The logo cropped to its glow, with the black background made transparent."""
+    """The logo cropped to a square around its glow, with the black background made transparent."""
     im = Image.open(SRC).convert('RGB')
-    w, h = im.size
-    # Everything visibly brighter than the black background belongs to the logo
-    lum = im.convert('L')
-    bbox = lum.point(lambda v: 255 if v > 40 else 0).getbbox()
-    left, top, right, bottom = bbox
-    # Solid inside the rounded square (slightly inset from the gold rim's outer edge)
-    side = right - left
-    radius = int(side * 0.19)
-    inset = int(side * 0.012)
-    scale = 4
-    mask = Image.new('L', (w * scale, h * scale), 0)
-    ImageDraw.Draw(mask).rounded_rectangle(
-        [(left + inset) * scale, (top + inset) * scale, (right - inset) * scale, (bottom - inset) * scale],
-        radius=radius * scale, fill=255)
-    solid = mask.resize((w, h), Image.LANCZOS)
-    # Outside it: the glow, its brightness as opacity
-    glow = lum.point(lambda v: min(255, int(v * 2.2)))
+    shape = logo_shape(im)
+    # Soft edge on the rounded square; outside it, the glow's brightness as opacity
+    solid = shape.filter(ImageFilter.GaussianBlur(1.2))
+    glow = im.convert('L').point(lambda v: min(255, int(v * 2.2)))
     alpha = ImageChops.lighter(solid, glow).filter(ImageFilter.SMOOTH)
     out = im.copy()
     out.putalpha(alpha)
-    pad = int(side * 0.03)
-    return out.crop((max(0, left - pad), max(0, top - pad), min(w, right + pad), min(h, bottom + pad)))
+    left, top, right, bottom = shape.getbbox()
+    half = round(max(right - left, bottom - top) * 1.06) // 2  # 3 % of room on each side for the glow
+    cx, cy = (left + right) // 2, (top + bottom) // 2
+    # A crop past the image edge is filled with transparent pixels, so the result is always square
+    return out.crop((cx - half, cy - half, cx + half, cy + half))
 
 
 def fit(logo: Image.Image, size: int, content: float, background=None, circle=False) -> Image.Image:
@@ -94,18 +103,42 @@ def main() -> None:
     save(fit(logo, 180, 0.9, background=(10, 5, 6, 255)), os.path.join(ROOT, 'public', 'apple-touch-icon.png'))
     save(fit(logo, 256, 1.0), os.path.join(ROOT, 'public', 'app-logo.png'))
     save(fit(logo, 256, 1.0), os.path.join(ROOT, 'docs', 'screenshots', 'app-icon.png'))
-    save(ios_icon(logo), IOS_ICON)
+    save(ios_icon(), IOS_ICON)
     # About screen logo: 72 pt at @3x
     save(fit(logo, 216, 1.0), IOS_LOGO)
 
 
 IOS_LOGO = os.path.join(ROOT, 'ios', 'Resources', 'Assets.xcassets', 'AppLogo.imageset', 'app_logo.png')
 IOS_ICON = os.path.join(ROOT, 'ios', 'Resources', 'Assets.xcassets', 'AppIcon.appiconset', 'AppIcon-1024.png')
+IOS_MASK_RADIUS = 0.2237  # corner radius of the iOS icon mask, as a share of the icon side
+RIM = 0.03  # the logo's rim and its glow, as a share of the logo side: kept outside the iOS mask
 
 
-def ios_icon(logo: Image.Image) -> Image.Image:
-    """1024 px, no alpha: the logo on its own maroon, the gold square just inside iOS's rounded mask."""
-    return fit(logo, 1024, 0.94, background=MAROON).convert('RGB')
+def ios_crop(shape: Image.Image) -> tuple:
+    """The largest centred square whose iOS-masked area lies wholly inside the logo's rim."""
+    left, top, right, bottom = shape.getbbox()
+    side = min(right - left, bottom - top)
+    cx, cy = (left + right) / 2, (top + bottom) / 2
+    inside = shape
+    for _ in range(max(1, round(side * RIM))):  # shrink the shape by the rim width
+        inside = inside.filter(ImageFilter.MinFilter(3))
+    for inset in range(0, side // 4):
+        half = side / 2 - inset
+        box = (round(cx - half), round(cy - half), round(cx + half), round(cy + half))
+        n = box[2] - box[0]
+        mask = Image.new('L', (n, n), 0)
+        ImageDraw.Draw(mask).rounded_rectangle([0, 0, n - 1, n - 1], radius=n * IOS_MASK_RADIUS, fill=255)
+        if ImageChops.subtract(mask, inside.crop(box)).getbbox() is None:
+            return box
+    raise ValueError('no crop of the logo fits the iOS mask')
+
+
+def ios_icon() -> Image.Image:
+    """1024 px, no alpha, full bleed: the inside of the logo, its own corners and rim outside the iOS mask."""
+    im = Image.open(SRC).convert('RGB')
+    box = ios_crop(logo_shape(im))
+    print('iPhone icon crop', box)
+    return im.crop(box).resize((1024, 1024), Image.LANCZOS)
 
 
 if __name__ == '__main__':

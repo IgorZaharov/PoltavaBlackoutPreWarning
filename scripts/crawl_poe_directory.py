@@ -9,6 +9,11 @@ Usage: python -X utf8 scripts/crawl_poe_directory.py OUT.json [--buildings] [--c
 --compact also writes the app snapshot: settlements deduplicated by their global id (a settlement may
 belong to several branches), junk rows such as "село _" dropped, streets as [id, name] pairs. Copy it to
 public/ and android/app/src/main/assets/ (npm test checks the copies).
+
+A failed request is never "no settlements" or "no streets": after any failed request, or when the snapshot
+has fewer than MIN_SETTLEMENTS settlements, the script does not write the snapshot and exits with 1. On
+2026-11-23 the weekly CI crawl (a US runner, which www.poe.pl.ua does not answer) wrote an empty snapshot,
+because a failed settlement list counted as an empty one.
 """
 import json
 import sys
@@ -19,6 +24,7 @@ import urllib.request
 URL = "https://www.poe.pl.ua/customs/search-disconnection-cabinet.php"
 UA = "Mozilla/5.0 (Linux; Android 14) PoltavaBlackoutPreWarning-directory"
 DELAY = 0.4
+MIN_SETTLEMENTS = 1500  # the snapshot of 2026-11-16 has 1 776; far fewer means a broken crawl, not a real change
 BRANCHES = {
     102: "Великокохнівська дільниця", 103: "Гадяцька дільниця", 104: "Глобинська дільниця",
     112: "Горішньоплавнівська дільниця", 105: "Гребінківська дільниця", 106: "Диканська дільниця",
@@ -55,7 +61,10 @@ def main():
     result = {"source": URL, "crawledAt": time.strftime("%Y-%m-%dT%H:%M:%S"), "branches": []}
     failures = 0
     for fid, fname in BRANCHES.items():
-        cities = query("city", fid) or []
+        cities = query("city", fid)
+        if cities is None:
+            failures += 1
+            cities = []
         print(f"{fid} {fname}: {len(cities)} settlements", file=sys.stderr)
         branch = {"cabinetId": fid, "registryId": fid - 100, "name": fname, "settlements": []}
         for c in cities:
@@ -80,13 +89,19 @@ def main():
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=1)
     print(f"done, failed requests: {failures}", file=sys.stderr)
+    if failures:
+        print("not writing the snapshot: some requests failed", file=sys.stderr)
+        sys.exit(1)
     if "--compact" in sys.argv:
         path = sys.argv[sys.argv.index("--compact") + 1]
+        snapshot = compact(result)
+        if len(snapshot["settlements"]) < MIN_SETTLEMENTS:
+            print(f"not writing {path}: {len(snapshot['settlements'])} settlements, "
+                  f"expected at least {MIN_SETTLEMENTS}", file=sys.stderr)
+            sys.exit(1)
         with open(path, "w", encoding="utf-8", newline="\n") as f:
-            json.dump(compact(result), f, ensure_ascii=False, separators=(",", ":"))
+            json.dump(snapshot, f, ensure_ascii=False, separators=(",", ":"))
         print(f"wrote {path}", file=sys.stderr)
-    if failures:
-        sys.exit(1)
 
 
 def is_junk(name):
